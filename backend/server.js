@@ -47,7 +47,6 @@ app.use('/api/database-dashboard', require('./routes/databaseDashboard'));
 app.use('/api/purchase-orders', require('./routes/purchaseOrders'));
 app.use('/api/sales-tax-invoices', require('./routes/salesTaxInvoices'));
 app.use('/api/purchase-tax-invoices', require('./routes/purchaseTaxInvoices'));
-app.use('/api/fix', require('./routes/fixStatusEnum'));
 
 // Health check
 app.get('/api/health', (req, res) => {
