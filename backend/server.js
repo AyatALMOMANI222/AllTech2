@@ -2,23 +2,16 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const mysql = require('mysql2/promise');
-const path = require('path');
-const fs = require('fs');
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 8000;
+const PORT = 8000;
 
 // Middleware
-// CORS configuration - allow all origins in production, localhost in development
-const allowedOrigins = process.env.NODE_ENV === 'production' 
-  ? process.env.ALLOWED_ORIGINS?.split(',') || ['*']
-  : ['http://localhost:3000'];
-
 app.use(cors({
-  origin: allowedOrigins.includes('*') ? true : allowedOrigins,
+  origin: 'http://localhost:3000',
   credentials: true
 }));
 app.use(express.json());
@@ -60,32 +53,15 @@ app.get('/api/health', (req, res) => {
   res.json({ message: 'Server is running!' });
 });
 
-// Serve static files from React app (AFTER API routes)
-const publicPath = path.join(__dirname, 'public');
-if (fs.existsSync(publicPath)) {
-  app.use(express.static(publicPath));
-}
-
-// Serve React app for all non-API routes (SPA fallback)
-app.get('*', (req, res) => {
-  // Don't serve React app for API routes
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ message: 'Route not found' });
-  }
-  
-  // Serve React app index.html for all other routes
-  const indexPath = path.join(__dirname, 'public', 'index.html');
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    res.status(404).json({ message: 'Frontend build not found. Please build the frontend first.' });
-  }
-});
-
-// Error handling middleware (must be last)
+// Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ message: 'Something went wrong!' });
+});
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({ message: 'Route not found' });
 });
 
 app.listen(PORT, () => {
