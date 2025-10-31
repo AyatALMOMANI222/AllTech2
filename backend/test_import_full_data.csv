@@ -1,0 +1,11 @@
+po_number,project_no,date_po,part_no,material_no,description,uom,quantity,supplier_unit_price,total_price,lead_time,due_date,penalty_percentage,penalty_amount,invoice_no,balance_quantity_undelivered,comments
+PO-001,PRJ-1001,2025-01-15,PN001,M001,Widget A,pcs,100,25.50,2550.00,7 days,2025-01-22,2.5,63.75,INV-001,0,Urgent order
+PO-002,PRJ-1002,2025-01-16,PN002,M002,Gear Assembly,pcs,50,40.00,2000.00,10 days,2025-01-26,0,0,INV-002,5,Normal delivery
+PO-003,PRJ-1003,2025-01-17,PN003,M003,Steel Bracket,pcs,25,15.75,393.75,5 days,2025-01-22,1.0,3.94,INV-003,0,Fast track
+PO-004,PRJ-1004,2025-01-18,PN004,M004,Electronic Component,pcs,200,8.50,1700.00,14 days,2025-02-01,0,0,,0,Standard order
+PO-005,PRJ-1005,2025-01-19,PN005,M005,Rubber Seal,pcs,75,12.25,918.75,3 days,2025-01-22,5.0,45.94,INV-005,10,Emergency
+PO-006,PRJ-1006,2025-01-20,PN006,M006,Aluminum Plate,pcs,30,35.00,1050.00,21 days,2025-02-10,0,0,INV-006,0,Custom order
+PO-007,PRJ-1007,2025-01-21,PN007,M007,Plastic Housing,pcs,150,6.80,1020.00,7 days,2025-01-28,1.5,15.30,INV-007,25,Regular
+PO-008,PRJ-1008,2025-01-22,PN008,M008,Copper Wire,m,500,2.50,1250.00,10 days,2025-02-01,0,0,,0,Bulk order
+PO-009,PRJ-1009,2025-01-23,PN009,M009,Ceramic Insulator,pcs,40,18.75,750.00,14 days,2025-02-06,3.0,22.50,INV-009,0,Special
+PO-010,PRJ-1010,2025-01-24,PN010,M010,Titanium Bolt,pcs,80,22.50,1800.00,5 days,2025-01-29,0,0,INV-010,15,High priority

@@ -1,0 +1,613 @@
+.purchase-tax-invoice {
+  .card {
+    border: none;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+  }
+
+  .card-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 1.5rem;
+
+    h2 {
+      margin: 0;
+      font-weight: 600;
+    }
+  }
+
+  .card-body {
+    padding: 2rem;
+    background-color: #f8f9fa;
+  }
+
+  // Invoice Header Section - Matching the design
+  .invoice-header-section {
+    margin-bottom: 2rem;
+    
+    .supplier-info-box,
+    .invoice-details-box {
+      border: 2px solid #007bff;
+      padding: 1rem;
+      background-color: white;
+      border-radius: 4px;
+      
+      .info-row {
+        display: flex;
+        margin-bottom: 0.5rem;
+        
+        &:last-child {
+          margin-bottom: 0;
+        }
+        
+        .label {
+          font-weight: bold;
+          min-width: 100px;
+          margin-right: 1rem;
+        }
+        
+        .value {
+          flex: 1;
+          
+          .invoice-input {
+            border: none;
+            border-bottom: 1px solid #ccc;
+            border-radius: 0;
+            padding: 0.25rem 0;
+            background: transparent;
+            
+            &:focus {
+              border-bottom-color: #007bff;
+              box-shadow: none;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Supplier Selection Section
+  .supplier-selection-section {
+    margin-bottom: 2rem;
+    
+    .form-group {
+      label {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 0.5rem;
+      }
+      
+      .form-control {
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        padding: 0.75rem;
+        
+        &:focus {
+          border-color: #007bff;
+          box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+      }
+    }
+  }
+
+  // Items Table - Matching the design exactly
+  .items-section {
+    margin-bottom: 2rem;
+    
+    .table-responsive {
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    .items-table {
+      margin-bottom: 0;
+      
+      .table-header {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        
+        th {
+          border: none;
+          padding: 1rem 0.75rem;
+          font-weight: 600;
+          text-align: center;
+          font-size: 0.9rem;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+      }
+      
+      tbody {
+        tr {
+          &:nth-child(even) {
+            background-color: #f8f9fa;
+          }
+          
+          &:hover {
+            background-color: #e3f2fd;
+          }
+          
+          td {
+            padding: 0.75rem;
+            vertical-align: middle;
+            border: 1px solid #dee2e6;
+            
+            .table-input {
+              border: none;
+              background: transparent;
+              padding: 0.5rem;
+              width: 100%;
+              text-align: center;
+              
+              &:focus {
+                background-color: white;
+                box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+                border-radius: 4px;
+              }
+            }
+            
+            &:first-child {
+              text-align: center;
+              font-weight: 600;
+              background-color: #e9ecef;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Claim Section
+  .claim-section {
+    margin-bottom: 2rem;
+    
+    .form-group {
+      label {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 0.5rem;
+      }
+      
+      .form-control {
+        max-width: 200px;
+      }
+    }
+  }
+
+  // Totals Section - Matching the design
+  .totals-section {
+    margin-bottom: 2rem;
+    
+    .totals-box {
+      border: 2px solid #28a745;
+      padding: 1.5rem;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      
+      .total-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #e9ecef;
+        
+        &:last-child {
+          border-bottom: none;
+        }
+        
+        &.total-final {
+          border-top: 2px solid #28a745;
+          margin-top: 0.5rem;
+          padding-top: 1rem;
+          font-weight: 700;
+          font-size: 1.1rem;
+          color: #28a745;
+        }
+        
+        .label {
+          font-weight: 600;
+          color: #495057;
+        }
+        
+        .value {
+          font-weight: 600;
+          color: #28a745;
+          font-size: 1.1rem;
+        }
+      }
+    }
+  }
+
+  // Form Actions
+  .form-actions {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid #dee2e6;
+    
+    .btn {
+      padding: 0.75rem 2rem;
+      font-weight: 600;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      
+      &.btn-success {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        border: none;
+        
+        &:hover {
+          background: linear-gradient(135deg, #218838 0%, #1ea085 100%);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+        }
+        
+        &:disabled {
+          background: #6c757d;
+          transform: none;
+          box-shadow: none;
+        }
+      }
+      
+      &.btn-outline-secondary {
+        border: 2px solid #6c757d;
+        color: #6c757d;
+        
+        &:hover {
+          background-color: #6c757d;
+          color: white;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
+        }
+      }
+    }
+  }
+
+  // Alert Styles
+  .alert {
+    border-radius: 8px;
+    border: none;
+    padding: 1rem 1.5rem;
+    margin-bottom: 2rem;
+    font-weight: 500;
+    
+    &.alert-danger {
+      background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+      color: white;
+    }
+    
+    &.alert-success {
+      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+      color: white;
+    }
+  }
+
+  // Responsive Design
+  @media (max-width: 1199.98px) {
+    .card-header h2 {
+      font-size: 1.5rem;
+    }
+  }
+
+  @media (max-width: 991.98px) {
+    .card-header h2 {
+      font-size: 1.35rem;
+    }
+    
+    .invoice-header-section,
+    .supplier-selection-section,
+    .items-section,
+    .claim-section,
+    .totals-section {
+      .row {
+        margin-bottom: 1rem;
+      }
+    }
+    
+    .table-responsive {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .card-body {
+      padding: 1rem;
+    }
+    
+    .card-header h2 {
+      font-size: 1.25rem;
+    }
+    
+    .invoice-header-section {
+      .supplier-info-box,
+      .invoice-details-box {
+        margin-bottom: 1rem;
+        padding: 0.75rem;
+        
+        .info-row {
+          flex-direction: column;
+          align-items: flex-start;
+          margin-bottom: 0.75rem;
+          
+          .label {
+            min-width: auto;
+            margin-bottom: 0.25rem;
+            font-size: 0.85rem;
+          }
+          
+          .invoice-input {
+            width: 100%;
+            font-size: 0.85rem;
+          }
+        }
+      }
+    }
+    
+    .supplier-selection-section {
+      .form-group {
+        margin-bottom: 1rem;
+        
+        label {
+          font-size: 0.9rem;
+        }
+        
+        .form-control {
+          font-size: 0.9rem;
+          padding: 0.6rem 0.75rem;
+        }
+      }
+    }
+    
+    .items-table {
+      font-size: 0.75rem;
+      
+      .table-header th {
+        padding: 0.5rem 0.3rem;
+        font-size: 0.7rem;
+      }
+      
+      tbody td {
+        padding: 0.5rem 0.3rem;
+        
+        .table-input {
+          padding: 0.3rem 0.4rem;
+          font-size: 0.75rem;
+        }
+        
+        .btn-sm {
+          padding: 0.25rem 0.4rem;
+          font-size: 0.7rem;
+        }
+      }
+    }
+    
+    .claim-section {
+      .form-group {
+        label {
+          font-size: 0.9rem;
+        }
+        
+        .form-control {
+          font-size: 0.9rem;
+          padding: 0.6rem 0.75rem;
+        }
+      }
+    }
+    
+    .totals-box {
+      padding: 1rem;
+      
+      .total-row {
+        padding: 0.5rem 0;
+        font-size: 0.85rem;
+        
+        &.total-final {
+          font-size: 1rem;
+        }
+      }
+    }
+    
+    .form-actions {
+      .btn {
+        padding: 0.6rem 1.5rem;
+        font-size: 0.9rem;
+      }
+    }
+  }
+
+  @media (max-width: 576px) {
+    .card-body {
+      padding: 0.75rem;
+    }
+    
+    .card-header h2 {
+      font-size: 1.1rem;
+    }
+    
+    .invoice-header-section {
+      .supplier-info-box,
+      .invoice-details-box {
+        padding: 0.5rem;
+        
+        .info-row {
+          margin-bottom: 0.5rem;
+          
+          .label {
+            font-size: 0.75rem;
+          }
+          
+          .invoice-input {
+            font-size: 0.75rem;
+            padding: 0.25rem 0;
+          }
+        }
+      }
+    }
+    
+    .supplier-selection-section {
+      .form-group {
+        margin-bottom: 0.75rem;
+        
+        label {
+          font-size: 0.8rem;
+        }
+        
+        .form-control {
+          font-size: 0.8rem;
+          padding: 0.5rem 0.6rem;
+        }
+      }
+    }
+    
+    .items-table {
+      font-size: 0.65rem;
+      
+      .table-header th {
+        padding: 0.4rem 0.2rem;
+        font-size: 0.6rem;
+      }
+      
+      tbody td {
+        padding: 0.4rem 0.2rem;
+        
+        .table-input {
+          padding: 0.25rem 0.3rem;
+          font-size: 0.65rem;
+        }
+        
+        .btn-sm {
+          padding: 0.2rem 0.3rem;
+          font-size: 0.6rem;
+        }
+      }
+    }
+    
+    .totals-box {
+      padding: 0.75rem;
+      
+      .total-row {
+        padding: 0.4rem 0;
+        font-size: 0.75rem;
+        
+        &.total-final {
+          font-size: 0.9rem;
+        }
+      }
+    }
+    
+    .form-actions {
+      .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.8rem;
+        width: 100%;
+      }
+    }
+  }
+
+  // Print Styles
+  @media print {
+    .card {
+      box-shadow: none;
+      border: none;
+      page-break-inside: avoid;
+    }
+    
+    .card-header {
+      display: none !important;
+    }
+    
+    .card-body {
+      padding: 0;
+      background-color: white !important;
+    }
+    
+    .alert {
+      display: none !important;
+    }
+    
+    .items-table .table-header {
+      background: #e9ecef !important;
+      color: #000 !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    
+    .form-actions {
+      display: none !important;
+    }
+    
+    .supplier-selection-section {
+      display: none !important;
+    }
+    
+    .table-input,
+    .invoice-input,
+    input[disabled] {
+      border: none !important;
+      background: transparent !important;
+      -webkit-appearance: none !important;
+      -moz-appearance: textfield !important;
+      color: #000 !important;
+      font-weight: 600 !important;
+    }
+    
+    .invoice-header-section {
+      page-break-inside: avoid;
+      
+      .supplier-info-box,
+      .invoice-details-box {
+        border: 2px solid #000 !important;
+        background-color: white !important;
+      }
+    }
+    
+    .items-section {
+      page-break-inside: auto;
+      
+      .table-responsive {
+        box-shadow: none;
+      }
+      
+      .items-table {
+        border: 1px solid #000;
+        
+        tbody tr {
+          page-break-inside: avoid;
+          
+          &:nth-child(even) {
+            background-color: #f8f9fa !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+        }
+        
+        td {
+          border: 1px solid #000 !important;
+        }
+      }
+    }
+    
+    .totals-section {
+      page-break-inside: avoid;
+      
+      .totals-box {
+        border: 2px solid #000 !important;
+        background-color: white !important;
+        
+        .total-row {
+          &.total-final {
+            border-top: 2px solid #000 !important;
+          }
+        }
+      }
+    }
+    
+    // Ensure proper page breaks
+    .claim-section {
+      page-break-inside: avoid;
+    }
+  }
+}
+

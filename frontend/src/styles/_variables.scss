@@ -1,0 +1,59 @@
+$primary-color: #3b82f6;      // Vibrant electric blue - modern and clean
+$secondary-color: #60a5fa;    // Softer sky blue - creates gentle contrast
+$success-color: #10b981;      // Kept the emerald green for consistency
+$danger-color: #ef4444;       // Crisp red - clear and attention-grabbing
+$warning-color: #f59e0b;      // Warm amber - maintains visibility
+$info-color: #06b6d4;         // Bright cyan - perfect for information
+$light-color: #f8fafc;        // Soft blue-white - clean background
+$dark-color: #1e293b;         // Deep blue-black - rich and modern
+$body-bg: #ffffff;            // Pure white for clarity
+$text-color: #334155;         // Slate blue-gray - excellent readability
+
+// Additional blue shades for more depth
+$blue-100: #dbeafe;
+$blue-200: #bfdbfe;
+$blue-300: #93c5fd;
+$blue-400: #60a5fa;
+$blue-500: #3b82f6;
+$blue-600: #2563eb;
+$blue-700: #1d4ed8;
+$blue-800: #1e40af;
+$blue-900: #1e3a8a;
+
+// Typography
+$font-family-base: 'Inter', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+$font-weight-normal: 400;
+$font-weight-bold: 600;
+
+// Custom variables
+$border-radius: 0.5rem;
+$box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
+$box-shadow-sm: 0 1px 2px rgba(59, 130, 246, 0.05);
+$box-shadow-lg: 0 8px 25px rgba(59, 130, 246, 0.15);
+
+// Spacing
+$spacer: 1rem;
+$spacers: (
+  0: 0,
+  1: $spacer * 0.25,
+  2: $spacer * 0.5,
+  3: $spacer,
+  4: $spacer * 1.5,
+  5: $spacer * 3,
+  6: $spacer * 4.5,
+  7: $spacer * 6,
+);
+
+// Breakpoints
+$grid-breakpoints: (
+  xs: 0,
+  sm: 576px,
+  md: 768px,
+  lg: 992px,
+  xl: 1200px,
+  xxl: 1400px
+);
+
+// Gradients for enhanced visual appeal
+$gradient-primary: linear-gradient(135deg, $primary-color, $blue-700);
+$gradient-secondary: linear-gradient(135deg, $secondary-color, $blue-400);

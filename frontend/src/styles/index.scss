@@ -1,0 +1,302 @@
+@import 'bootstrap/scss/bootstrap';
+@import './_variables';
+
+// Global styles
+body {
+  font-family: $font-family-base;
+  font-weight: $font-weight-normal;
+  color: $text-color;
+  background-color: $body-bg;
+}
+
+// Custom utility classes
+.text-primary-custom {
+  color: $primary-color !important;
+}
+
+.bg-primary-custom {
+  background-color: $primary-color !important;
+}
+
+.border-primary-custom {
+  border-color: $primary-color !important;
+}
+
+.btn-primary-custom {
+  background-color: $primary-color;
+  border-color: $primary-color;
+  
+  &:hover {
+    background-color: darken($primary-color, 10%);
+    border-color: darken($primary-color, 10%);
+  }
+}
+
+// Card styles
+.card {
+  border-radius: $border-radius;
+  box-shadow: $box-shadow;
+  border: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.card-header {
+  background-color: $light-color;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+// Form styles
+.form-control {
+  border-radius: $border-radius;
+  
+  &:focus {
+    border-color: $primary-color;
+    box-shadow: 0 0 0 0.2rem rgba($primary-color, 0.25);
+  }
+}
+
+.form-label {
+  font-weight: $font-weight-bold;
+  color: $dark-color;
+}
+
+// Button styles
+.btn {
+  border-radius: $border-radius;
+  font-weight: $font-weight-normal;
+}
+
+// Table styles
+.table {
+  th {
+    font-weight: $font-weight-bold;
+    color: $dark-color;
+    border-top: none;
+  }
+}
+
+// Navigation styles
+.navbar {
+  box-shadow: $box-shadow;
+}
+
+.navbar-brand {
+  font-weight: $font-weight-bold;
+  color: $primary-color !important;
+}
+
+// Alert styles
+.alert {
+  border-radius: $border-radius;
+  border: none;
+}
+
+// Modal styles
+.modal-content {
+  border-radius: $border-radius;
+  box-shadow: $box-shadow-lg;
+}
+
+.modal-header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.modal-footer {
+  border-top: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+// Loading spinner
+.spinner-border-sm {
+  width: 1rem;
+  height: 1rem;
+}
+
+// Custom spacing
+.mt-custom-1 { margin-top: $spacer * 0.25 !important; }
+.mt-custom-2 { margin-top: $spacer * 0.5 !important; }
+.mt-custom-3 { margin-top: $spacer !important; }
+.mt-custom-4 { margin-top: $spacer * 1.5 !important; }
+.mt-custom-5 { margin-top: $spacer * 3 !important; }
+
+.mb-custom-1 { margin-bottom: $spacer * 0.25 !important; }
+.mb-custom-2 { margin-bottom: $spacer * 0.5 !important; }
+.mb-custom-3 { margin-bottom: $spacer !important; }
+.mb-custom-4 { margin-bottom: $spacer * 1.5 !important; }
+.mb-custom-5 { margin-bottom: $spacer * 3 !important; }
+
+// Responsive utilities
+@media (max-width: 1199.98px) {
+  .container-fluid {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+  
+  h1 {
+    font-size: 2rem;
+  }
+  
+  h2 {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .container-fluid {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+  
+  .modal-dialog {
+    max-width: 95%;
+  }
+  
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 768px) {
+  .container-fluid {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  h1 {
+    font-size: 1.75rem;
+  }
+  
+  h2 {
+    font-size: 1.35rem;
+  }
+  
+  h3 {
+    font-size: 1.15rem;
+  }
+  
+  .btn {
+    font-size: 0.9rem;
+    padding: 0.6rem 1rem;
+  }
+  
+  .table {
+    font-size: 0.85rem;
+    
+    th, td {
+      padding: 0.5rem 0.4rem;
+    }
+  }
+}
+
+@media (max-width: 576px) {
+  .container-fluid {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  
+  h1 {
+    font-size: 1.5rem;
+  }
+  
+  h2 {
+    font-size: 1.15rem;
+  }
+  
+  h3 {
+    font-size: 1rem;
+  }
+  
+  h4 {
+    font-size: 0.95rem;
+  }
+  
+  .btn {
+    font-size: 0.85rem;
+    padding: 0.5rem 0.75rem;
+  }
+  
+  .table {
+    font-size: 0.75rem;
+    
+    th, td {
+      padding: 0.4rem 0.3rem;
+    }
+  }
+  
+  .card-body {
+    padding: 1rem;
+  }
+  
+  .form-control,
+  .form-select {
+    font-size: 0.85rem;
+    padding: 0.5rem 0.75rem;
+  }
+  
+  .form-label {
+    font-size: 0.85rem;
+  }
+  
+  .modal-header,
+  .modal-footer {
+    padding: 0.75rem 1rem;
+  }
+  
+  .modal-body {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .container-fluid {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+  
+  h1 {
+    font-size: 1.35rem;
+  }
+  
+  h2 {
+    font-size: 1rem;
+  }
+  
+  .btn {
+    font-size: 0.8rem;
+    padding: 0.45rem 0.65rem;
+  }
+}
+
+// Touch device optimizations
+@media (hover: none) and (pointer: coarse) {
+  .btn,
+  .nav-link,
+  a,
+  button {
+    min-height: 44px; // iOS touch target size
+    min-width: 44px;
+  }
+}
+
+// Print optimizations
+@media print {
+  .btn,
+  .pagination,
+  .modal-footer,
+  .alert {
+    display: none !important;
+  }
+  
+  .card {
+    box-shadow: none;
+    page-break-inside: avoid;
+  }
+  
+  .table {
+    page-break-inside: auto;
+    
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
+  }
+}

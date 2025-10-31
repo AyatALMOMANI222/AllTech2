@@ -1,0 +1,624 @@
+@import '../../styles/variables';
+
+// ============================================
+// Additional Variables for Enhancement
+// ============================================
+$gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+$gradient-success: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
+$gradient-warning: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+$gradient-info: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+
+$shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.04);
+$shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+$shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+$shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.16);
+
+$transition-fast: 0.2s ease-in-out;
+$transition-normal: 0.3s ease-in-out;
+$transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+
+// ============================================
+// Dashboard Container
+// ============================================
+.dashboard-container {
+  padding: 2.5rem 0;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  position: relative;
+  
+  // Animated background pattern
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 400px;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+    clip-path: ellipse(120% 50% at 50% 0%);
+    z-index: 0;
+  }
+  
+  > .container-fluid {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+// ============================================
+// Dashboard Header
+// ============================================
+.dashboard-header {
+  margin-bottom: 3rem;
+  animation: fadeInDown 0.6s ease-out;
+  
+  @keyframes fadeInDown {
+    from {
+      opacity: 0;
+      transform: translateY(-30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .dashboard-title {
+    color: $dark-color;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    font-size: 2.5rem;
+    background: $gradient-primary;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.02em;
+    position: relative;
+    display: inline-block;
+    
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 0;
+      width: 80px;
+      height: 4px;
+      background: $gradient-primary;
+      border-radius: 2px;
+    }
+  }
+  
+  .dashboard-subtitle {
+    color: $secondary-color;
+    font-size: 1.15rem;
+    margin-bottom: 0;
+    margin-top: 1.25rem;
+    font-weight: 500;
+    opacity: 0.9;
+  }
+}
+
+// ============================================
+// Dashboard Cards
+// ============================================
+.dashboard-card {
+  height: 100%;
+  transition: all $transition-slow;
+  border: none;
+  box-shadow: $shadow-md;
+  border-radius: 1.25rem;
+  background: white;
+  overflow: hidden;
+  position: relative;
+  animation: fadeInUp 0.6s ease-out backwards;
+  
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  // Staggered animation for multiple cards
+  @for $i from 1 through 6 {
+    &:nth-child(#{$i}) {
+      animation-delay: #{$i * 0.1}s;
+    }
+  }
+  
+  // Decorative gradient overlay
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    background: $gradient-primary;
+    opacity: 0;
+    transition: opacity $transition-fast;
+  }
+  
+  &:hover {
+    transform: translateY(-12px) scale(1.02);
+    box-shadow: $shadow-xl;
+    
+    &::before {
+      opacity: 1;
+    }
+    
+    .dashboard-icon {
+      transform: scale(1.15) rotate(5deg);
+      
+      i {
+        animation: iconPulse 0.6s ease;
+      }
+    }
+    
+    .btn-primary {
+      transform: scale(1.05);
+      box-shadow: 0 8px 20px rgba($primary-color, 0.3);
+    }
+  }
+  
+  .card-body {
+    padding: 2.5rem 2rem;
+    position: relative;
+    
+    // Background pattern
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: -20px;
+      right: -20px;
+      width: 100px;
+      height: 100px;
+      background: radial-gradient(circle, rgba($primary-color, 0.03) 0%, transparent 70%);
+      border-radius: 50%;
+    }
+  }
+}
+
+// ============================================
+// Dashboard Icon
+// ============================================
+.dashboard-icon {
+  font-size: 3.5rem;
+  margin-bottom: 1.5rem;
+  transition: all $transition-normal;
+  position: relative;
+  display: inline-block;
+  
+  i {
+    display: block;
+    background: $gradient-primary;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 4px 8px rgba($primary-color, 0.2));
+  }
+  
+  @keyframes iconPulse {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.1);
+    }
+  }
+  
+  // Icon background circle
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90px;
+    height: 90px;
+    background: linear-gradient(135deg, rgba($primary-color, 0.08) 0%, rgba($primary-color, 0.02) 100%);
+    border-radius: 50%;
+    z-index: -1;
+  }
+}
+
+// ============================================
+// Card Content
+// ============================================
+.card-title {
+  color: $dark-color;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+  position: relative;
+  z-index: 1;
+}
+
+.card-text {
+  color: $secondary-color;
+  margin-bottom: 2rem;
+  line-height: 1.7;
+  font-size: 0.95rem;
+  position: relative;
+  z-index: 1;
+}
+
+// ============================================
+// Buttons
+// ============================================
+.btn-primary {
+  background: $gradient-primary;
+  border: none;
+  padding: 0.875rem 2rem;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  transition: all $transition-normal;
+  box-shadow: 0 4px 12px rgba($primary-color, 0.25);
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  
+  // Shine effect
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.5s;
+  }
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba($primary-color, 0.35);
+    
+    &::before {
+      left: 100%;
+    }
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, $secondary-color 0%, darken($secondary-color, 10%) 100%);
+  border: none;
+  padding: 0.875rem 2rem;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  transition: all $transition-normal;
+  box-shadow: $shadow-sm;
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: lighten($secondary-color, 20%);
+  }
+  
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: $shadow-md;
+  }
+}
+
+// ============================================
+// Stats Card
+// ============================================
+.stat-item {
+  padding: 1.5rem;
+  position: relative;
+  transition: all $transition-normal;
+  border-radius: 1rem;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba($primary-color, 0.05) 0%, transparent 100%);
+    border-radius: 1rem;
+    opacity: 0;
+    transition: opacity $transition-normal;
+  }
+  
+  &:hover {
+    transform: translateY(-5px);
+    
+    &::before {
+      opacity: 1;
+    }
+    
+    .stat-number {
+      transform: scale(1.1);
+      color: $primary-color;
+    }
+  }
+  
+  .stat-number {
+    font-size: 3rem;
+    font-weight: 800;
+    background: $gradient-primary;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+    transition: all $transition-normal;
+    letter-spacing: -0.02em;
+  }
+  
+  .stat-label {
+    color: $secondary-color;
+    font-weight: 600;
+    margin-bottom: 0;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    position: relative;
+  }
+}
+
+// ============================================
+// Card Base
+// ============================================
+.card {
+  border: none;
+  box-shadow: $shadow-md;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  background: white;
+  animation: fadeInUp 0.8s ease-out backwards;
+  animation-delay: 0.4s;
+  
+  .card-header {
+    background: linear-gradient(135deg, rgba($primary-color, 0.03) 0%, rgba($primary-color, 0.01) 100%);
+    border-bottom: 2px solid rgba($primary-color, 0.1);
+    padding: 1.75rem 2rem;
+    position: relative;
+    
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 2rem;
+      right: 2rem;
+      height: 2px;
+      background: $gradient-primary;
+      opacity: 0.3;
+    }
+    
+    h5 {
+      color: $dark-color;
+      font-weight: 700;
+      margin-bottom: 0;
+      font-size: 1.25rem;
+      letter-spacing: -0.01em;
+    }
+  }
+  
+  .card-body {
+    padding: 2rem;
+  }
+}
+
+// ============================================
+// Row Adjustments
+// ============================================
+.row {
+  > [class*="col-"] {
+    &.mb-4 {
+      margin-bottom: 2rem !important;
+    }
+    
+    &.mb-3 {
+      margin-bottom: 1.5rem !important;
+    }
+  }
+}
+
+// ============================================
+// Responsive Design
+// ============================================
+@media (max-width: 992px) {
+  .dashboard-header {
+    .dashboard-title {
+      font-size: 2rem;
+    }
+  }
+  
+  .dashboard-card {
+    .card-body {
+      padding: 2rem 1.5rem;
+    }
+  }
+  
+  .dashboard-icon {
+    font-size: 3rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 1.5rem 0;
+    
+    &::before {
+      height: 250px;
+    }
+  }
+  
+  .dashboard-header {
+    margin-bottom: 2rem;
+    text-align: center;
+    
+    .dashboard-title {
+      font-size: 1.75rem;
+      
+      &::after {
+        left: 50%;
+        transform: translateX(-50%);
+      }
+    }
+    
+    .dashboard-subtitle {
+      font-size: 1rem;
+    }
+  }
+  
+  .dashboard-card {
+    margin-bottom: 1.5rem;
+    
+    .card-body {
+      padding: 2rem 1.5rem;
+    }
+    
+    &:hover {
+      transform: translateY(-8px) scale(1.01);
+    }
+  }
+  
+  .dashboard-icon {
+    font-size: 2.75rem;
+    
+    &::before {
+      width: 75px;
+      height: 75px;
+    }
+  }
+  
+  .stat-item {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    
+    .stat-number {
+      font-size: 2.25rem;
+    }
+    
+    .stat-label {
+      font-size: 0.75rem;
+    }
+  }
+  
+  .card {
+    .card-header {
+      padding: 1.5rem;
+    }
+    
+    .card-body {
+      padding: 1.5rem;
+    }
+  }
+  
+  .btn-primary,
+  .btn-secondary {
+    padding: 0.75rem 1.5rem;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 576px) {
+  .dashboard-container {
+    padding: 1rem 0;
+  }
+  
+  .dashboard-header {
+    margin-bottom: 1.5rem;
+    
+    .dashboard-title {
+      font-size: 1.5rem;
+    }
+    
+    .dashboard-subtitle {
+      font-size: 0.9rem;
+    }
+  }
+  
+  .dashboard-card {
+    .card-body {
+      padding: 1.5rem 1rem;
+    }
+  }
+  
+  .dashboard-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    
+    &::before {
+      width: 65px;
+      height: 65px;
+    }
+  }
+  
+  .card-title {
+    font-size: 1.15rem;
+  }
+  
+  .card-text {
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .stat-item {
+    .stat-number {
+      font-size: 2rem;
+    }
+  }
+  
+  .card {
+    .card-header {
+      padding: 1.25rem;
+      
+      h5 {
+        font-size: 1.1rem;
+      }
+    }
+    
+    .card-body {
+      padding: 1.25rem;
+    }
+  }
+}
+
+// ============================================
+// Accessibility
+// ============================================
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+// ============================================
+// Custom Scrollbar
+// ============================================
+.dashboard-container {
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: rgba($primary-color, 0.05);
+    border-radius: 4px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, rgba($primary-color, 0.5) 0%, rgba($primary-color, 0.3) 100%);
+    border-radius: 4px;
+    
+    &:hover {
+      background: linear-gradient(135deg, rgba($primary-color, 0.7) 0%, rgba($primary-color, 0.5) 100%);
+    }
+  }
+}

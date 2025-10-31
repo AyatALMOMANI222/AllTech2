@@ -1,0 +1,789 @@
+// Database Dashboard - Professional Design
+.database-dashboard {
+  padding: 0;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  min-height: 100vh;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+  &.horizontal-layout {
+    .dashboard-container {
+      max-width: 100%;
+      margin: 0;
+      padding: 24px;
+    }
+
+    .card {
+      border: none;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      background: white;
+      backdrop-filter: blur(10px);
+
+      .card-header {
+        background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+        color: white;
+        padding: 32px;
+        border: none;
+        position: relative;
+        overflow: hidden;
+
+        &::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: linear-gradient(45deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+          pointer-events: none;
+        }
+
+        h2 {
+          margin: 0;
+          font-size: 32px;
+          font-weight: 700;
+          letter-spacing: -0.5px;
+          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          position: relative;
+          z-index: 1;
+        }
+      }
+
+      .card-body {
+        padding: 0;
+        background: white;
+      }
+    }
+
+    // Professional Filters Section
+    .filters-section {
+      padding: 32px;
+      background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+      position: relative;
+
+      &::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 32px;
+        right: 32px;
+        height: 1px;
+        background: linear-gradient(90deg, transparent 0%, rgba(52, 152, 219, 0.3) 50%, transparent 100%);
+      }
+
+      .form-label {
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 12px;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .form-control, .form-select {
+        border-radius: 12px;
+        border: 2px solid #e9ecef;
+        padding: 14px 18px;
+        font-size: 15px;
+        transition: all 0.3s ease;
+        background: white;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+
+        &:focus {
+          border-color: #3498db;
+          box-shadow: 0 0 0 4px rgba(52, 152, 219, 0.1);
+          transform: translateY(-1px);
+        }
+
+        &::placeholder {
+          color: #95a5a6;
+          font-style: italic;
+        }
+      }
+
+      .btn {
+        border-radius: 12px;
+        padding: 14px 28px;
+        font-weight: 600;
+        font-size: 14px;
+        border: none;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        position: relative;
+        overflow: hidden;
+
+        &::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -100%;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+          transition: left 0.5s;
+        }
+
+        &:hover::before {
+          left: 100%;
+        }
+
+        &.btn-primary {
+          background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+          box-shadow: 0 8px 25px rgba(52, 152, 219, 0.3);
+
+          &:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 35px rgba(52, 152, 219, 0.4);
+          }
+        }
+
+        &.btn-success {
+          background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+          box-shadow: 0 8px 25px rgba(39, 174, 96, 0.3);
+
+          &:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 35px rgba(39, 174, 96, 0.4);
+          }
+        }
+
+        &.btn-secondary {
+          background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+          box-shadow: 0 8px 25px rgba(149, 165, 166, 0.3);
+
+          &:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 35px rgba(149, 165, 166, 0.4);
+          }
+        }
+
+        &:disabled {
+          opacity: 0.6;
+          transform: none;
+          box-shadow: none;
+        }
+      }
+    }
+
+    // Professional Table Container
+    .horizontal-table-container {
+      background: white;
+      overflow-x: auto;
+      overflow-y: visible;
+      position: relative;
+      border-radius: 0 0 16px 16px;
+      
+      .horizontal-scroll-wrapper {
+        min-width: 2000px;
+        overflow-x: auto;
+      }
+
+      .horizontal-dashboard-table {
+        width: 100%;
+        min-width: 2000px;
+        border-collapse: collapse;
+        margin: 0;
+        font-size: 13px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+        // Professional Main Header Row
+        .main-header-row {
+          th {
+            padding: 20px 12px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 15px;
+            border: none;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+
+            // ALLTECH DATABASE Header (Professional Gold)
+            &.alltech-main-header {
+              background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+              color: white;
+              border-color: #f39c12;
+              box-shadow: 0 4px 15px rgba(243, 156, 18, 0.3);
+
+              .alltech-title {
+                font-size: 18px;
+                font-weight: 800;
+                text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+              }
+            }
+
+            // APPROVED PURCHASED ORDER Header (Professional Blue)
+            &.approved-purchase-main-header {
+              background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+              color: white;
+              border-color: #3498db;
+              box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+
+              .approved-purchase-title {
+                font-size: 15px;
+                font-weight: 700;
+                text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+              }
+            }
+
+            // SUPPLIER Header (Professional Dark Blue)
+            &.supplier-main-header {
+              background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+              color: white;
+              border-color: #2c3e50;
+              box-shadow: 0 4px 15px rgba(44, 62, 80, 0.3);
+
+              .supplier-main-content {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+
+                .supplier-main-title {
+                  font-size: 15px;
+                  font-weight: 700;
+                  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+                }
+
+                .delivered-purchase-subtitle {
+                  font-size: 12px;
+                  font-weight: 600;
+                  opacity: 0.9;
+                }
+              }
+            }
+
+            // APPROVED SALES ORDER Header (Professional Green)
+            &.approved-sales-main-header {
+              background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+              color: white;
+              border-color: #27ae60;
+              box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+
+              .approved-sales-title {
+                font-size: 15px;
+                font-weight: 700;
+                text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+              }
+            }
+
+            // CUSTOMER Header (Professional Dark Green)
+            &.customer-main-header {
+              background: linear-gradient(135deg, #16a085 0%, #138d75 100%);
+              color: white;
+              border-color: #16a085;
+              box-shadow: 0 4px 15px rgba(22, 160, 133, 0.3);
+
+              .customer-main-content {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+
+                .customer-main-title {
+                  font-size: 15px;
+                  font-weight: 700;
+                  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+                }
+
+                .delivered-sales-subtitle {
+                  font-size: 12px;
+                  font-weight: 600;
+                  opacity: 0.9;
+                }
+              }
+            }
+          }
+        }
+
+        // Professional Column Header Row
+        .column-header-row {
+          th {
+            padding: 16px 8px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            position: sticky;
+            top: 80px;
+            z-index: 9;
+            background: white;
+
+            // ALLTECH DATABASE Column Headers (Light Gold)
+            &.alltech-col-header {
+              background: linear-gradient(135deg, #fef9e7 0%, #fcf3cf 100%);
+              color: #8b6914;
+              border-color: #fcf3cf;
+              font-weight: 700;
+            }
+
+            // APPROVED PURCHASED ORDER Column Headers (Light Blue)
+            &.approved-purchase-col-header {
+              background: linear-gradient(135deg, #ebf3fd 0%, #d6eaf8 100%);
+              color: #1b4f72;
+              border-color: #d6eaf8;
+              font-weight: 700;
+            }
+
+            // DELIVERED PURCHASED ORDER Column Headers (Light Blue)
+            &.delivered-purchase-col-header {
+              background: linear-gradient(135deg, #ebf3fd 0%, #d6eaf8 100%);
+              color: #1b4f72;
+              border-color: #d6eaf8;
+              font-weight: 700;
+            }
+
+            // APPROVED SALES ORDER Column Headers (Light Green)
+            &.approved-sales-col-header {
+              background: linear-gradient(135deg, #e8f8f5 0%, #d5f4e6 100%);
+              color: #145a32;
+              border-color: #d5f4e6;
+              font-weight: 700;
+            }
+
+            // DELIVERED SALES ORDER Column Headers (Light Green)
+            &.delivered-sales-col-header {
+              background: linear-gradient(135deg, #e8f8f5 0%, #d5f4e6 100%);
+              color: #145a32;
+              border-color: #d5f4e6;
+              font-weight: 700;
+            }
+          }
+        }
+
+        // Professional Data Rows
+        .data-row {
+          transition: all 0.2s ease;
+
+          &:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          }
+
+          td {
+            padding: 14px 8px;
+            text-align: center;
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            font-size: 12px;
+            vertical-align: middle;
+            font-weight: 500;
+
+            // ALLTECH DATABASE Data (Clean White)
+            &.alltech-data {
+              background-color: #ffffff;
+              color: #2c3e50;
+              border-color: rgba(0, 0, 0, 0.04);
+
+              strong {
+                color: #1a252f;
+                font-weight: 700;
+              }
+            }
+
+            // APPROVED PURCHASED ORDER Data (Light Blue)
+            &.approved-purchase-data {
+              background: linear-gradient(135deg, #f8fbff 0%, #f1f8ff 100%);
+              color: #2c3e50;
+              border-color: rgba(52, 152, 219, 0.1);
+            }
+
+            // DELIVERED PURCHASED ORDER Data (Light Blue)
+            &.delivered-purchase-data {
+              background: linear-gradient(135deg, #f8fbff 0%, #f1f8ff 100%);
+              color: #2c3e50;
+              border-color: rgba(52, 152, 219, 0.1);
+            }
+
+            // APPROVED SALES ORDER Data (Light Green)
+            &.approved-sales-data {
+              background: linear-gradient(135deg, #f8fff8 0%, #f1fff1 100%);
+              color: #2c3e50;
+              border-color: rgba(39, 174, 96, 0.1);
+            }
+
+            // DELIVERED SALES ORDER Data (Light Green)
+            &.delivered-sales-data {
+              background: linear-gradient(135deg, #f8fff8 0%, #f1fff1 100%);
+              color: #2c3e50;
+              border-color: rgba(39, 174, 96, 0.1);
+            }
+          }
+
+          // Alternating row colors for better readability
+          &:nth-child(even) {
+            td.alltech-data {
+              background-color: #fafbfc;
+            }
+            
+            td.approved-purchase-data,
+            td.delivered-purchase-data {
+              background: linear-gradient(135deg, #f5f9ff 0%, #eef7ff 100%);
+            }
+            
+            td.approved-sales-data,
+            td.delivered-sales-data {
+              background: linear-gradient(135deg, #f5fff5 0%, #eefeee 100%);
+            }
+          }
+        }
+
+        // Professional Empty State
+        .text-center {
+          &.py-4 {
+            padding: 60px 20px !important;
+            color: #7f8c8d;
+            font-style: italic;
+            font-size: 16px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+          }
+        }
+      }
+    }
+  }
+
+  // Professional Loading State
+  .text-center {
+    &.py-5 {
+      padding: 80px 20px !important;
+      color: #7f8c8d;
+      background: white;
+
+      .spinner-border {
+        width: 4rem;
+        height: 4rem;
+        border-width: 4px;
+        border-color: #3498db;
+        border-right-color: transparent;
+      }
+
+      p {
+        margin-top: 20px;
+        font-size: 18px;
+        font-weight: 500;
+      }
+    }
+  }
+
+  // Professional Alert Styles
+  .alert {
+    border-radius: 12px;
+    border: none;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    font-weight: 500;
+
+    &.alert-danger {
+      background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+      color: white;
+      box-shadow: 0 8px 25px rgba(231, 76, 60, 0.2);
+    }
+  }
+
+  // Professional Scroll Indicator
+  .horizontal-table-container {
+    position: relative;
+
+    &::after {
+      content: "← Scroll horizontally to view all data →";
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: linear-gradient(135deg, rgba(44, 62, 80, 0.9) 0%, rgba(52, 152, 219, 0.9) 100%);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0.9;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.9; }
+      50% { opacity: 0.7; }
+    }
+
+    @media (max-width: 768px) {
+      &::after {
+        content: "← →";
+        font-size: 18px;
+        padding: 10px 14px;
+        top: 12px;
+        right: 12px;
+      }
+    }
+  }
+
+  // Professional Print Styles
+  @media print {
+    background: white !important;
+    
+    // Force landscape orientation for better table visibility
+    @page {
+      size: landscape;
+      margin: 0.2cm;
+    }
+    
+    // Reset all widths to allow table to determine its own width
+    * {
+      max-width: none !important;
+      min-width: 0 !important;
+    }
+    
+    .no-print {
+      display: none !important;
+    }
+
+    // Hide all elements except table content
+    .filters-section,
+    .card-header,
+    .card-footer,
+    .spinner-border,
+    .alert,
+    .badge,
+    &::after {
+      display: none !important;
+    }
+
+    .dashboard-container {
+      padding: 0 !important;
+      margin: 0 !important;
+      width: 100% !important;
+      height: auto !important;
+      max-height: none !important;
+      overflow: visible !important;
+    }
+
+    .card {
+      box-shadow: none !important;
+      border: none !important;
+      page-break-inside: auto !important;
+      margin: 0 !important;
+      height: auto !important;
+      max-height: none !important;
+    }
+
+    .card-body {
+      padding: 2px !important;
+      overflow: visible !important;
+      height: auto !important;
+      max-height: none !important;
+    }
+
+    .horizontal-table-container {
+      overflow: visible !important;
+      box-shadow: none !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      transform: scale(0.55) !important; // Reduced from 0.60 to fit more content
+      transform-origin: top left !important;
+      margin-bottom: 0 !important;
+      padding-bottom: 50% !important; // Increased to prevent bottom cutoff
+
+      .horizontal-scroll-wrapper {
+        overflow: visible !important;
+        width: 181.82% !important; // Compensate for 0.55 scale (1/0.55)
+        min-width: auto !important;
+      }
+
+      .horizontal-dashboard-table {
+        width: 100% !important;
+        min-width: auto !important;
+        font-size: 8px !important; // Reduced from 10px
+        box-shadow: none !important;
+        page-break-inside: auto !important;
+        table-layout: auto !important;
+        border-collapse: collapse !important;
+        page-break-after: auto !important;
+
+        th, td {
+          padding: 3px 4px !important; // Reduced padding
+          font-size: 7px !important; // Reduced from 9px
+          line-height: 1.1 !important; // Reduced from 1.2
+          word-wrap: break-word !important;
+          overflow: visible !important;
+          white-space: normal !important;
+          max-width: none !important;
+          width: auto !important;
+          border: 0.5px solid #dee2e6 !important;
+        }
+
+        .main-header-row {
+          page-break-after: avoid !important;
+          
+          th {
+            position: static !important;
+            background: #f8f9fa !important;
+            color: #2c3e50 !important;
+            font-size: 8px !important; // Reduced
+            padding: 4px 3px !important; // Reduced
+            font-weight: 700 !important;
+            
+            .alltech-title,
+            .approved-purchase-title,
+            .supplier-main-title,
+            .approved-sales-title,
+            .customer-main-title {
+              font-size: 8px !important; // Reduced
+              text-shadow: none !important;
+            }
+            
+            .delivered-purchase-subtitle,
+            .delivered-sales-subtitle {
+              font-size: 7px !important; // Reduced
+            }
+          }
+        }
+
+        .column-header-row {
+          page-break-after: avoid !important;
+          
+          th {
+            position: static !important;
+            background: #e9ecef !important;
+            color: #2c3e50 !important;
+            font-size: 7px !important; // Reduced
+            padding: 3px 3px !important; // Reduced
+            font-weight: 600 !important;
+          }
+        }
+
+        .data-row {
+          page-break-inside: avoid !important;
+          
+          td {
+            border: 0.5px solid #dee2e6 !important;
+            background: white !important;
+            font-size: 7px !important; // Reduced
+            padding: 3px 4px !important; // Reduced
+            
+            &.alltech-data,
+            &.purchase-data,
+            &.approved-sales-data,
+            &.delivered-sales-data {
+              background: white !important;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Professional Responsive Design
+  @media (max-width: 1200px) {
+    .dashboard-container {
+      padding: 20px;
+    }
+
+    .horizontal-table-container {
+      .horizontal-dashboard-table {
+        font-size: 11px;
+
+        .main-header-row th {
+          padding: 16px 8px;
+          font-size: 13px;
+        }
+
+        .column-header-row th {
+          padding: 12px 6px;
+          font-size: 10px;
+        }
+
+        .data-row td {
+          padding: 12px 6px;
+          font-size: 10px;
+        }
+      }
+    }
+  }
+
+  @media (max-width: 768px) {
+    .dashboard-container {
+      padding: 16px;
+    }
+
+    .card {
+      border-radius: 12px;
+
+      .card-header {
+        padding: 24px;
+
+        h2 {
+          font-size: 24px;
+        }
+      }
+    }
+
+    .filters-section {
+      padding: 24px;
+
+      .form-control, .form-select {
+        padding: 12px 16px;
+        font-size: 14px;
+      }
+
+      .btn {
+        padding: 12px 20px;
+        font-size: 13px;
+      }
+    }
+
+    .horizontal-table-container {
+      .horizontal-dashboard-table {
+        font-size: 9px;
+
+        .main-header-row th {
+          padding: 12px 4px;
+          font-size: 11px;
+        }
+
+        .column-header-row th {
+          padding: 8px 4px;
+          font-size: 8px;
+        }
+
+        .data-row td {
+          padding: 8px 4px;
+          font-size: 8px;
+        }
+      }
+    }
+  }
+
+  @media (max-width: 576px) {
+    .dashboard-container {
+      padding: 12px;
+    }
+
+    .horizontal-table-container {
+      .horizontal-dashboard-table {
+        font-size: 8px;
+
+        .main-header-row th {
+          padding: 8px 2px;
+          font-size: 10px;
+        }
+
+        .column-header-row th {
+          padding: 6px 2px;
+          font-size: 7px;
+        }
+
+        .data-row td {
+          padding: 6px 2px;
+          font-size: 7px;
+        }
+      }
+    }
+  }
+}

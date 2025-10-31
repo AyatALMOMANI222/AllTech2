@@ -1,0 +1,5 @@
+serial_no,project_no,date_po,part_no,material_no,description,uom,quantity,supplier_unit_price,total_price,sold_quantity,balance,balance_amount
+INV001,PRJ001,2024-01-15,PART001,MAT001,Steel Rod 10mm,pcs,100,25.50,2550.00,20,80,2040.00
+INV002,PRJ002,2024-01-16,PART002,MAT002,Aluminum Sheet 2mm,sqft,50,45.00,2250.00,10,40,1800.00
+INV003,PRJ001,2024-01-17,PART003,MAT003,Copper Wire 12AWG,m,200,3.25,650.00,50,150,487.50
+

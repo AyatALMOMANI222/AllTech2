@@ -1,0 +1,22 @@
+// ProtectedRoute component styles
+.protected-route {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-spinner {
+  width: 3rem;
+  height: 3rem;
+}
+
+.access-denied {
+  text-align: center;
+  padding: 2rem;
+  
+  .alert {
+    max-width: 500px;
+    margin: 0 auto;
+  }
+}

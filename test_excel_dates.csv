@@ -1,0 +1,4 @@
+serial_no,project_no,date_po,part_no,material_no,description,uom,quantity,supplier_unit_price,total_price,sold_quantity,balance,balance_amount
+TEST001,PRJ001,2024-01-15,PART001,MAT001,Test Item with Date,pcs,10,5.00,50.00,2,8,40.00
+TEST002,PRJ002,2024-02-20,PART002,MAT002,Another Test Item,pcs,20,10.00,200.00,5,15,150.00
+

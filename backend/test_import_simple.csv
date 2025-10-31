@@ -1,0 +1,4 @@
+po_number,project_no,date_po,part_no,material_no,description,uom,quantity,supplier_unit_price,total_price,lead_time,due_date,comments
+PO-TEST-001,PRJ-TEST-001,2025-01-20,PN-TEST-001,M-TEST-001,Test Widget,pcs,10,15.00,150.00,5 days,2025-01-25,Test import
+PO-TEST-002,PRJ-TEST-002,2025-01-21,PN-TEST-002,M-TEST-002,Test Component,pcs,5,25.00,125.00,7 days,2025-01-28,Another test
+PO-TEST-003,PRJ-TEST-003,2025-01-22,PN-TEST-003,M-TEST-003,Test Assembly,pcs,20,12.50,250.00,3 days,2025-01-25,Final test
