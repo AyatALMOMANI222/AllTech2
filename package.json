@@ -1,0 +1,13 @@
+{
+  "name": "alltech2",
+  "version": "1.0.0",
+  "description": "AllTech Business Management System",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build && cd ../backend && npm install",
+    "start": "cd backend && node server.js",
+    "init-db": "cd backend && node initDb.js"
+  },
+  "keywords": ["business", "management", "erp"],
+  "author": "",
+  "license": "ISC"
+}
