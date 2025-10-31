@@ -7,11 +7,11 @@ const mysql = require('mysql2/promise');
 dotenv.config();
 
 const app = express();
-const PORT = 8000;
+const PORT = process.env.PORT || 8000;
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: process.env.FRONTEND_URL || process.env.RAILWAY_PUBLIC_DOMAIN || 'http://localhost:3000',
   credentials: true
 }));
 app.use(express.json());
