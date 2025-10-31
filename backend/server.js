@@ -11,23 +11,40 @@ const PORT = process.env.PORT || 8000;
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: process.env.FRONTEND_URL || process.env.CORS_ORIGIN || '*',
   credentials: true
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Database connection
-const dbConfig = {
-  host: process.env.DB_HOST || '127.0.0.1',
-  port: process.env.DB_PORT || 3306,
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '1335293',
-  database: process.env.DB_NAME || 'management',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-};
+// Support Railway's DATABASE_URL format: mysql://user:password@host:port/database
+let dbConfig;
+if (process.env.DATABASE_URL) {
+  // Parse Railway DATABASE_URL format
+  const url = new URL(process.env.DATABASE_URL);
+  dbConfig = {
+    host: url.hostname,
+    port: parseInt(url.port) || 3306,
+    user: url.username,
+    password: url.password,
+    database: url.pathname.slice(1), // Remove leading '/'
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+  };
+} else {
+  dbConfig = {
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: process.env.DB_PORT || 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '1335293',
+    database: process.env.DB_NAME || 'management',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+  };
+}
 
 const pool = mysql.createPool(dbConfig);
 
@@ -48,9 +65,31 @@ app.use('/api/purchase-orders', require('./routes/purchaseOrders'));
 app.use('/api/sales-tax-invoices', require('./routes/salesTaxInvoices'));
 app.use('/api/purchase-tax-invoices', require('./routes/purchaseTaxInvoices'));
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'AllTech API Server is running!',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      users: '/api/users',
+      inventory: '/api/inventory',
+      purchaseOrders: '/api/purchase-orders',
+      salesTaxInvoices: '/api/sales-tax-invoices',
+      purchaseTaxInvoices: '/api/purchase-tax-invoices',
+      databaseDashboard: '/api/database-dashboard'
+    }
+  });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ message: 'Server is running!' });
+  res.json({ 
+    status: 'ok',
+    message: 'Server is running!',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Error handling middleware
