@@ -1,9 +1,0 @@
-node_modules/
-frontend/
-.git/
-*.md
-uploads/
-*.csv
-*.xlsx
-test_*.js
-

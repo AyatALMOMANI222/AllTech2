@@ -143,13 +143,13 @@ async function calculateAndUpdateDeliveredData(db, poId) {
     // Set appropriate status
     let newStatus = po.status;
     if (allDelivered && !allPending) {
-      newStatus = 'delivered_completed';
+      newStatus = 'delivered';
     } else if (!allPending && !allDelivered) {
       newStatus = 'partially_delivered';
     }
     
-    // Only update if status changed and newStatus is valid
-    if (newStatus !== po.status && ['approved', 'partially_delivered', 'delivered_completed'].includes(newStatus)) {
+    // Only update if status changed
+    if (newStatus !== po.status) {
       await db.execute('UPDATE purchase_orders SET status = ? WHERE id = ?', [newStatus, poId]);
       console.log(`✓ Updated PO ${poId} status to ${newStatus}`);
     }
