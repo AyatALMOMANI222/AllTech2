@@ -5,25 +5,41 @@ dotenv.config();
 
 async function initializeDatabase() {
   try {
-    // Database configuration with environment variables
-    const dbConfig = {
-      host: process.env.DB_HOST || '127.0.0.1',
-      port: process.env.DB_PORT || 3306,
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '1335293'
-    };
-    
-    console.log('Connecting to database with config:', dbConfig);
-    
-    // Connect to MySQL without specifying database
+    // Parse DATABASE_URL if provided (Railway format)
+    let dbConfig;
+
+    if (process.env.DATABASE_URL) {
+      // Railway provides DATABASE_URL
+      const url = process.env.DATABASE_URL;
+      const match = url.match(/mysql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
+      if (match) {
+        dbConfig = {
+          host: match[3],
+          port: parseInt(match[4]),
+          user: match[1],
+          password: match[2],
+          database: match[5] // Use the database from URL (railway)
+        };
+        console.log('✓ Using DATABASE_URL from Railway');
+        console.log(`✓ Database: ${dbConfig.database}`);
+      }
+    } else {
+      // Local development - use environment variables
+      dbConfig = {
+        host: process.env.DB_HOST || '127.0.0.1',
+        port: process.env.DB_PORT || 3306,
+        user: process.env.DB_USERNAME || process.env.DB_USER || 'root',
+        password: process.env.DB_PASSWORD || '',
+        database: process.env.DB_DATABASE || 'alltech_business'
+      };
+      console.log('✓ Using local database configuration');
+    }
+
+    console.log(`Connecting to database at ${dbConfig.host}...`);
+
+    // Connect directly to the database (don't create new one)
     const connection = await mysql.createConnection(dbConfig);
-
-    // Create database if it doesn't exist
-    await connection.execute(`CREATE DATABASE IF NOT EXISTS management`);
-    console.log('Database created or already exists');
-
-    // Use the database
-    await connection.query(`USE management`);
+    console.log(`✓ Connected to database '${dbConfig.database}'`);
 
     // Create users table
     await connection.execute(`
@@ -37,6 +53,7 @@ async function initializeDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
+    console.log('✓ Users table created');
 
     // Create customers_suppliers table
     await connection.execute(`
@@ -54,6 +71,7 @@ async function initializeDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
+    console.log('✓ Customers/Suppliers table created');
 
     // Create inventory table
     await connection.execute(`
@@ -76,6 +94,7 @@ async function initializeDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
+    console.log('✓ Inventory table created');
 
     // Create purchase_orders table
     await connection.execute(`
@@ -96,6 +115,7 @@ async function initializeDatabase() {
         FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
+    console.log('✓ Purchase Orders table created');
 
     // Create purchase_order_items table
     await connection.execute(`
@@ -127,8 +147,9 @@ async function initializeDatabase() {
         FOREIGN KEY (po_id) REFERENCES purchase_orders(id) ON DELETE CASCADE
       )
     `);
+    console.log('✓ Purchase Order Items table created');
 
-    // Create po_documents table for file attachments
+    // Create po_documents table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS po_documents (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -142,6 +163,7 @@ async function initializeDatabase() {
         FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
+    console.log('✓ PO Documents table created');
 
     // Create sales_tax_invoices table
     await connection.execute(`
@@ -169,6 +191,7 @@ async function initializeDatabase() {
         FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
+    console.log('✓ Sales Tax Invoices table created');
 
     // Create sales_tax_invoice_items table
     await connection.execute(`
@@ -185,6 +208,7 @@ async function initializeDatabase() {
         FOREIGN KEY (invoice_id) REFERENCES sales_tax_invoices(id) ON DELETE CASCADE
       )
     `);
+    console.log('✓ Sales Tax Invoice Items table created');
 
     // Create purchase_tax_invoices table
     await connection.execute(`
@@ -207,6 +231,7 @@ async function initializeDatabase() {
         FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
+    console.log('✓ Purchase Tax Invoices table created');
 
     // Create purchase_tax_invoice_items table
     await connection.execute(`
@@ -226,24 +251,31 @@ async function initializeDatabase() {
         FOREIGN KEY (invoice_id) REFERENCES purchase_tax_invoices(id) ON DELETE CASCADE
       )
     `);
+    console.log('✓ Purchase Tax Invoice Items table created');
 
     // Insert default admin user
     const bcrypt = require('bcryptjs');
     const hashedPassword = await bcrypt.hash('admin123', 10);
-    
+
     await connection.execute(`
-      INSERT IGNORE INTO users (username, email, password, role) 
+      INSERT IGNORE INTO users (username, email, password, role)
       VALUES ('admin', 'admin@example.com', ?, 'admin')
     `, [hashedPassword]);
 
-    console.log('Database tables created successfully');
-    console.log('Default admin user created:');
-    console.log('Username: admin');
-    console.log('Password: admin123');
+    console.log('\n==============================================');
+    console.log('✅ Database initialization completed successfully!');
+    console.log('==============================================');
+    console.log('✓ All 10 tables created');
+    console.log('✓ Default admin user created:');
+    console.log('   Username: admin');
+    console.log('   Password: admin123');
+    console.log('==============================================\n');
 
     await connection.end();
   } catch (error) {
-    console.error('Error initializing database:', error);
+    console.error('\n❌ Error initializing database:');
+    console.error(error.message);
+    console.error('\nPlease check your database configuration and try again.');
     process.exit(1);
   }
 }
