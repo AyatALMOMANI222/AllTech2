@@ -332,10 +332,10 @@ router.put('/:id', async (req, res) => {
       });
     }
     
-    // Validate status (only 'approved' and 'delivered' are allowed)
-    if (status && !['approved', 'delivered'].includes(status)) {
+    // Validate status (only valid ENUM values are allowed)
+    if (status && !['approved', 'partially_delivered', 'delivered_completed'].includes(status)) {
       return res.status(400).json({ 
-        message: 'Status must be approved or delivered' 
+        message: 'Status must be approved, partially_delivered, or delivered_completed' 
       });
     }
     
@@ -406,7 +406,7 @@ router.put('/:id', async (req, res) => {
     }
     
     // Handle form-level fields for delivered status
-    if (status === 'delivered' && (due_date || delivered_quantity || delivered_unit_price || delivered_total_price)) {
+    if (status === 'delivered_completed' && (due_date || delivered_quantity || delivered_unit_price || delivered_total_price)) {
       console.log('Updating existing items with form-level fields for delivered status');
       console.log('Form-level fields:', { penalty_percentage, due_date, delivered_quantity, delivered_unit_price, delivered_total_price });
       

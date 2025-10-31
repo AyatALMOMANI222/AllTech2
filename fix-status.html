@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إصلاح Status ENUM</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            display: block;
+        }
+        
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            display: block;
+        }
+        
+        .result.loading {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            display: block;
+        }
+        
+        .icon {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 إصلاح Status ENUM</h1>
+        <p class="subtitle">سيتم تحديث قاعدة البيانات لإصلاح خطأ Status</p>
+        
+        <div class="input-group">
+            <label for="apiUrl">رابط API الخاص بك:</label>
+            <input 
+                type="text" 
+                id="apiUrl" 
+                placeholder="https://your-app.railway.app/api/fix/fix-status-enum"
+                value=""
+            />
+        </div>
+        
+        <button id="fixBtn" onclick="fixStatus()">
+            <span class="icon">🚀</span>
+            تشغيل الإصلاح
+        </button>
+        
+        <div id="result" class="result"></div>
+    </div>
+    
+    <script>
+        async function fixStatus() {
+            const apiUrl = document.getElementById('apiUrl').value.trim();
+            const btn = document.getElementById('fixBtn');
+            const result = document.getElementById('result');
+            
+            if (!apiUrl) {
+                result.className = 'result error';
+                result.innerHTML = '⚠️ يرجى إدخال رابط API';
+                return;
+            }
+            
+            // Disable button
+            btn.disabled = true;
+            btn.innerHTML = '<span class="icon">⏳</span> جاري المعالجة...';
+            
+            // Show loading
+            result.className = 'result loading';
+            result.innerHTML = '⏳ جاري تحديث قاعدة البيانات...';
+            
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    result.className = 'result success';
+                    result.innerHTML = `
+                        ✅ <strong>تم بنجاح!</strong><br>
+                        📊 تم تحديث ${data.updatedRows || 0} صف<br>
+                        🔄 القيم الجديدة: ${data.newValues.join(', ')}
+                    `;
+                } else {
+                    throw new Error(data.message || 'حدث خطأ');
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = `
+                    ❌ <strong>حدث خطأ:</strong><br>
+                    ${error.message}
+                    <br><br>
+                    <small>تأكد من:</small><br>
+                    • رابط API صحيح<br>
+                    • الكود تم رفعه إلى Railway<br>
+                    • Deployment اكتمل
+                `;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span class="icon">🚀</span> تشغيل الإصلاح';
+            }
+        }
+    </script>
+</body>
+</html>
+
