@@ -7,6 +7,10 @@ import {
 import SalesTaxInvoice from "../SalesTaxInvoice";
 import PurchaseTaxInvoice from "../PurchaseTaxInvoice";
 
+// API base URL - use environment variable or detect production
+const API_BASE_URL = process.env.REACT_APP_API_URL ||
+  (process.env.NODE_ENV === 'production' ? '/api' : '${API_BASE_URL}');
+
 const PurchaseOrdersManagement = () => {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -65,7 +69,7 @@ const PurchaseOrdersManagement = () => {
   const fetchPurchaseOrders = async () => {
     setLoading(true);
     try {
-      let url = `http://localhost:8000/api/purchase-orders`;
+      let url = `${API_BASE_URL}/purchase-orders`;
       if (!showAll) {
         url += `?page=${currentPage}&limit=${itemsPerPage}`;
       } else {
@@ -87,7 +91,7 @@ const PurchaseOrdersManagement = () => {
   const fetchCustomersSuppliers = async () => {
     try {
       const response = await fetch(
-        "http://localhost:8000/api/purchase-orders/customers-suppliers/list"
+        "${API_BASE_URL}/purchase-orders/customers-suppliers/list"
       );
       const data = await response.json();
       setCustomersSuppliers(data);
@@ -127,8 +131,8 @@ const PurchaseOrdersManagement = () => {
 
     try {
       const url = editingOrder
-        ? `http://localhost:8000/api/purchase-orders/${editingOrder.id}`
-        : "http://localhost:8000/api/purchase-orders";
+        ? `${API_BASE_URL}/purchase-orders/${editingOrder.id}`
+        : "${API_BASE_URL}/purchase-orders";
 
       const method = editingOrder ? "PUT" : "POST";
 
@@ -197,7 +201,7 @@ const PurchaseOrdersManagement = () => {
       setLoading(true);
       try {
         const response = await fetch(
-          `http://localhost:8000/api/purchase-orders/${id}`,
+          `${API_BASE_URL}/purchase-orders/${id}`,
           {
             method: "DELETE",
           }
@@ -221,7 +225,7 @@ const PurchaseOrdersManagement = () => {
   const handleViewDetails = async (order) => {
     try {
       const response = await fetch(
-        `http://localhost:8000/api/purchase-orders/${order.id}`
+        `${API_BASE_URL}/purchase-orders/${order.id}`
       );
       const data = await response.json();
       setSelectedOrder(data);
@@ -425,7 +429,7 @@ const PurchaseOrdersManagement = () => {
 
     try {
       const response = await fetch(
-        "http://localhost:8000/api/purchase-orders/import",
+        "${API_BASE_URL}/purchase-orders/import",
         {
           method: "POST",
           body: formData,
@@ -470,7 +474,7 @@ const PurchaseOrdersManagement = () => {
     setLoading(true);
     try {
       const response = await fetch(
-        "http://localhost:8000/api/purchase-orders",
+        "${API_BASE_URL}/purchase-orders",
         {
           method: "POST",
           headers: {

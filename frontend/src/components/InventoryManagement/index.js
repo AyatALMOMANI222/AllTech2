@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import './style.scss';
 
+// API base URL - use environment variable or detect production
+const API_BASE_URL = process.env.REACT_APP_API_URL ||
+  (process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8000/api');
+
 const InventoryManagement = () => {
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -36,7 +40,7 @@ const InventoryManagement = () => {
   const fetchInventory = async () => {
     setLoading(true);
     try {
-      let url = `http://localhost:8000/api/inventory?search=${searchTerm}`;
+      let url = `${API_BASE_URL}/inventory?search=${searchTerm}`;
       if (!showAll) {
         url += `&page=${currentPage}&limit=${itemsPerPage}`;
       } else {
@@ -68,9 +72,9 @@ const InventoryManagement = () => {
     setLoading(true);
 
     try {
-      const url = editingItem 
-        ? `http://localhost:8000/api/inventory/${editingItem.id}`
-        : 'http://localhost:8000/api/inventory';
+      const url = editingItem
+        ? `${API_BASE_URL}/inventory/${editingItem.id}`
+        : `${API_BASE_URL}/inventory`;
       
       const method = editingItem ? 'PUT' : 'POST';
       
@@ -138,7 +142,7 @@ const InventoryManagement = () => {
     if (window.confirm('Are you sure you want to delete this inventory item?')) {
       setLoading(true);
       try {
-        const response = await fetch(`http://localhost:8000/api/inventory/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/inventory/${id}`, {
           method: 'DELETE',
         });
 
@@ -169,7 +173,7 @@ const InventoryManagement = () => {
     formData.append('file', importFile);
 
     try {
-      const response = await fetch('http://localhost:8000/api/inventory/import', {
+      const response = await fetch(`${API_BASE_URL}/inventory/import`, {
         method: 'POST',
         body: formData,
       });
