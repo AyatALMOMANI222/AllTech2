@@ -9,7 +9,7 @@ import PurchaseTaxInvoice from "../PurchaseTaxInvoice";
 
 // API base URL - use environment variable or detect production
 const API_BASE_URL = process.env.REACT_APP_API_URL ||
-  (process.env.NODE_ENV === 'production' ? '/api' : '${API_BASE_URL}');
+  (process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:8000/api');
 
 const PurchaseOrdersManagement = () => {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -91,7 +91,7 @@ const PurchaseOrdersManagement = () => {
   const fetchCustomersSuppliers = async () => {
     try {
       const response = await fetch(
-        "${API_BASE_URL}/purchase-orders/customers-suppliers/list"
+        `${API_BASE_URL}/purchase-orders/customers-suppliers/list`
       );
       const data = await response.json();
       setCustomersSuppliers(data);
@@ -132,7 +132,7 @@ const PurchaseOrdersManagement = () => {
     try {
       const url = editingOrder
         ? `${API_BASE_URL}/purchase-orders/${editingOrder.id}`
-        : "${API_BASE_URL}/purchase-orders";
+        : `${API_BASE_URL}/purchase-orders`;
 
       const method = editingOrder ? "PUT" : "POST";
 
@@ -429,7 +429,7 @@ const PurchaseOrdersManagement = () => {
 
     try {
       const response = await fetch(
-        "${API_BASE_URL}/purchase-orders/import",
+        `${API_BASE_URL}/purchase-orders/import`,
         {
           method: "POST",
           body: formData,
@@ -474,7 +474,7 @@ const PurchaseOrdersManagement = () => {
     setLoading(true);
     try {
       const response = await fetch(
-        "${API_BASE_URL}/purchase-orders",
+        `${API_BASE_URL}/purchase-orders`,
         {
           method: "POST",
           headers: {
