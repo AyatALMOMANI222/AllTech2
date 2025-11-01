@@ -18,19 +18,6 @@ async function migratePOStatus() {
 
     await connection.beginTransaction();
 
-    // Check current status distribution
-    const [statusCounts] = await connection.execute(`
-      SELECT status, COUNT(*) as count 
-      FROM purchase_orders 
-      GROUP BY status
-    `);
-
-    console.log('Current status distribution:');
-    statusCounts.forEach(row => {
-      console.log(`  ${row.status}: ${row.count} records`);
-    });
-    console.log('');
-
     // Map old statuses to new ones
     console.log('Migrating statuses...');
     
@@ -42,18 +29,18 @@ async function migratePOStatus() {
     `);
     console.log(`✓ Updated ${result1.affectedRows} records from draft/pending/rejected to approved`);
 
-    // completed → delivered
+    // completed, delivered → delivered_completed
     const [result2] = await connection.execute(`
       UPDATE purchase_orders 
-      SET status = 'delivered' 
-      WHERE status = 'completed'
+      SET status = 'delivered_completed' 
+      WHERE status IN ('completed', 'delivered')
     `);
-    console.log(`✓ Updated ${result2.affectedRows} records from completed to delivered`);
-
-    // Check if there are any other statuses
+    console.log(`✓ Updated ${result2.affectedRows} records from completed/delivered to delivered_completed`);
+    
+    // Check if there are any other unexpected statuses
     const [remainingStatuses] = await connection.execute(`
       SELECT DISTINCT status FROM purchase_orders 
-      WHERE status NOT IN ('approved', 'delivered')
+      WHERE status NOT IN ('approved', 'partially_delivered', 'delivered_completed')
     `);
 
     if (remainingStatuses.length > 0) {
@@ -61,12 +48,12 @@ async function migratePOStatus() {
       remainingStatuses.forEach(row => {
         console.warn(`  - ${row.status}`);
       });
-      console.warn('  These will be converted to "approved"');
+      console.warn('  Converting to "approved"');
       
       await connection.execute(`
         UPDATE purchase_orders 
         SET status = 'approved' 
-        WHERE status NOT IN ('approved', 'delivered')
+        WHERE status NOT IN ('approved', 'partially_delivered', 'delivered_completed')
       `);
     }
 
@@ -74,7 +61,7 @@ async function migratePOStatus() {
     console.log('\nUpdating table schema...');
     await connection.execute(`
       ALTER TABLE purchase_orders 
-      MODIFY COLUMN status ENUM('approved', 'delivered') DEFAULT 'approved'
+      MODIFY COLUMN status ENUM('approved', 'partially_delivered', 'delivered_completed') DEFAULT 'approved'
     `);
     console.log('✓ Table schema updated successfully');
 
@@ -94,7 +81,8 @@ async function migratePOStatus() {
     console.log('\n✅ Migration completed successfully!');
     console.log('\nStatus values are now:');
     console.log('  - approved (default)');
-    console.log('  - delivered');
+    console.log('  - partially_delivered');
+    console.log('  - delivered_completed');
 
     await connection.end();
   } catch (error) {
