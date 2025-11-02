@@ -524,18 +524,22 @@
     }
   }
 
-  // Professional Print Styles
+  // Professional Print Styles - Full Table Display
   @media print {
     background: white !important;
     
     // Force landscape orientation for better table visibility
     @page {
       size: landscape;
-      margin: 0.2cm;
+      margin: 0.5cm;
     }
     
+    // Print color adjustment to preserve formatting
     // Reset all widths to allow table to determine its own width
     * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
       max-width: none !important;
       min-width: 0 !important;
     }
@@ -574,10 +578,11 @@
     }
 
     .card-body {
-      padding: 2px !important;
+      padding: 5px !important;
       overflow: visible !important;
       height: auto !important;
       max-height: none !important;
+      width: 100% !important;
     }
 
     .horizontal-table-container {
@@ -585,87 +590,115 @@
       box-shadow: none !important;
       width: 100% !important;
       max-width: 100% !important;
-      transform: scale(0.55) !important; // Reduced from 0.60 to fit more content
+      transform: none !important; // Remove scale to show full table
       transform-origin: top left !important;
-      margin-bottom: 0 !important;
-      padding-bottom: 50% !important; // Increased to prevent bottom cutoff
+      margin: 0 !important;
+      padding: 0 !important;
+      page-break-inside: auto !important;
 
       .horizontal-scroll-wrapper {
         overflow: visible !important;
-        width: 181.82% !important; // Compensate for 0.55 scale (1/0.55)
-        min-width: auto !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
       }
 
       .horizontal-dashboard-table {
         width: 100% !important;
-        min-width: auto !important;
-        font-size: 8px !important; // Reduced from 10px
+        min-width: 100% !important;
+        max-width: 100% !important;
+        font-size: 9px !important; // Readable font size
         box-shadow: none !important;
         page-break-inside: auto !important;
-        table-layout: auto !important;
+        table-layout: fixed !important; // Fixed layout for consistent column widths
         border-collapse: collapse !important;
+        border-spacing: 0 !important;
         page-break-after: auto !important;
+        display: table !important;
+        
+        // Ensure table fits on page width
+        width: 100% !important;
 
         th, td {
-          padding: 3px 4px !important; // Reduced padding
-          font-size: 7px !important; // Reduced from 9px
-          line-height: 1.1 !important; // Reduced from 1.2
+          padding: 4px 6px !important; // Adequate padding
+          font-size: 9px !important; // Readable font size
+          line-height: 1.3 !important; // Better line spacing
           word-wrap: break-word !important;
+          overflow-wrap: break-word !important;
           overflow: visible !important;
           white-space: normal !important;
           max-width: none !important;
-          width: auto !important;
-          border: 0.5px solid #dee2e6 !important;
+          border: 1px solid #000 !important; // Clear borders for print
+          vertical-align: middle !important;
+          text-align: center !important;
+          page-break-inside: avoid !important;
         }
 
         .main-header-row {
           page-break-after: avoid !important;
+          page-break-inside: avoid !important;
+          display: table-row !important;
           
           th {
             position: static !important;
             background: #f8f9fa !important;
             color: #2c3e50 !important;
-            font-size: 8px !important; // Reduced
-            padding: 4px 3px !important; // Reduced
+            font-size: 10px !important;
+            padding: 6px 4px !important;
             font-weight: 700 !important;
+            border: 1px solid #000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
             
             .alltech-title,
             .approved-purchase-title,
             .supplier-main-title,
             .approved-sales-title,
             .customer-main-title {
-              font-size: 8px !important; // Reduced
+              font-size: 10px !important;
               text-shadow: none !important;
             }
             
             .delivered-purchase-subtitle,
             .delivered-sales-subtitle {
-              font-size: 7px !important; // Reduced
+              font-size: 9px !important;
             }
           }
         }
 
         .column-header-row {
           page-break-after: avoid !important;
+          page-break-inside: avoid !important;
+          display: table-row !important;
           
           th {
             position: static !important;
             background: #e9ecef !important;
             color: #2c3e50 !important;
-            font-size: 7px !important; // Reduced
-            padding: 3px 3px !important; // Reduced
+            font-size: 9px !important;
+            padding: 5px 4px !important;
             font-weight: 600 !important;
+            border: 1px solid #000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
         }
 
         .data-row {
           page-break-inside: avoid !important;
+          display: table-row !important;
+          
+          // Allow rows to break across pages if needed, but avoid breaking individual rows
+          &:not(:first-child) {
+            page-break-before: auto !important;
+          }
           
           td {
-            border: 0.5px solid #dee2e6 !important;
+            border: 1px solid #000 !important;
             background: white !important;
-            font-size: 7px !important; // Reduced
-            padding: 3px 4px !important; // Reduced
+            font-size: 9px !important;
+            padding: 4px 5px !important;
+            page-break-inside: avoid !important;
             
             &.alltech-data,
             &.purchase-data,
@@ -673,9 +706,29 @@
             &.delivered-sales-data {
               background: white !important;
             }
+            
+            // Ensure strong text in part_no and material_no is visible
+            strong {
+              font-weight: 700 !important;
+              color: #000 !important;
+            }
           }
         }
+        
+        // Ensure proper column width distribution for 32 columns
+        // Calculate approximate width: (100% / 32 columns) = ~3.125% per column
+        th, td {
+          width: auto !important;
+        }
       }
+    }
+    
+    // Ensure no horizontal scrolling or overflow
+    html, body {
+      width: 100% !important;
+      overflow: visible !important;
+      overflow-x: visible !important;
+      overflow-y: visible !important;
     }
   }
 

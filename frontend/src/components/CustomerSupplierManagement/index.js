@@ -210,21 +210,24 @@ const CustomerSupplierManagement = () => {
                                 onClick={() => handleViewRecord(record)}
                                 title="View Details"
                               >
-                                View
+                                <i className="fas fa-eye"></i>
+                                <span>View</span>
                               </button>
                               <button
                                 className="btn btn-sm btn-outline-primary"
                                 onClick={() => handleEditRecord(record)}
                                 title="Edit Record"
                               >
-                               Edit
+                                <i className="fas fa-edit"></i>
+                                <span>Edit</span>
                               </button>
                               <button
                                 className="btn btn-sm btn-outline-danger"
                                 onClick={() => handleDeleteRecord(record.id)}
                                 title="Delete Record"
                               >
-                                Delete
+                                <i className="fas fa-trash"></i>
+                                <span>Delete</span>
                               </button>
                             </div>
                           </td>

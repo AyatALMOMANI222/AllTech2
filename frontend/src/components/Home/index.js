@@ -22,20 +22,27 @@ const Home = () => {
 
   return (
     <div className="home-page">
-      {/* Navigation Bar */}
+      {/* Top Navigation Bar */}
       <nav className="home-navbar">
         <div className="container">
           <div className="navbar-content">
             <div className="brand">
               <div className="brand-icon">
-                <i className="fas fa-shield-alt"></i>
+                <i className="fas fa-industry"></i>
               </div>
-              <span className="brand-name">ALLTECH DEFENCE</span>
+              <div className="brand-info">
+                <span className="brand-name">ALLTECH</span>
+                <span className="brand-tagline">Enterprise Solutions</span>
+              </div>
             </div>
             <div className="nav-actions">
-              <button className="btn-nav" onClick={() => navigate('/login')}>
-                <i className="fas fa-sign-in-alt"></i>
-                <span>Sign In</span>
+              <button className="btn-nav-secondary" onClick={() => navigate('/login')}>
+                <i className="fas fa-user"></i>
+                <span>Login</span>
+              </button>
+              <button className="btn-nav-primary" onClick={handleGetStarted}>
+                <span>Get Started</span>
+                <i className="fas fa-arrow-right"></i>
               </button>
             </div>
           </div>
@@ -45,106 +52,140 @@ const Home = () => {
       {/* Hero Section */}
       <section className={`hero-section ${isVisible ? 'visible' : ''}`}>
         <div className="hero-background">
-          <div className="animated-grid"></div>
+          <div className="grid-pattern"></div>
+          <div className="mesh-gradient"></div>
           <div className="gradient-overlay"></div>
-          <div className="particle particle-1"></div>
-          <div className="particle particle-2"></div>
-          <div className="particle particle-3"></div>
-          <div className="particle particle-4"></div>
-          <div className="particle particle-5"></div>
+          <div className="animated-lines">
+            <div className="line line-1"></div>
+            <div className="line line-2"></div>
+            <div className="line line-3"></div>
+          </div>
+          <div className="floating-shapes">
+            <div className="shape shape-1"></div>
+            <div className="shape shape-2"></div>
+            <div className="shape shape-3"></div>
+            <div className="shape shape-4"></div>
+            <div className="shape shape-5"></div>
+          </div>
+          <div className="particle-field">
+            {[...Array(20)].map((_, i) => (
+              <div 
+                key={i} 
+                className="particle" 
+                style={{ 
+                  '--delay': `${i * 0.2}s`,
+                  left: `${(i * 5) % 100}%`,
+                  animationDuration: `${12 + (i % 3)}s`
+                }}
+              ></div>
+            ))}
+          </div>
         </div>
-        
+
         <div className="container">
-          <div className="row align-items-center" style={{ minHeight: '100vh', paddingTop: '80px' }}>
-            <div className="col-lg-6 hero-content">
+          <div className="hero-content-wrapper">
+            <div className="hero-content">
               <div className="hero-badge">
-                <div className="badge-icon">
-                  <i className="fas fa-award"></i>
-                </div>
-                <span>Premium Enterprise Solutions</span>
+                <i className="fas fa-certificate"></i>
+                <span>Enterprise-Grade Business Management</span>
               </div>
-              
+
               <h1 className="hero-title">
-                <span className="title-line-1">Empowering</span>
-                <span className="title-line-2">Business Excellence</span>
-                <span className="title-line-3">Through Innovation</span>
+                <span className="title-line title-primary">Powering</span>
+                <span className="title-line title-gradient">Automotive & Defense</span>
+                <span className="title-line title-accent">Operations Excellence</span>
               </h1>
-              
+
               <p className="hero-description">
-                AllTech Defence delivers world-class business management solutions, 
-                empowering enterprises with intelligent automation, real-time insights, 
-                and seamless operational control across inventory, procurement, and financial operations.
+                AllTech delivers mission-critical business management solutions for automotive parts 
+                and defense industries. Streamline operations, optimize inventory, and drive growth 
+                with our comprehensive, enterprise-level platform built for precision and reliability.
               </p>
-              
-              <div className="hero-buttons">
-                <button className="btn btn-primary-hero" onClick={handleGetStarted}>
+
+              <div className="hero-cta">
+                <button className="btn btn-hero-primary" onClick={handleGetStarted}>
                   <span>Start Your Journey</span>
                   <i className="fas fa-rocket"></i>
                 </button>
-                <button className="btn btn-secondary-hero" onClick={() => navigate('/login')}>
+                <button className="btn btn-hero-secondary" onClick={() => navigate('/login')}>
                   <span>Access Platform</span>
-                  <i className="fas fa-arrow-right"></i>
+                  <i className="fas fa-lock"></i>
                 </button>
               </div>
-              
-              <div className="hero-features">
-                <div className="feature-badge">
-                  <i className="fas fa-check-circle"></i>
-                  <span>ISO Certified</span>
+
+              <div className="hero-trust-indicators">
+                <div className="trust-item">
+                  <div className="trust-icon-wrapper">
+                    <i className="fas fa-shield-alt"></i>
+                  </div>
+                  <span>Military-Grade Security</span>
                 </div>
-                <div className="feature-badge">
-                  <i className="fas fa-check-circle"></i>
-                  <span>Cloud-Based</span>
+                <div className="trust-item">
+                  <div className="trust-icon-wrapper">
+                    <i className="fas fa-certificate"></i>
+                  </div>
+                  <span>ISO 27001 Certified</span>
                 </div>
-                <div className="feature-badge">
-                  <i className="fas fa-check-circle"></i>
-                  <span>24/7 Support</span>
+                <div className="trust-item">
+                  <div className="trust-icon-wrapper">
+                    <i className="fas fa-clock"></i>
+                  </div>
+                  <span>99.9% Uptime SLA</span>
                 </div>
               </div>
             </div>
-            
-            <div className="col-lg-6 hero-visual">
-              <div className="visual-showcase">
-                <div className="showcase-card primary-card">
-                  <div className="card-header-custom">
-                    <div className="header-icon">
-                      <i className="fas fa-chart-line"></i>
-                    </div>
-                    <div className="header-text">
-                      <h6>Performance Analytics</h6>
-                      <span>Real-time monitoring</span>
+
+            <div className="hero-visual">
+              <div className="automotive-showcase">
+                <div className="showcase-image image-main">
+                  <div className="image-overlay"></div>
+                  <div className="image-content">
+                    <div className="image-badge">
+                      <i className="fas fa-car"></i>
+                      <span>Automotive Excellence</span>
                     </div>
                   </div>
-                  <div className="card-chart">
-                    <div className="chart-bar" style={{height: '60%'}}></div>
-                    <div className="chart-bar" style={{height: '85%'}}></div>
-                    <div className="chart-bar" style={{height: '70%'}}></div>
-                    <div className="chart-bar" style={{height: '95%'}}></div>
-                    <div className="chart-bar" style={{height: '75%'}}></div>
-                  </div>
+                  <div className="image-shine"></div>
                 </div>
-                
-                <div className="showcase-card secondary-card">
-                  <div className="security-badge">
-                    <i className="fas fa-shield-check"></i>
-                    <span>Enterprise Security</span>
-                  </div>
-                </div>
-                
-                <div className="showcase-card tertiary-card">
-                  <div className="notification-item">
-                    <i className="fas fa-bell"></i>
-                    <div className="notification-text">
-                      <strong>New Order #2847</strong>
-                      <span>Processing...</span>
+
+                <div className="showcase-image image-secondary">
+                  <div className="image-overlay"></div>
+                  <div className="image-content">
+                    <div className="image-badge">
+                      <i className="fas fa-shield-alt"></i>
+                      <span>Defense Solutions</span>
                     </div>
                   </div>
+                  <div className="image-shine"></div>
                 </div>
-                
-                <div className="central-hub">
-                  <div className="hub-ring"></div>
-                  <div className="hub-ring"></div>
-                  <div className="hub-core">
+
+                <div className="showcase-image image-tertiary">
+                  <div className="image-overlay"></div>
+                  <div className="image-content">
+                    <div className="image-badge">
+                      <i className="fas fa-cogs"></i>
+                      <span>Enterprise Platform</span>
+                    </div>
+                  </div>
+                  <div className="image-shine"></div>
+                </div>
+
+                <div className="showcase-image image-featured">
+                  <div className="image-overlay"></div>
+                  <div className="image-content">
+                    <div className="image-badge">
+                      <i className="fas fa-industry"></i>
+                      <span>Industry Leading</span>
+                    </div>
+                  </div>
+                  <div className="image-shine"></div>
+                  <div className="featured-glow"></div>
+                </div>
+
+                <div className="showcase-accent">
+                  <div className="accent-ring ring-1"></div>
+                  <div className="accent-ring ring-2"></div>
+                  <div className="accent-core">
                     <i className="fas fa-building"></i>
                   </div>
                 </div>
@@ -152,166 +193,397 @@ const Home = () => {
             </div>
           </div>
         </div>
-        
-        <div className="hero-decoration">
+
+        <div className="scroll-indicator">
+          <div className="scroll-text">Scroll to explore</div>
+          <div className="scroll-line"></div>
+          <div className="scroll-arrow">
+            <i className="fas fa-chevron-down"></i>
+          </div>
+        </div>
+
+        <div className="hero-divider">
           <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M0 0L60 10C120 20 240 40 360 46.7C480 53 600 47 720 43.3C840 40 960 40 1080 46.7C1200 53 1320 67 1380 73.3L1440 80V120H1380C1320 120 1200 120 1080 120C960 120 840 120 720 120C600 120 480 120 360 120C240 120 120 120 60 120H0V0Z" fill="white"/>
+            <path d="M0 0L60 12C120 24 240 48 360 56C480 64 600 56 720 52C840 48 960 48 1080 56C1200 64 1320 80 1380 88L1440 96V120H1380C1320 120 1200 120 1080 120C960 120 840 120 720 120C600 120 480 120 360 120C240 120 120 120 60 120H0V0Z" fill="currentColor"/>
           </svg>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="features-section">
+      {/* Capabilities Section */}
+      <section className="capabilities-section">
+        <div className="section-background-decoration">
+          <div className="decoration-circle circle-1"></div>
+          <div className="decoration-circle circle-2"></div>
+          <div className="decoration-circle circle-3"></div>
+        </div>
         <div className="container">
           <div className="section-header">
-            <h2 className="section-title">Powerful Features</h2>
+            <div className="section-badge">
+              <i className="fas fa-star"></i>
+              <span>Enterprise Capabilities</span>
+            </div>
+            <h2 className="section-title">Comprehensive Business Management</h2>
             <p className="section-subtitle">
-              Everything you need to manage your business efficiently
+              Industry-leading solutions designed for automotive parts and defense operations
             </p>
           </div>
-          
-          <div className="row g-4">
-            <div className="col-lg-4 col-md-6">
-              <div className="feature-card">
-                <div className="feature-icon">
+
+          <div className="capabilities-grid">
+            <div className="capability-card">
+              <div className="card-background-pattern"></div>
+              <div className="card-glow"></div>
+              <div className="card-top-accent"></div>
+              <div className="capability-icon-wrapper">
+                <div className="capability-icon">
+                  <div className="icon-background"></div>
+                  <div className="icon-pattern"></div>
                   <i className="fas fa-boxes"></i>
                 </div>
-                <h3>Inventory Management</h3>
-                <p>
-                  Track stock levels, manage suppliers, and automate reordering 
-                  with our intelligent inventory system.
-                </p>
-                <div className="feature-link">
-                  Learn more <i className="fas fa-arrow-right"></i>
+                <div className="icon-shadow"></div>
+              </div>
+              <h3>Inventory Management</h3>
+              <p>
+                Advanced inventory control with real-time tracking, automated reordering, 
+                and intelligent stock optimization for automotive parts and components.
+              </p>
+              <div className="capability-features">
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Real-time Tracking</span>
+                </div>
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Auto Reorder</span>
+                </div>
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Smart Analytics</span>
                 </div>
               </div>
+              <div className="card-hover-effect"></div>
+              <div className="card-bottom-decoration"></div>
             </div>
-            
-            <div className="col-lg-4 col-md-6">
-              <div className="feature-card">
-                <div className="feature-icon">
+
+            <div className="capability-card">
+              <div className="card-background-pattern"></div>
+              <div className="card-glow"></div>
+              <div className="card-top-accent"></div>
+              <div className="capability-icon-wrapper">
+                <div className="capability-icon">
+                  <div className="icon-background"></div>
+                  <div className="icon-pattern"></div>
                   <i className="fas fa-file-invoice-dollar"></i>
                 </div>
-                <h3>Smart Invoicing</h3>
-                <p>
-                  Generate professional invoices, track payments, and manage 
-                  tax compliance effortlessly.
-                </p>
-                <div className="feature-link">
-                  Learn more <i className="fas fa-arrow-right"></i>
+                <div className="icon-shadow"></div>
+              </div>
+              <h3>Invoicing & Billing</h3>
+              <p>
+                Professional invoicing system with tax compliance, automated billing cycles, 
+                and comprehensive financial reporting for enterprise operations.
+              </p>
+              <div className="capability-features">
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Tax Compliance</span>
+                </div>
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Auto Billing</span>
+                </div>
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Multi-Currency</span>
                 </div>
               </div>
+              <div className="card-hover-effect"></div>
+              <div className="card-bottom-decoration"></div>
             </div>
-            
-            <div className="col-lg-4 col-md-6">
-              <div className="feature-card">
-                <div className="feature-icon">
+
+            <div className="capability-card">
+              <div className="card-background-pattern"></div>
+              <div className="card-glow"></div>
+              <div className="card-top-accent"></div>
+              <div className="capability-icon-wrapper">
+                <div className="capability-icon">
+                  <div className="icon-background"></div>
+                  <div className="icon-pattern"></div>
                   <i className="fas fa-shopping-cart"></i>
                 </div>
-                <h3>Purchase Orders</h3>
-                <p>
-                  Streamline procurement processes, manage vendor relationships, 
-                  and optimize purchasing decisions.
-                </p>
-                <div className="feature-link">
-                  Learn more <i className="fas fa-arrow-right"></i>
+                <div className="icon-shadow"></div>
+              </div>
+              <h3>Purchase Orders</h3>
+              <p>
+                Streamlined procurement workflow from order creation to delivery tracking, 
+                ensuring operational efficiency across your supply chain.
+              </p>
+              <div className="capability-features">
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>PO Tracking</span>
+                </div>
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Delivery Status</span>
+                </div>
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Vendor Management</span>
                 </div>
               </div>
+              <div className="card-hover-effect"></div>
+              <div className="card-bottom-decoration"></div>
             </div>
-            
-            <div className="col-lg-4 col-md-6">
-              <div className="feature-card">
-                <div className="feature-icon">
-                  <i className="fas fa-users"></i>
+
+            <div className="capability-card">
+              <div className="card-background-pattern"></div>
+              <div className="card-glow"></div>
+              <div className="card-top-accent"></div>
+              <div className="capability-icon-wrapper">
+                <div className="capability-icon">
+                  <div className="icon-background"></div>
+                  <div className="icon-pattern"></div>
+                  <i className="fas fa-users-cog"></i>
                 </div>
-                <h3>Customer Relations</h3>
-                <p>
-                  Manage customer data, track interactions, and build 
-                  lasting business relationships.
-                </p>
-                <div className="feature-link">
-                  Learn more <i className="fas fa-arrow-right"></i>
+                <div className="icon-shadow"></div>
+              </div>
+              <h3>Customer & Supplier</h3>
+              <p>
+                Comprehensive relationship management with centralized data, 
+                interaction history, and integrated communication tools.
+              </p>
+              <div className="capability-features">
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>CRM Integration</span>
+                </div>
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Contact History</span>
+                </div>
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Communication Hub</span>
                 </div>
               </div>
+              <div className="card-hover-effect"></div>
+              <div className="card-bottom-decoration"></div>
             </div>
-            
-            <div className="col-lg-4 col-md-6">
-              <div className="feature-card">
-                <div className="feature-icon">
-                  <i className="fas fa-chart-bar"></i>
+
+            <div className="capability-card">
+              <div className="card-background-pattern"></div>
+              <div className="card-glow"></div>
+              <div className="card-top-accent"></div>
+              <div className="capability-icon-wrapper">
+                <div className="capability-icon">
+                  <div className="icon-background"></div>
+                  <div className="icon-pattern"></div>
+                  <i className="fas fa-chart-pie"></i>
                 </div>
-                <h3>Analytics & Reports</h3>
-                <p>
-                  Gain actionable insights with comprehensive analytics 
-                  and customizable reporting tools.
-                </p>
-                <div className="feature-link">
-                  Learn more <i className="fas fa-arrow-right"></i>
+                <div className="icon-shadow"></div>
+              </div>
+              <h3>Analytics & Reports</h3>
+              <p>
+                Advanced business intelligence with customizable dashboards, 
+                predictive analytics, and comprehensive reporting suite.
+              </p>
+              <div className="capability-features">
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Custom Dashboards</span>
+                </div>
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Predictive Analytics</span>
+                </div>
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Export Reports</span>
                 </div>
               </div>
+              <div className="card-hover-effect"></div>
+              <div className="card-bottom-decoration"></div>
             </div>
-            
-            <div className="col-lg-4 col-md-6">
-              <div className="feature-card">
-                <div className="feature-icon">
-                  <i className="fas fa-cloud"></i>
+
+            <div className="capability-card">
+              <div className="card-background-pattern"></div>
+              <div className="card-glow"></div>
+              <div className="card-top-accent"></div>
+              <div className="capability-icon-wrapper">
+                <div className="capability-icon">
+                  <div className="icon-background"></div>
+                  <div className="icon-pattern"></div>
+                  <i className="fas fa-server"></i>
                 </div>
-                <h3>Cloud-Based</h3>
-                <p>
-                  Access your data anywhere, anytime with our secure 
-                  cloud infrastructure and real-time sync.
-                </p>
-                <div className="feature-link">
-                  Learn more <i className="fas fa-arrow-right"></i>
+                <div className="icon-shadow"></div>
+              </div>
+              <h3>Cloud Infrastructure</h3>
+              <p>
+                Enterprise cloud platform with global data centers, automatic backups, 
+                and scalable infrastructure designed for mission-critical operations.
+              </p>
+              <div className="capability-features">
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Global CDN</span>
+                </div>
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Auto Backup</span>
+                </div>
+                <div className="feature-tag">
+                  <div className="tag-icon">
+                    <i className="fas fa-check-circle"></i>
+                  </div>
+                  <span>Scalable</span>
                 </div>
               </div>
+              <div className="card-hover-effect"></div>
+              <div className="card-bottom-decoration"></div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Stats Section */}
-      <section className="stats-section">
+      {/* <section className="stats-section">
+        <div className="stats-background-decoration">
+          <div className="stats-glow glow-1"></div>
+          <div className="stats-glow glow-2"></div>
+          <div className="stats-pattern"></div>
+        </div>
         <div className="container">
-          <div className="row g-4">
-            <div className="col-lg-3 col-md-6">
-              <div className="stat-box">
-                <div className="stat-icon">
-                  <i className="fas fa-building"></i>
-                </div>
-                <div className="stat-number">500+</div>
-                <div className="stat-text">Active Businesses</div>
+          <div className="stats-grid">
+            <div className="stat-item">
+              <div className="stat-icon">
+                <i className="fas fa-building"></i>
               </div>
+              <div className="stat-number" data-target="500">0</div>
+              <div className="stat-label">Enterprise Clients</div>
+              <div className="stat-suffix">+</div>
             </div>
-            
-            <div className="col-lg-3 col-md-6">
-              <div className="stat-box">
-                <div className="stat-icon">
-                  <i className="fas fa-file-invoice"></i>
-                </div>
-                <div className="stat-number">1M+</div>
-                <div className="stat-text">Invoices Generated</div>
+
+            <div className="stat-item">
+              <div className="stat-icon">
+                <i className="fas fa-file-invoice"></i>
               </div>
+              <div className="stat-number" data-target="1000000">0</div>
+              <div className="stat-label">Invoices Processed</div>
+              <div className="stat-suffix">+</div>
             </div>
-            
-            <div className="col-lg-3 col-md-6">
-              <div className="stat-box">
-                <div className="stat-icon">
-                  <i className="fas fa-globe"></i>
-                </div>
-                <div className="stat-number">50+</div>
-                <div className="stat-text">Countries</div>
+
+            <div className="stat-item">
+              <div className="stat-icon">
+                <i className="fas fa-globe-americas"></i>
               </div>
+              <div className="stat-number" data-target="50">0</div>
+              <div className="stat-label">Countries Served</div>
+              <div className="stat-suffix">+</div>
             </div>
-            
-            <div className="col-lg-3 col-md-6">
-              <div className="stat-box">
-                <div className="stat-icon">
-                  <i className="fas fa-award"></i>
-                </div>
-                <div className="stat-number">15+</div>
-                <div className="stat-text">Years Experience</div>
+
+            <div className="stat-item">
+              <div className="stat-icon">
+                <i className="fas fa-award"></i>
               </div>
+              <div className="stat-number" data-target="15">0</div>
+              <div className="stat-label">Years Excellence</div>
+              <div className="stat-suffix">+</div>
+            </div>
+          </div>
+        </div>
+      </section> */}
+
+      {/* Industries Section */}
+      <section className="industries-section">
+        <div className="container">
+          <div className="section-header">
+            <h2 className="section-title">Built for Your Industry</h2>
+            <p className="section-subtitle">
+              Specialized solutions tailored for automotive and defense sector requirements
+            </p>
+          </div>
+
+          <div className="industries-grid">
+            <div className="industry-card">
+              <div className="industry-icon">
+                <i className="fas fa-car"></i>
+              </div>
+              <h3>Automotive Parts</h3>
+              <p>
+                Comprehensive inventory management for automotive components, 
+                parts tracking, supplier relationships, and order fulfillment.
+              </p>
+              <ul className="industry-features">
+                <li><i className="fas fa-check"></i> Parts cataloging</li>
+                <li><i className="fas fa-check"></i> Supplier network</li>
+                <li><i className="fas fa-check"></i> Order automation</li>
+              </ul>
+            </div>
+
+            <div className="industry-card industry-featured">
+              <div className="featured-badge">Featured</div>
+              <div className="industry-icon">
+                <i className="fas fa-shield-alt"></i>
+              </div>
+              <h3>Defense & Military</h3>
+              <p>
+                Mission-critical systems with enhanced security, compliance tracking, 
+                and specialized workflows for defense operations.
+              </p>
+              <ul className="industry-features">
+                <li><i className="fas fa-check"></i> Security clearance</li>
+                <li><i className="fas fa-check"></i> Compliance tracking</li>
+                <li><i className="fas fa-check"></i> Audit trails</li>
+              </ul>
+            </div>
+
+            <div className="industry-card">
+              <div className="industry-icon">
+                <i className="fas fa-industry"></i>
+              </div>
+              <h3>Manufacturing</h3>
+              <p>
+                End-to-end manufacturing operations management from raw materials 
+                to finished products with quality control integration.
+              </p>
+              <ul className="industry-features">
+                <li><i className="fas fa-check"></i> Production planning</li>
+                <li><i className="fas fa-check"></i> Quality control</li>
+                <li><i className="fas fa-check"></i> Material tracking</li>
+              </ul>
             </div>
           </div>
         </div>
@@ -320,75 +592,137 @@ const Home = () => {
       {/* CTA Section */}
       <section className="cta-section">
         <div className="container">
-          <div className="cta-box">
-            <h2 className="cta-title">Ready to Transform Your Business?</h2>
-            <p className="cta-description">
-              Join hundreds of businesses worldwide that trust AllTech for their 
-              complete business management solution.
-            </p>
-            <button className="btn btn-cta" onClick={handleGetStarted}>
-              <span>Start Your Journey</span>
-              <i className="fas fa-rocket"></i>
-            </button>
+          <div className="cta-container">
+            <div className="cta-content">
+              <h2 className="cta-title">Ready to Transform Your Operations?</h2>
+              <p className="cta-description">
+                Join leading enterprises in automotive and defense industries 
+                that trust AllTech for mission-critical business management.
+              </p>
+              <div className="cta-buttons">
+                <button className="btn btn-cta-primary" onClick={handleGetStarted}>
+                  <span>Start Free Trial</span>
+                  <i className="fas fa-arrow-right"></i>
+                </button>
+                <button className="btn btn-cta-secondary" onClick={() => navigate('/login')}>
+                  <span>Schedule Demo</span>
+                  <i className="fas fa-calendar"></i>
+                </button>
+              </div>
+            </div>
+            <div className="cta-visual">
+              <div className="cta-graphic">
+                <div className="graphic-circle circle-1"></div>
+                <div className="graphic-circle circle-2"></div>
+                <div className="graphic-icon">
+                  <i className="fas fa-rocket"></i>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Footer */}
       <footer className="home-footer">
+        <div className="footer-background-decoration">
+          <div className="footer-glow"></div>
+          <div className="footer-pattern"></div>
+        </div>
         <div className="container">
-          <div className="row">
-            <div className="col-lg-4 col-md-6 mb-4">
-              <h4 className="footer-title">AllTech Business</h4>
-              <p className="footer-text">
-                Leading provider of enterprise business management solutions, 
-                empowering companies to achieve operational excellence.
-              </p>
-            </div>
-            
-            <div className="col-lg-2 col-md-6 mb-4">
-              <h5 className="footer-heading">Product</h5>
-              <ul className="footer-links">
-                <li><a href="#features">Features</a></li>
-                <li><a href="#pricing">Pricing</a></li>
-                <li><a href="#solutions">Solutions</a></li>
-              </ul>
-            </div>
-            
-            <div className="col-lg-2 col-md-6 mb-4">
-              <h5 className="footer-heading">Company</h5>
-              <ul className="footer-links">
-                <li><a href="#about">About Us</a></li>
-                <li><a href="#careers">Careers</a></li>
-                <li><a href="#contact">Contact</a></li>
-              </ul>
-            </div>
-            
-            <div className="col-lg-4 col-md-6 mb-4">
-              <h5 className="footer-heading">Get In Touch</h5>
-              <div className="footer-contact">
-                <div className="contact-item">
-                  <i className="fas fa-envelope"></i>
-                  <span>Info@alltech-defence.ae</span>
+          <div className="footer-content">
+            <div className="footer-main">
+              <div className="footer-section footer-brand">
+                <div className="footer-brand-logo">
+                  <div className="brand-icon">
+                    <i className="fas fa-industry"></i>
+                  </div>
+                  <div className="brand-text">
+                    <h4 className="brand-name">ALLTECH</h4>
+                    <p className="brand-tagline">Enterprise Solutions</p>
+                  </div>
                 </div>
-                <div className="contact-item">
-                  <i className="fas fa-phone"></i>
-                  <span>+971 50 621 3247</span>
+                <p className="footer-description">
+                  Leading provider of enterprise business management solutions for 
+                  automotive parts and defense industries, delivering excellence 
+                  through innovation and reliability.
+                </p>
+                <div className="footer-social">
+                  <a href="#" aria-label="LinkedIn" className="social-link">
+                    <i className="fab fa-linkedin-in"></i>
+                  </a>
+                  <a href="#" aria-label="Twitter" className="social-link">
+                    <i className="fab fa-twitter"></i>
+                  </a>
+                  <a href="#" aria-label="Facebook" className="social-link">
+                    <i className="fab fa-facebook-f"></i>
+                  </a>
+                  <a href="#" aria-label="Email" className="social-link">
+                    <i className="fas fa-envelope"></i>
+                  </a>
                 </div>
-                <div className="contact-item">
-                  <i className="fas fa-map-marker-alt"></i>
-                  <span>Abu Dhabi, UAE</span>
+              </div>
+
+              <div className="footer-section footer-contact">
+                <h5 className="footer-heading">
+                  <i className="fas fa-headset"></i>
+                  Get In Touch
+                </h5>
+                <div className="contact-info">
+                  <div className="contact-item">
+                    <div className="contact-icon-wrapper">
+                      <i className="fas fa-map-marker-alt"></i>
+                    </div>
+                    <div className="contact-text">
+                      <span className="contact-label">Location</span>
+                      <span className="contact-value">Abu Dhabi, United Arab Emirates</span>
+                    </div>
+                  </div>
+                  <div className="contact-item">
+                    <div className="contact-icon-wrapper">
+                      <i className="fas fa-phone"></i>
+                    </div>
+                    <div className="contact-text">
+                      <span className="contact-label">Phone</span>
+                      <a href="tel:+971506213247" className="contact-value">+971 50 621 3247</a>
+                    </div>
+                  </div>
+                  <div className="contact-item">
+                    <div className="contact-icon-wrapper">
+                      <i className="fas fa-envelope"></i>
+                    </div>
+                    <div className="contact-text">
+                      <span className="contact-label">Email</span>
+                      <a href="mailto:Info@alltech-defence.ae" className="contact-value">Info@alltech-defence.ae</a>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          
-          <div className="footer-bottom">
-            <p>&copy; 2024 AllTech. All rights reserved.</p>
-            <div className="social-links">
-              <a href="#" aria-label="LinkedIn"><i className="fab fa-linkedin"></i></a>
-              <a href="#" aria-label="Twitter"><i className="fab fa-twitter"></i></a>
-              <a href="#" aria-label="Facebook"><i className="fab fa-facebook"></i></a>
+
+            <div className="footer-bottom">
+              <div className="footer-bottom-left">
+                <p className="copyright">&copy; {new Date().getFullYear()} AllTech. All rights reserved.</p>
+                <p className="footer-tagline">Empowering businesses with enterprise-grade solutions</p>
+              </div>
+              <div className="footer-bottom-right">
+                <div className="footer-legal">
+                  <a href="#privacy" className="legal-link">
+                    <i className="fas fa-shield-alt"></i>
+                    Privacy Policy
+                  </a>
+                  <span className="separator">•</span>
+                  <a href="#terms" className="legal-link">
+                    <i className="fas fa-file-contract"></i>
+                    Terms of Service
+                  </a>
+                  <span className="separator">•</span>
+                  <a href="#security" className="legal-link">
+                    <i className="fas fa-lock"></i>
+                    Security
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
         </div>

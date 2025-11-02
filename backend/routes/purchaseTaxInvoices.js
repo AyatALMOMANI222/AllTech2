@@ -583,15 +583,16 @@ router.get('/:id/pdf', authenticateToken, async (req, res) => {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0' });
     
-    // Generate PDF
+    // Generate PDF with full color preservation
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,
+      preferCSSPageSize: false,
       margin: {
-        top: '20mm',
-        right: '15mm',
-        bottom: '20mm',
-        left: '15mm'
+        top: '12mm',
+        right: '12mm',
+        bottom: '12mm',
+        left: '12mm'
       }
     });
     
@@ -612,7 +613,7 @@ router.get('/:id/pdf', authenticateToken, async (req, res) => {
   }
 });
 
-// Helper function to generate HTML for PDF
+// Helper function to generate HTML for PDF - Matching frontend design exactly
 function generateInvoiceHTML(invoice, items) {
   const formatCurrency = (amount) => {
     return parseFloat(amount).toLocaleString('en-US', { 
@@ -621,190 +622,412 @@ function generateInvoiceHTML(invoice, items) {
     });
   };
 
+  const amountOfClaim = invoice.subtotal * (invoice.claim_percentage / 100);
+
   return `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Purchase Tax Invoice - ${invoice.invoice_number}</title>
       <style>
-        body {
-          font-family: Arial, sans-serif;
+        * {
           margin: 0;
-          padding: 20px;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          margin: 0;
+          padding: 2rem;
           color: #333;
+          background-color: #f8f9fa;
+          font-size: 14px;
+          line-height: 1.5;
         }
+        
         .invoice-container {
-          max-width: 800px;
+          max-width: 1200px;
           margin: 0 auto;
-          border: 1px solid #ddd;
-          padding: 20px;
+          background-color: white;
+          padding: 2rem;
+          box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
         }
-        .header {
+        
+        /* Invoice Header Section - Matching frontend design */
+        .invoice-header-section {
+          margin-bottom: 2rem;
+        }
+        
+        .header-row {
           display: flex;
-          justify-content: space-between;
-          margin-bottom: 30px;
+          gap: 2rem;
+          margin-bottom: 2rem;
         }
-        .supplier-info, .invoice-details {
+        
+        .supplier-info-box,
+        .invoice-details-box {
+          flex: 1;
           border: 2px solid #007bff;
-          padding: 15px;
-          background: white;
+          padding: 1rem;
+          background-color: white;
+          border-radius: 4px;
         }
-        .supplier-info h4, .invoice-details h4 {
-          margin: 0 0 10px 0;
-          color: #007bff;
-        }
+        
         .info-row {
-          margin-bottom: 5px;
+          display: flex;
+          margin-bottom: 0.5rem;
         }
+        
+        .info-row:last-child {
+          margin-bottom: 0;
+        }
+        
         .label {
           font-weight: bold;
-          display: inline-block;
-          width: 100px;
+          min-width: 100px;
+          margin-right: 1rem;
+          color: #495057;
         }
+        
+        .value {
+          flex: 1;
+          color: #212529;
+        }
+        
+        /* Items Table - Matching frontend design exactly */
+        .items-section {
+          margin-bottom: 2rem;
+        }
+        
+        .table-responsive {
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
         .items-table {
           width: 100%;
           border-collapse: collapse;
-          margin: 20px 0;
+          margin: 0;
+          background-color: white;
         }
-        .items-table th {
-          background: #007bff;
+        
+        .table-header {
+          background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
           color: white;
-          padding: 10px;
+        }
+        
+        .table-header th {
+          border: none;
+          padding: 1rem 0.75rem;
+          font-weight: 600;
           text-align: center;
-          font-size: 12px;
+          font-size: 0.9rem;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
-        .items-table td {
-          border: 1px solid #ddd;
-          padding: 8px;
+        
+        .items-table tbody tr:nth-child(even) {
+          background-color: #f8f9fa;
+        }
+        
+        .items-table tbody tr:hover {
+          background-color: #e3f2fd;
+        }
+        
+        .items-table tbody td {
+          padding: 0.75rem;
+          vertical-align: middle;
+          border: 1px solid #dee2e6;
           text-align: center;
         }
-        .items-table tr:nth-child(even) {
-          background: #f9f9f9;
+        
+        .items-table tbody td:first-child {
+          text-align: center;
+          font-weight: 600;
+          background-color: #e9ecef;
         }
+        
+        /* Totals Section - Matching frontend design */
         .totals-section {
+          margin-bottom: 2rem;
           display: flex;
           justify-content: flex-end;
-          margin-top: 20px;
         }
+        
         .totals-box {
           border: 2px solid #28a745;
-          padding: 15px;
-          background: white;
-          min-width: 300px;
+          padding: 1.5rem;
+          background-color: white;
+          border-radius: 8px;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+          min-width: 400px;
         }
+        
         .total-row {
           display: flex;
           justify-content: space-between;
-          margin-bottom: 10px;
+          align-items: center;
+          padding: 0.75rem 0;
+          border-bottom: 1px solid #e9ecef;
         }
+        
+        .total-row:last-child {
+          border-bottom: none;
+        }
+        
         .total-row.total-final {
           border-top: 2px solid #28a745;
-          padding-top: 10px;
-          font-weight: bold;
-          font-size: 16px;
+          margin-top: 0.5rem;
+          padding-top: 1rem;
+          font-weight: 700;
+          font-size: 1.1rem;
           color: #28a745;
         }
+        
+        .total-row .label {
+          font-weight: 600;
+          color: #495057;
+          min-width: auto;
+          margin-right: 1rem;
+        }
+        
+        .total-row .value {
+          font-weight: 600;
+          color: #28a745;
+          font-size: 1.1rem;
+        }
+        
+        .total-row.total-final .label,
+        .total-row.total-final .value {
+          color: #28a745;
+        }
+        
         .footer {
-          margin-top: 30px;
+          margin-top: 2rem;
+          padding-top: 2rem;
+          border-top: 1px solid #dee2e6;
           text-align: center;
           font-size: 12px;
           color: #666;
+        }
+        
+        /* Print Styles - Matching frontend exactly */
+        @media print {
+          @page {
+            size: auto;
+            margin: 12mm;
+          }
+          
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          body {
+            background-color: white !important;
+            padding: 0;
+            margin: 0;
+          }
+          
+          .invoice-container {
+            box-shadow: none;
+            padding: 1rem;
+            max-width: 100%;
+            background-color: white !important;
+          }
+          
+          .invoice-header-section {
+            page-break-inside: avoid;
+          }
+          
+          .supplier-info-box,
+          .invoice-details-box {
+            border: 2px solid #000 !important;
+            background-color: white !important;
+            page-break-inside: avoid;
+          }
+          
+          .items-section {
+            page-break-inside: auto;
+          }
+          
+          .table-responsive {
+            box-shadow: none;
+          }
+          
+          .items-table {
+            border: 1px solid #000;
+          }
+          
+          .items-table .table-header {
+            background: #e9ecef !important;
+            color: #000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          .items-table .table-header th {
+            border: 1px solid #000 !important;
+          }
+          
+          .items-table tbody tr {
+            page-break-inside: avoid;
+          }
+          
+          .items-table tbody tr:nth-child(even) {
+            background-color: #f8f9fa !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          .items-table tbody td {
+            border: 1px solid #000 !important;
+          }
+          
+          .items-table tbody td:first-child {
+            background-color: #e9ecef !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          
+          .totals-section {
+            page-break-inside: avoid;
+          }
+          
+          .totals-box {
+            border: 2px solid #000 !important;
+            background-color: white !important;
+            page-break-inside: avoid;
+          }
+          
+          .total-row {
+            border-bottom: 1px solid #000 !important;
+          }
+          
+          .total-row.total-final {
+            border-top: 2px solid #000 !important;
+            color: #000 !important;
+          }
+          
+          .total-row.total-final .label,
+          .total-row.total-final .value {
+            color: #000 !important;
+          }
+          
+          .footer {
+            border-top: 1px solid #000 !important;
+          }
         }
       </style>
     </head>
     <body>
       <div class="invoice-container">
-        <div class="header">
-          <div class="supplier-info">
-            <h4>Supplier Information</h4>
-            <div class="info-row">
-              <span class="label">Company:</span>
-              <span>${invoice.supplier_name || ''}</span>
+        <!-- Invoice Header Section -->
+        <div class="invoice-header-section">
+          <div class="header-row">
+            <div class="supplier-info-box">
+              <div class="info-row">
+                <span class="label">Company:</span>
+                <span class="value">${invoice.supplier_name || ''}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Address:</span>
+                <span class="value">${invoice.supplier_address || ''}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Contact:</span>
+                <span class="value">${invoice.supplier_phone || ''}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Email add.:</span>
+                <span class="value">${invoice.supplier_email || ''}</span>
+              </div>
             </div>
-            <div class="info-row">
-              <span class="label">Address:</span>
-              <span>${invoice.supplier_address || ''}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Contact:</span>
-              <span>${invoice.supplier_phone || ''}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Email:</span>
-              <span>${invoice.supplier_email || ''}</span>
-            </div>
-          </div>
-          
-          <div class="invoice-details">
-            <h4>Invoice Details</h4>
-            <div class="info-row">
-              <span class="label">Inv. No.:</span>
-              <span>${invoice.invoice_number}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Inv. Date:</span>
-              <span>${new Date(invoice.invoice_date).toLocaleDateString()}</span>
-            </div>
-            <div class="info-row">
-              <span class="label">Project no.:</span>
-              <span>${invoice.project_number || ''}</span>
+            
+            <div class="invoice-details-box">
+              <div class="info-row">
+                <span class="label">Inv. No.:</span>
+                <span class="value">${invoice.invoice_number}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Inv. Date:</span>
+                <span class="value">${new Date(invoice.invoice_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+              </div>
+              <div class="info-row">
+                <span class="label">Project no.:</span>
+                <span class="value">${invoice.project_number || ''}</span>
+              </div>
             </div>
           </div>
         </div>
         
-        <table class="items-table">
-          <thead>
-            <tr>
-              <th>SERI AL NO.</th>
-              <th>PART NO.</th>
-              <th>MATERIAL NO.</th>
-              <th>DESCRIPTION</th>
-              <th>UOM</th>
-              <th>QUANTITY</th>
-              <th>SUPPLIER UNIT PRICE</th>
-              <th>TOTAL PRICE</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${items.map(item => `
-              <tr>
-                <td>${item.serial_no}</td>
-                <td>${item.part_no || ''}</td>
-                <td>${item.material_no || ''}</td>
-                <td>${item.description || ''}</td>
-                <td>${item.uom || ''}</td>
-                <td>${item.quantity}</td>
-                <td>${formatCurrency(item.supplier_unit_price)}</td>
-                <td>${formatCurrency(item.total_price)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+        <!-- Items Table -->
+        <div class="items-section">
+          <div class="table-responsive">
+            <table class="items-table">
+              <thead class="table-header">
+                <tr>
+                  <th>SERI AL NO.</th>
+                  <th>PART NO.</th>
+                  <th>MATERIAL NO.</th>
+                  <th>DESCRIPTION</th>
+                  <th>UOM</th>
+                  <th>QUANTITY</th>
+                  <th>SUPPLIER UNIT PRICE</th>
+                  <th>TOTAL PRICE</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items.map(item => `
+                  <tr>
+                    <td>${item.serial_no || ''}</td>
+                    <td>${item.part_no || ''}</td>
+                    <td>${item.material_no || ''}</td>
+                    <td>${item.description || ''}</td>
+                    <td>${item.uom || ''}</td>
+                    <td>${parseFloat(item.quantity).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td>${formatCurrency(item.supplier_unit_price)}</td>
+                    <td>${formatCurrency(item.total_price)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
         
+        <!-- Totals Section -->
         <div class="totals-section">
           <div class="totals-box">
             <div class="total-row">
-              <span>SUB-TOTAL:</span>
-              <span>${formatCurrency(invoice.subtotal)}</span>
+              <span class="label">SUB-TOTAL:</span>
+              <span class="value">${formatCurrency(invoice.subtotal)}</span>
             </div>
             <div class="total-row">
-              <span>Amount of Claim ${invoice.claim_percentage}%:</span>
-              <span>${formatCurrency(invoice.subtotal * (invoice.claim_percentage / 100))}</span>
+              <span class="label">Amount of Claim ${invoice.claim_percentage}%:</span>
+              <span class="value">${formatCurrency(amountOfClaim)}</span>
             </div>
             <div class="total-row">
-              <span>VAT 5%:</span>
-              <span>${formatCurrency(invoice.vat_amount)}</span>
+              <span class="label">VAT 5%:</span>
+              <span class="value">${formatCurrency(invoice.vat_amount)}</span>
             </div>
             <div class="total-row total-final">
-              <span>TOTAL:</span>
-              <span>${formatCurrency(invoice.gross_total)}</span>
+              <span class="label">TOTAL:</span>
+              <span class="value">${formatCurrency(invoice.gross_total)}</span>
             </div>
           </div>
         </div>
         
+        <!-- Footer -->
         <div class="footer">
-          <p>Generated on ${new Date().toLocaleDateString()} | AllTech Business Management System</p>
+          <p>Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} | AllTech Business Management System</p>
         </div>
       </div>
     </body>
