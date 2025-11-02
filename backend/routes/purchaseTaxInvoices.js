@@ -192,14 +192,45 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
       
       // Update inventory - match by project_no, part_no, description, AND unit_price (supplier_unit_price)
       // ⚠️ IMPORTANT: Only update existing inventory if ALL four fields match exactly
-      // If any field differs, create a new inventory record
+      // If any field differs (including project_no), create a new inventory record
       if (item.part_no && item.description) {
+        // Determine the project_no to use for matching (from item or fallback to invoice project_number)
+        const projectNoForMatching = item.project_no || project_number || null;
+        
         // Check if inventory item exists - match by project_no, part_no, description, AND supplier_unit_price
-        const [existingItems] = await connection.execute(`
-          SELECT id, quantity, sold_quantity, supplier_unit_price
-          FROM inventory 
-          WHERE project_no = ? AND part_no = ? AND description = ? AND supplier_unit_price = ?
-        `, [item.project_no || project_number, item.part_no, item.description, unitPrice]);
+        // ⚠️ CRITICAL: All four fields (project_no, part_no, description, supplier_unit_price) must match exactly
+        // Handle NULL values correctly: use IS NULL when comparing NULL, otherwise use equality
+        let existingItems;
+        if (projectNoForMatching === null || projectNoForMatching === '') {
+          // If project_no is NULL/empty, match only records with NULL/empty project_no
+          [existingItems] = await connection.execute(`
+            SELECT id, quantity, sold_quantity, supplier_unit_price
+            FROM inventory 
+            WHERE (project_no IS NULL OR project_no = '')
+              AND part_no = ? 
+              AND description = ? 
+              AND supplier_unit_price = ?
+          `, [
+            item.part_no,
+            item.description,
+            unitPrice
+          ]);
+        } else {
+          // If project_no has a value, match records with the exact same project_no value
+          [existingItems] = await connection.execute(`
+            SELECT id, quantity, sold_quantity, supplier_unit_price
+            FROM inventory 
+            WHERE project_no = ?
+              AND part_no = ? 
+              AND description = ? 
+              AND supplier_unit_price = ?
+          `, [
+            projectNoForMatching,
+            item.part_no,
+            item.description,
+            unitPrice
+          ]);
+        }
         
         if (existingItems.length > 0) {
           // Item exists with exact match on all four fields - UPDATE quantities and recalculate

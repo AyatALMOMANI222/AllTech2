@@ -390,12 +390,46 @@ router.post('/import', (req, res, next) => {
         const unitPrice = parseFloat(supplier_unit_price) || 0;
         const importSoldQuantity = parseFloat(sold_quantity) || 0;
         
-        // Check if item exists based on part_no AND material_no
-        const [existingItems] = await connection.execute(`
+        // ⚠️ IMPORTANT: Check if item exists based on project_no, part_no, description, AND supplier_unit_price
+        // Only update existing record if ALL four fields match exactly
+        // Handle NULL values correctly for both project_no and description
+        let existingItems;
+        const projectNoForMatching = project_no || null;
+        const descriptionForMatching = description || null;
+        
+        // Build WHERE clause condition based on NULL values
+        let whereClause = '';
+        let params = [];
+        
+        // Handle project_no
+        if (!project_no || project_no === '' || project_no === null) {
+          whereClause += '(project_no IS NULL OR project_no = \'\')';
+        } else {
+          whereClause += 'project_no = ?';
+          params.push(projectNoForMatching);
+        }
+        
+        // Add part_no (required)
+        whereClause += ' AND part_no = ?';
+        params.push(part_no);
+        
+        // Handle description
+        if (!description || description === '' || description === null) {
+          whereClause += ' AND (description IS NULL OR description = \'\')';
+        } else {
+          whereClause += ' AND description = ?';
+          params.push(descriptionForMatching);
+        }
+        
+        // Add supplier_unit_price (required)
+        whereClause += ' AND supplier_unit_price = ?';
+        params.push(unitPrice);
+        
+        [existingItems] = await connection.execute(`
           SELECT id, quantity, sold_quantity, supplier_unit_price
           FROM inventory 
-          WHERE part_no = ? AND material_no = ?
-        `, [part_no, material_no]);
+          WHERE ${whereClause}
+        `, params);
         
         if (existingItems.length > 0) {
           // Item EXISTS - UPDATE quantities and recalculate
@@ -411,6 +445,7 @@ router.post('/import', (req, res, next) => {
           const newTotalPrice = newQuantity * unitPrice;
           const newBalanceAmount = newBalance * unitPrice;
           
+          // Update using the same matching criteria
           await connection.execute(`
             UPDATE inventory 
             SET quantity = ?,
@@ -419,28 +454,29 @@ router.post('/import', (req, res, next) => {
                 balance = ?,
                 balance_amount = ?,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE part_no = ? AND material_no = ?
+            WHERE ${whereClause}
           `, [
             newQuantity,
             unitPrice,
             newTotalPrice,
             newBalance,
             newBalanceAmount,
-            part_no,
-            material_no
+            ...params
           ]);
           
           updatedItems.push({
             row: i + 1,
+            project_no: projectNoForMatching,
             part_no,
-            material_no,
+            description: description || '',
+            unit_price: unitPrice,
             previous_quantity: existingQuantity,
             added_quantity: importQuantity,
             new_quantity: newQuantity,
             new_balance: newBalance
           });
           
-          console.log(`✓ Updated: part_no=${part_no}, material_no=${material_no}, quantity: ${existingQuantity} + ${importQuantity} = ${newQuantity}`);
+          console.log(`✓ Updated: project_no=${projectNoForMatching}, part_no=${part_no}, description=${description || ''}, unit_price=${unitPrice}, quantity: ${existingQuantity} + ${importQuantity} = ${newQuantity}`);
           
         } else {
           // Item DOES NOT EXIST - INSERT new record
@@ -475,13 +511,15 @@ router.post('/import', (req, res, next) => {
           insertedItems.push({
             row: i + 1,
             id: result.insertId,
+            project_no: projectNoForMatching,
             part_no,
-            material_no,
+            description: description || '',
+            unit_price: unitPrice,
             quantity: newQuantity,
             balance: newBalance
           });
           
-          console.log(`✓ Inserted: part_no=${part_no}, material_no=${material_no}, quantity=${newQuantity}`);
+          console.log(`✓ Created: project_no=${projectNoForMatching}, part_no=${part_no}, description=${description || ''}, unit_price=${unitPrice}, quantity=${newQuantity}`);
         }
         
       } catch (error) {
@@ -505,17 +543,20 @@ router.post('/import', (req, res, next) => {
       console.error('Warning: Error cleaning up file:', cleanupError);
     }
     
-    // Prepare response
+    // Prepare response with summary message
     const totalProcessed = insertedItems.length + updatedItems.length;
     const response = {
       success: true,
       message: `Import completed successfully! ${totalProcessed} items processed.`,
       summary: {
         total_rows: data.length,
-        inserted: insertedItems.length,
-        updated: updatedItems.length,
+        records_updated: updatedItems.length,
+        records_created: insertedItems.length,
+        inserted: insertedItems.length,  // Keep for backward compatibility
+        updated: updatedItems.length,    // Keep for backward compatibility
         skipped: skippedItems.length
       },
+      summary_message: `Import Summary: ${updatedItems.length} inventory record(s) updated, ${insertedItems.length} inventory record(s) newly created.`,
       details: {
         inserted_items: insertedItems,
         updated_items: updatedItems,

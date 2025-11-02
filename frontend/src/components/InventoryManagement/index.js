@@ -187,12 +187,15 @@ const InventoryManagement = () => {
         
         if (result.summary) {
           const summary = result.summary;
+          // Display the summary message from backend, or build custom message
+          const summaryMessage = result.summary_message || 
+            `Import Summary: ${summary.records_updated || summary.updated || 0} inventory record(s) updated, ${summary.records_created || summary.inserted || 0} inventory record(s) newly created.`;
+          
           alert(
             `Import completed successfully!\n\n` +
-            `Total Rows: ${summary.total_rows}\n` +
-            `Inserted: ${summary.inserted} new items\n` +
-            `Updated: ${summary.updated} existing items\n` +
-            `Skipped: ${summary.skipped} rows\n\n` +
+            `${summaryMessage}\n\n` +
+            `Total Rows Processed: ${summary.total_rows}\n` +
+            `Skipped: ${summary.skipped || 0} rows\n\n` +
             `All values auto-calculated by the system!`
           );
         } else {

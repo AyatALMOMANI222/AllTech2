@@ -406,7 +406,12 @@ const PurchaseOrdersManagement = () => {
 
       if (response.ok) {
         setShowImportModal(false);
-        setImportedItems(result.items);
+        // Calculate total_price automatically for each item: Total Price = Unit Price × Quantity
+        const processedItems = result.items.map((item) => ({
+          ...item,
+          total_price: (parseFloat(item.unit_price) || 0) * (parseFloat(item.quantity) || 0),
+        }));
+        setImportedItems(processedItems);
         // Generate a default PO number for imported data
         setFormData((prev) => ({
           ...prev,
@@ -1392,8 +1397,8 @@ View Details                                </button>
                           <td>{item.description}</td>
                           <td>{item.uom}</td>
                           <td>{item.quantity}</td>
-                          <td>${item.unit_price}</td>
-                          <td>${item.total_price}</td>
+                          <td>${parseFloat(item.unit_price || 0).toFixed(2)}</td>
+                          <td>${parseFloat(item.total_price || 0).toFixed(2)}</td>
                           <td>{item.lead_time}</td>
                           <td>{item.comments}</td>
                         </tr>
