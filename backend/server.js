@@ -177,7 +177,7 @@ app.get('/api/initialize-database', async (req, res) => {
         order_type ENUM('customer', 'supplier') NOT NULL,
         customer_supplier_id VARCHAR(50),
         customer_supplier_name VARCHAR(255),
-        status ENUM('approved', 'delivered') DEFAULT 'approved',
+        status ENUM('approved', 'partially_delivered', 'delivered_completed') DEFAULT 'approved',
         total_amount DECIMAL(10,2) DEFAULT 0.0,
         created_by INT,
         approved_by INT,

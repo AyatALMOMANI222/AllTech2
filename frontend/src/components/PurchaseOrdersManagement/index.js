@@ -46,12 +46,7 @@ const PurchaseOrdersManagement = () => {
     po_number: "",
     order_type: "customer",
     customer_supplier_id: "",
-    status: "approved",
     penalty_percentage: "",
-    due_date: "",
-    delivered_quantity: "",
-    delivered_unit_price: "",
-    delivered_total_price: "",
   });
 
   // Generate a default PO number
@@ -102,27 +97,10 @@ const PurchaseOrdersManagement = () => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => {
-      const newData = {
-        ...prev,
-        [name]: value,
-      };
-
-      // Auto-calculate delivered_total_price when delivered_quantity or delivered_unit_price changes
-      if (name === "delivered_quantity" || name === "delivered_unit_price") {
-        const quantity =
-          name === "delivered_quantity"
-            ? parseFloat(value) || 0
-            : parseFloat(prev.delivered_quantity) || 0;
-        const unitPrice =
-          name === "delivered_unit_price"
-            ? parseFloat(value) || 0
-            : parseFloat(prev.delivered_unit_price) || 0;
-        newData.delivered_total_price = (quantity * unitPrice).toFixed(2);
-      }
-
-      return newData;
-    });
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -151,14 +129,7 @@ const PurchaseOrdersManagement = () => {
           po_number: "",
           order_type: "customer",
           customer_supplier_id: "",
-          status: "approved",
           penalty_percentage: "",
-          penalty_amount: "",
-          balance_quantity_undelivered: "",
-          due_date: "",
-          delivered_quantity: "",
-          delivered_unit_price: "",
-          delivered_total_price: "",
         });
         fetchPurchaseOrders();
         alert(
@@ -184,12 +155,7 @@ const PurchaseOrdersManagement = () => {
       po_number: order.po_number,
       order_type: order.order_type,
       customer_supplier_id: order.customer_supplier_id,
-      status: order.status,
       penalty_percentage: order.penalty_percentage || "",
-      due_date: order.due_date || "",
-      delivered_quantity: order.delivered_quantity || "",
-      delivered_unit_price: order.delivered_unit_price || "",
-      delivered_total_price: order.delivered_total_price || "",
     });
     setShowModal(true);
   };
@@ -494,7 +460,7 @@ const PurchaseOrdersManagement = () => {
           po_number: "",
           order_type: "customer",
           customer_supplier_id: "",
-          status: "approved",
+          penalty_percentage: "",
         });
         fetchPurchaseOrders();
         alert("Purchase order created successfully with imported data!");
@@ -515,12 +481,7 @@ const PurchaseOrdersManagement = () => {
       po_number: "",
       order_type: "customer",
       customer_supplier_id: "",
-      status: "approved",
       penalty_percentage: "",
-      due_date: "",
-      delivered_quantity: "",
-      delivered_unit_price: "",
-      delivered_total_price: "",
     });
     setEditingOrder(null);
   };
@@ -839,7 +800,8 @@ const PurchaseOrdersManagement = () => {
   const getStatusBadge = (status) => {
     const statusClasses = {
       approved: "bg-success",
-      delivered: "bg-info",
+      partially_delivered: "bg-warning",
+      delivered_completed: "bg-info",
     };
     return `badge ${statusClasses[status] || "bg-secondary"}`;
   };
@@ -1204,104 +1166,33 @@ View Details                                </button>
                           ))}
                       </select>
                     </div>
+                  </div>
+
+                  {/* Additional Fields */}
+                  <div className="row">
                     <div className="col-md-6 mb-3">
-                      <label className="form-label">Status</label>
-                      <select
+                      <label className="form-label">Penalty %</label>
+                      <input
+                        type="number"
+                        step="0.01"
                         className="form-control"
-                        name="status"
-                        value={formData.status}
+                        name="penalty_percentage"
+                        value={formData.penalty_percentage || ""}
                         onChange={handleInputChange}
-                      >
-                        <option value="approved">Approved</option>
-                        <option value="delivered">Delivered</option>
-                      </select>
+                        placeholder="Enter penalty percentage"
+                      />
+                      <small className="form-text text-muted">
+                        Optional penalty percentage (will be used in automatic calculations when invoices are created)
+                      </small>
                     </div>
                   </div>
 
-                  {/* Additional Fields for Delivered Status */}
-                  {formData.status === "delivered" && (
-                    <div className="row">
-                      <div className="col-12">
-                        <hr className="my-3" />
-                        <h6 className="text-primary mb-3">
-                          <i className="fas fa-truck me-2"></i>
-                          Delivery Information
-                        </h6>
-                      </div>
-                      <div className="col-md-6 mb-3">
-                        <label className="form-label">Penalty %</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="form-control"
-                          name="penalty_percentage"
-                          value={formData.penalty_percentage || ""}
-                          onChange={handleInputChange}
-                          placeholder="Enter penalty percentage"
-                        />
-                        <small className="form-text text-muted">
-                          Optional penalty percentage
-                        </small>
-                      </div>
-                      <div className="col-md-6 mb-3">
-                        <label className="form-label">Delivered Quantity</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="form-control"
-                          name="delivered_quantity"
-                          value={formData.delivered_quantity || ""}
-                          onChange={handleInputChange}
-                          placeholder="Enter delivered quantity"
-                          disabled={!editingOrder}
-                        />
-                        <small className="form-text text-muted">
-                          {editingOrder
-                            ? "Quantity actually delivered"
-                            : "Only available when editing existing orders"}
-                        </small>
-                      </div>
-                      <div className="col-md-6 mb-3">
-                        <label className="form-label">
-                          Delivered Unit Price
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="form-control"
-                          name="delivered_unit_price"
-                          value={formData.delivered_unit_price || ""}
-                          onChange={handleInputChange}
-                          placeholder="Enter delivered unit price"
-                          disabled={!editingOrder}
-                        />
-                        <small className="form-text text-muted">
-                          {editingOrder
-                            ? "Unit price for delivered items"
-                            : "Only available when editing existing orders"}
-                        </small>
-                      </div>
-                      <div className="col-md-6 mb-3">
-                        <label className="form-label">
-                          Delivered Total Price
-                        </label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          name="delivered_total_price"
-                          value={formData.delivered_total_price || ""}
-                          readOnly
-                          placeholder="Auto-calculated"
-                          disabled={!editingOrder}
-                        />
-                        <small className="form-text text-muted">
-                          {editingOrder
-                            ? "Automatically calculated: Delivered Quantity × Delivered Unit Price"
-                            : "Only available when editing existing orders"}
-                        </small>
-                      </div>
-                    </div>
-                  )}
+                  {/* Info Message */}
+                  <div className="alert alert-info mt-3 mb-0">
+                    <i className="fas fa-info-circle me-2"></i>
+                    <strong>Note:</strong> Status, Delivered Quantity, Delivered Unit Price, and Delivered Total Price 
+                    are automatically calculated and updated by the system when invoices are created or updated.
+                  </div>
                 </div>
                 <div className="modal-footer">
                   <button

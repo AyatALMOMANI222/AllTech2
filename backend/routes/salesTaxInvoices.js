@@ -416,7 +416,9 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
     await connection.commit();
     console.log('✓ Sales invoice created and inventory updated successfully');
     
-    // Recalculate delivered data for the PO if exists
+    // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO if exists
+    // This ensures delivered_quantity, delivered_unit_price, delivered_total_price,
+    // penalty_amount, and balance_quantity_undelivered are updated from invoice data
     if (customer_po_number) {
       const [pos] = await connection.execute(
         'SELECT id FROM purchase_orders WHERE po_number = ?',
@@ -544,7 +546,8 @@ router.put('/:id', validateSalesTaxInvoice, async (req, res) => {
       ]);
     }
     
-    // Recalculate delivered data for the PO if exists
+    // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO if exists
+    // Triggered when invoice items are updated
     if (customer_po_number) {
       const [pos] = await req.db.execute(
         'SELECT id FROM purchase_orders WHERE po_number = ?',
@@ -577,7 +580,8 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Sales tax invoice not found' });
     }
     
-    // Recalculate delivered data for the PO if it exists
+    // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO if it exists
+    // Triggered when invoice is deleted to remove its contribution to delivered quantities
     if (invoice && invoice.customer_po_number) {
       const [pos] = await req.db.execute(
         'SELECT id FROM purchase_orders WHERE po_number = ?',

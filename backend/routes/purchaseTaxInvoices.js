@@ -190,18 +190,20 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
         item.description, item.uom, quantity, unitPrice, itemTotal
       ]);
       
-      // Update inventory - check if item exists based on project_no, part_no, AND description
+      // Update inventory - match by project_no, part_no, description, AND unit_price (supplier_unit_price)
+      // ⚠️ IMPORTANT: Only update existing inventory if ALL four fields match exactly
+      // If any field differs, create a new inventory record
       if (item.part_no && item.description) {
-        // Check if inventory item exists - match by project_no, part_no, description
+        // Check if inventory item exists - match by project_no, part_no, description, AND supplier_unit_price
         const [existingItems] = await connection.execute(`
           SELECT id, quantity, sold_quantity, supplier_unit_price
           FROM inventory 
-          WHERE project_no = ? AND part_no = ? AND description = ?
-        `, [item.project_no || project_number, item.part_no, item.description]);
+          WHERE project_no = ? AND part_no = ? AND description = ? AND supplier_unit_price = ?
+        `, [item.project_no || project_number, item.part_no, item.description, unitPrice]);
         
         if (existingItems.length > 0) {
-          // Item exists - UPDATE quantities and recalculate
-          // Use FIFO - update the first matching record
+          // Item exists with exact match on all four fields - UPDATE quantities and recalculate
+          // Update only ONE existing inventory record (first match)
           const existingItem = existingItems[0];
           const newQuantity = parseFloat(existingItem.quantity) + quantity;
           const soldQuantity = parseFloat(existingItem.sold_quantity) || 0;
@@ -216,7 +218,7 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
                 total_price = ?,
                 balance = ?,
                 balance_amount = ?,
-              updated_at = CURRENT_TIMESTAMP
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
           `, [
             newQuantity,
@@ -227,9 +229,10 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
             existingItem.id
           ]);
           
-          console.log(`Updated inventory for project_no=${item.project_no || project_number}, part_no=${item.part_no}, description=${item.description}, new_quantity=${newQuantity}`);
+          console.log(`Updated existing inventory: project_no=${item.project_no || project_number}, part_no=${item.part_no}, description=${item.description}, unit_price=${unitPrice}, new_quantity=${newQuantity}`);
         } else {
-          // Item does NOT exist - INSERT new record
+          // No exact match found - CREATE new inventory record
+          // This happens when any of the key fields differ (project_no, part_no, description, or unit_price)
           const balance = quantity; // balance = quantity - sold_quantity (0)
           const totalPrice = quantity * unitPrice;
           const balanceAmount = balance * unitPrice;
@@ -256,7 +259,7 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
             balanceAmount
           ]);
           
-          console.log(`Inserted new inventory item for project_no=${item.project_no || project_number}, part_no=${item.part_no}, description=${item.description}`);
+          console.log(`Created new inventory record: project_no=${item.project_no || project_number}, part_no=${item.part_no}, description=${item.description}, unit_price=${unitPrice}`);
         }
       }
     }
@@ -271,6 +274,9 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
         [po_number]
       );
       if (pos.length > 0) {
+        // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO
+        // This ensures delivered_quantity, delivered_unit_price, delivered_total_price,
+        // penalty_amount, and balance_quantity_undelivered are updated from invoice data
         await calculateAndUpdateDeliveredData(req.db, pos[0].id);
       }
     }
@@ -370,6 +376,8 @@ router.put('/:id', authenticateToken, validatePurchaseTaxInvoice, async (req, re
         [po_number]
       );
       if (pos.length > 0) {
+        // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO
+        // Triggered when invoice items are updated
         await calculateAndUpdateDeliveredData(req.db, pos[0].id);
       }
     }
@@ -396,7 +404,8 @@ router.delete('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: 'Purchase tax invoice not found' });
     }
     
-    // Recalculate delivered data for the PO if it exists
+    // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO if it exists
+    // Triggered when invoice is deleted to remove its contribution to delivered quantities
     if (invoice && invoice.po_number) {
       const [pos] = await req.db.execute(
         'SELECT id FROM purchase_orders WHERE po_number = ?',

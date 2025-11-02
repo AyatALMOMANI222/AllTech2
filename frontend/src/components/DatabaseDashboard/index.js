@@ -360,6 +360,8 @@ const DatabaseDashboard = () => {
                             <td className="alltech-data">{item.uom || '-'}</td>
                             
                             {/* SUPPLIER APPROVED PURCHASE ORDER Data */}
+                            {/* ⚠️ IMPORTANT: supplierDelivered is found based on order_type='supplier' and status (partially_delivered/delivered_completed) */}
+                            {/* Records are displayed regardless of penalty_percentage or penalty_amount values */}
                             {(() => {
                               const supplierApproved = item.purchase_orders?.approved_orders?.find(o => o.order_type === 'supplier');
                               const supplierDelivered = item.purchase_orders?.delivered_orders?.find(o => o.order_type === 'supplier');
@@ -393,10 +395,14 @@ const DatabaseDashboard = () => {
                                     {supplierDelivered?.delivered_total_price || '-'}
                                   </td>
                                   <td className="purchase-data">
-                                    {supplierDelivered?.penalty_percentage || '-'}
+                                    {supplierDelivered?.penalty_percentage != null && supplierDelivered?.penalty_percentage !== '' 
+                                      ? supplierDelivered.penalty_percentage 
+                                      : ''}
                                   </td>
                                   <td className="purchase-data">
-                                    {supplierDelivered?.penalty_amount || '-'}
+                                    {supplierDelivered?.penalty_amount != null && supplierDelivered?.penalty_amount !== '' 
+                                      ? supplierDelivered.penalty_amount 
+                                      : ''}
                                   </td>
                                   <td className="purchase-data">
                                     {supplierDelivered?.invoice_no || '-'}
@@ -412,6 +418,8 @@ const DatabaseDashboard = () => {
                             })()}
                             
                             {/* CUSTOMER APPROVED SALES ORDER Data */}
+                            {/* ⚠️ IMPORTANT: customerDelivered is found based on order_type='customer' and status (partially_delivered/delivered_completed) */}
+                            {/* Records are displayed regardless of penalty_percentage or penalty_amount values */}
                             {(() => {
                               const customerApproved = item.purchase_orders?.approved_orders?.find(o => o.order_type === 'customer');
                               const customerDelivered = item.purchase_orders?.delivered_orders?.find(o => o.order_type === 'customer');
@@ -445,10 +453,14 @@ const DatabaseDashboard = () => {
                                     {customerDelivered?.delivered_total_price || '-'}
                                   </td>
                                   <td className="delivered-sales-data">
-                                    {customerDelivered?.penalty_percentage || '-'}
+                                    {customerDelivered?.penalty_percentage != null && customerDelivered?.penalty_percentage !== '' 
+                                      ? customerDelivered.penalty_percentage 
+                                      : ''}
                                   </td>
                                   <td className="delivered-sales-data">
-                                    {customerDelivered?.penalty_amount || '-'}
+                                    {customerDelivered?.penalty_amount != null && customerDelivered?.penalty_amount !== '' 
+                                      ? customerDelivered.penalty_amount 
+                                      : ''}
                                   </td>
                                   <td className="delivered-sales-data">
                                     {customerDelivered?.invoice_no || '-'}

@@ -1,7 +1,59 @@
 const express = require('express');
 const router = express.Router();
 
-// Helper function to calculate and update delivered data for a PO
+/**
+ * Helper function to calculate and update delivered data for a Purchase Order
+ * 
+ * 🧾 DELIVERED PURCHASED ORDER Section Logic:
+ * 
+ * ⚠️ IMPORTANT: Supplier Delivered Purchased Orders work EXACTLY the same way as
+ * Customer Delivered Sales Orders. All calculations and automatic updates are identical.
+ * 
+ * 1. Invoice Types (Automatic Detection):
+ *    - Customer Purchase Orders → Pull from Sales Tax Invoices (Customer Invoices)
+ *    - Supplier Purchase Orders → Pull from Purchase Tax Invoices (Supplier Invoices)
+ *    - System automatically detects PO type (order_type) and fetches from matching invoice type
+ * 
+ * 2. Data Source Structure:
+ *    - Customer Invoices: items[].quantity, items[].unit_price, items[].total_amount
+ *    - Supplier Invoices: items[].quantity, items[].supplier_unit_price, items[].total_price
+ * 
+ * 3. Automatic Calculations (Per Item - NOT per invoice):
+ *    - If multiple invoices link to the same PO item:
+ *      * DELIVERED QUANTITY: Sum of all quantities per item across all related invoices
+ *      * DELIVERED UNIT PRICE: Take from any related invoice (same for all items)
+ *      * DELIVERED TOTAL PRICE = DELIVERED QUANTITY × DELIVERED UNIT PRICE
+ * 
+ * 4. Penalty and Balance (Per Item - Automatically Calculated):
+ *    - PENALTY %: If value entered, use it; if not, leave empty
+ *    - PENALTY AMOUNT: If PENALTY % exists → (PENALTY % × DELIVERED TOTAL PRICE) / 100
+ *    - BALANCE QUANTITY UNDELIVERED = ORDERED QUANTITY (from APPROVED section) - DELIVERED QUANTITY
+ * 
+ * 5. Automatic Updates (Triggered When):
+ *    - Purchase Tax Invoice (Supplier) is created → Recalculates Supplier PO
+ *    - Purchase Tax Invoice (Supplier) is updated → Recalculates Supplier PO
+ *    - Purchase Tax Invoice (Supplier) is deleted → Recalculates Supplier PO
+ *    - Sales Tax Invoice (Customer) is created → Recalculates Customer PO
+ *    - Sales Tax Invoice (Customer) is updated → Recalculates Customer PO
+ *    - Sales Tax Invoice (Customer) is deleted → Recalculates Customer PO
+ *    - Purchase Order items are updated → Recalculates delivered data
+ *    - Purchase Order penalty_percentage is updated → Recalculates penalty_amount
+ * 
+ * 6. Storage:
+ *    - All calculated values are stored in purchase_order_items table:
+ *      * delivered_quantity
+ *      * delivered_unit_price
+ *      * delivered_total_price
+ *      * penalty_amount
+ *      * balance_quantity_undelivered
+ *      * invoice_no (comma-separated list of invoice numbers)
+ * 
+ * 7. Display Conditions:
+ *    - Show in DELIVERED PURCHASED ORDER section ONLY when PO status is:
+ *      * "partially_delivered" (partial delivery)
+ *      * "delivered_completed" (complete delivery)
+ *    - Applies to BOTH Customer and Supplier Purchase Orders
+ */
 async function calculateAndUpdateDeliveredData(db, poId) {
   try {
     console.log(`Calculating delivered data for PO: ${poId}`);
@@ -39,7 +91,8 @@ async function calculateAndUpdateDeliveredData(db, poId) {
       let invoiceNumbers = [];
       
       if (isSupplier) {
-        // Get data from Purchase Tax Invoices
+        // SUPPLIER Purchase Orders: Pull data from Purchase Tax Invoices (Supplier Invoices)
+        // Data Source: items[].quantity, items[].supplier_unit_price, items[].total_price
         const [invoices] = await db.execute(`
           SELECT pti.*, ptii.quantity, ptii.supplier_unit_price, ptii.total_price
           FROM purchase_tax_invoices pti
@@ -47,7 +100,8 @@ async function calculateAndUpdateDeliveredData(db, poId) {
           WHERE pti.po_number = ? AND ptii.part_no = ? AND ptii.material_no = ?
         `, [poNumber, item.part_no, item.material_no]);
         
-        // Sum quantities and get unit price from any invoice
+        // DELIVERED QUANTITY: Sum of all quantities per item across all related invoices
+        // DELIVERED UNIT PRICE: Take from any related invoice (assume same price for all invoices)
         for (const inv of invoices) {
           deliveredQuantity += parseFloat(inv.quantity) || 0;
           if (deliveredUnitPrice === null && inv.supplier_unit_price) {
@@ -58,7 +112,8 @@ async function calculateAndUpdateDeliveredData(db, poId) {
           }
         }
       } else {
-        // Get data from Sales Tax Invoices
+        // CUSTOMER Purchase Orders: Pull data from Sales Tax Invoices (Customer Invoices)
+        // Data Source: items[].quantity, items[].unit_price, items[].total_amount
         const [invoices] = await db.execute(`
           SELECT sti.*, stii.quantity, stii.unit_price, stii.total_amount
           FROM sales_tax_invoices sti
@@ -66,7 +121,8 @@ async function calculateAndUpdateDeliveredData(db, poId) {
           WHERE sti.customer_po_number = ? AND stii.part_no = ? AND stii.material_no = ?
         `, [poNumber, item.part_no, item.material_no]);
         
-        // Sum quantities and get unit price from any invoice
+        // DELIVERED QUANTITY: Sum of all quantities per item across all related invoices
+        // DELIVERED UNIT PRICE: Take from any related invoice (assume same price for all invoices)
         for (const inv of invoices) {
           deliveredQuantity += parseFloat(inv.quantity) || 0;
           if (deliveredUnitPrice === null && inv.unit_price) {
@@ -78,19 +134,19 @@ async function calculateAndUpdateDeliveredData(db, poId) {
         }
       }
       
-      // Calculate delivered_total_price
-      const deliveredTotalPrice = deliveredQuantity * deliveredUnitPrice || 0;
+      // DELIVERED TOTAL PRICE = DELIVERED QUANTITY × DELIVERED UNIT PRICE
+      const deliveredTotalPrice = deliveredQuantity * (deliveredUnitPrice || 0);
       
-      // Get or keep penalty_percentage
+      // PENALTY %: If entered, use it; otherwise, leave empty
       const penaltyPercentage = item.penalty_percentage || null;
       
-      // Calculate penalty_amount
+      // PENALTY AMOUNT = (PENALTY % × DELIVERED TOTAL PRICE) / 100 (if PENALTY % exists)
       let penaltyAmount = null;
-      if (penaltyPercentage && deliveredTotalPrice) {
-        penaltyAmount = (penaltyPercentage * deliveredTotalPrice) / 100;
+      if (penaltyPercentage !== null && penaltyPercentage !== '' && deliveredTotalPrice > 0) {
+        penaltyAmount = (parseFloat(penaltyPercentage) * deliveredTotalPrice) / 100;
       }
       
-      // Calculate balance_quantity_undelivered
+      // BALANCE QUANTITY UNDELIVERED = ORDERED QUANTITY - DELIVERED QUANTITY
       const balanceQuantityUndelivered = (parseFloat(item.quantity) || 0) - deliveredQuantity;
       
       // Update the item
@@ -118,40 +174,43 @@ async function calculateAndUpdateDeliveredData(db, poId) {
     }
     
     // Update PO status based on delivery
+    // Status should be 'partially_delivered' or 'delivered_completed' based on quantities
     const [updatedItems] = await db.execute(
       'SELECT quantity, delivered_quantity FROM purchase_order_items WHERE po_id = ?',
       [poId]
     );
     
-    let allDelivered = true;
-    let allPending = true;
-    
-    for (const itm of updatedItems) {
-      const qty = parseFloat(itm.quantity) || 0;
-      const delQty = parseFloat(itm.delivered_quantity) || 0;
+    if (updatedItems.length > 0) {
+      let totalOrdered = 0;
+      let totalDelivered = 0;
+      let hasDeliveredItems = false;
       
-      if (delQty > 0 && delQty < qty) {
-        allDelivered = false;
-        allPending = false;
-      } else if (delQty === 0) {
-        allDelivered = false;
-      } else if (delQty >= qty) {
-        allPending = false;
+      for (const itm of updatedItems) {
+        const qty = parseFloat(itm.quantity) || 0;
+        const delQty = parseFloat(itm.delivered_quantity) || 0;
+        totalOrdered += qty;
+        totalDelivered += delQty;
+        if (delQty > 0) {
+          hasDeliveredItems = true;
+        }
       }
-    }
-    
-    // Set appropriate status
-    let newStatus = po.status;
-    if (allDelivered && !allPending) {
-      newStatus = 'delivered';
-    } else if (!allPending && !allDelivered) {
-      newStatus = 'partially_delivered';
-    }
-    
-    // Only update if status changed
-    if (newStatus !== po.status) {
-      await db.execute('UPDATE purchase_orders SET status = ? WHERE id = ?', [newStatus, poId]);
-      console.log(`✓ Updated PO ${poId} status to ${newStatus}`);
+      
+      // Set appropriate status
+      let newStatus = po.status;
+      if (hasDeliveredItems) {
+        if (totalDelivered >= totalOrdered) {
+          newStatus = 'delivered_completed';
+        } else if (totalDelivered > 0) {
+          newStatus = 'partially_delivered';
+        }
+        // If totalDelivered is 0, keep status as 'approved' (default)
+      }
+      
+      // Only update if status changed
+      if (newStatus !== po.status) {
+        await db.execute('UPDATE purchase_orders SET status = ? WHERE id = ?', [newStatus, poId]);
+        console.log(`✓ Updated PO ${poId} status to ${newStatus}`);
+      }
     }
     
     console.log(`✓ Completed calculation for PO ${poId}`);
@@ -187,9 +246,10 @@ router.get('/', async (req, res) => {
         i.balance as inventory_balance,
         i.balance_amount as inventory_balance_amount,
         
-        -- Approved Orders (all types with status = 'approved')
+        -- Approved Orders (all types with status = 'approved', 'partially_delivered', or 'delivered_completed')
+        -- NOTE: Delivered POs appear in BOTH approved and delivered sections
         GROUP_CONCAT(DISTINCT CASE 
-          WHEN po_approved.status = 'approved'
+          WHEN po_approved.status IN ('approved', 'partially_delivered', 'delivered_completed')
           THEN CONCAT(
             poi_approved.quantity, '|',
             poi_approved.unit_price, '|',
@@ -205,22 +265,46 @@ router.get('/', async (req, res) => {
           ELSE NULL 
         END SEPARATOR '||') as approved_orders_data,
         
-        -- Delivered Purchase Orders (all types with status = 'partially_delivered' or 'delivered_completed')
+        -- 📦 DELIVERED PURCHASED ORDER Section
+        -- ⚠️ Display Condition: Show ONLY when PO status is "partially_delivered" or "delivered_completed"
+        -- ⚠️ IMPORTANT: Records are displayed REGARDLESS of penalty_percentage or penalty_amount values
+        -- Records appear immediately when status changes to partially_delivered or delivered_completed
+        -- NOTE: These POs also appear in the APPROVED section above (showing original approved data)
+        -- Data Structure (pipe-separated):
+        -- [0] quantity (ORDERED QUANTITY from APPROVED section)
+        -- [1] unit_price (original unit price)
+        -- [2] total_price (ORDERED QUANTITY × unit_price)
+        -- [3] lead_time
+        -- [4] due_date
+        -- [5] delivered_quantity (sum from all invoices)
+        -- [6] delivered_unit_price (from any invoice)
+        -- [7] delivered_total_price (delivered_quantity × delivered_unit_price)
+        -- [8] penalty_percentage (can be empty/null - does NOT affect display)
+        -- [9] penalty_amount (can be empty/null - does NOT affect display)
+        -- [10] invoice_no (comma-separated invoice numbers)
+        -- [11] balance_quantity_undelivered (ORDERED QUANTITY - DELIVERED QUANTITY)
+        -- [12] company_name
+        -- [13] po_number
+        -- [14] order_type
+        -- [15] status
+        -- ⚠️ CRITICAL: Display condition is ONLY based on status, NOT on penalty_percentage or any other field
+        -- Records are included if status === 'partially_delivered' OR status === 'delivered_completed'
+        -- This works even if penalty_percentage, penalty_amount, or delivered_quantity are NULL/empty
         GROUP_CONCAT(DISTINCT CASE 
           WHEN po_delivered.status IN ('partially_delivered', 'delivered_completed')
           THEN CONCAT(
-            poi_delivered.quantity, '|',
-            poi_delivered.unit_price, '|',
-            (poi_delivered.quantity * poi_delivered.unit_price), '|',
+            poi_delivered.quantity, '|',                    -- ORDERED QUANTITY (from APPROVED section)
+            poi_delivered.unit_price, '|',                  -- Original unit price
+            (poi_delivered.quantity * poi_delivered.unit_price), '|',  -- Original total
             COALESCE(poi_delivered.lead_time, ''), '|',
             COALESCE(poi_delivered.due_date, ''), '|',
-            COALESCE(poi_delivered.delivered_quantity, ''), '|',
-            COALESCE(poi_delivered.delivered_unit_price, ''), '|',
-            COALESCE(poi_delivered.delivered_total_price, ''), '|',
-            COALESCE(poi_delivered.penalty_percentage, ''), '|',
-            COALESCE(poi_delivered.penalty_amount, ''), '|',
-            COALESCE(poi_delivered.invoice_no, ''), '|',
-            COALESCE(poi_delivered.balance_quantity_undelivered, ''), '|',
+            COALESCE(poi_delivered.delivered_quantity, ''), '|',       -- DELIVERED QUANTITY (sum from invoices)
+            COALESCE(poi_delivered.delivered_unit_price, ''), '|',     -- DELIVERED UNIT PRICE (from invoices)
+            COALESCE(poi_delivered.delivered_total_price, ''), '|',    -- DELIVERED TOTAL PRICE (calculated)
+            COALESCE(poi_delivered.penalty_percentage, ''), '|',       -- PENALTY % (if entered)
+            COALESCE(poi_delivered.penalty_amount, ''), '|',           -- PENALTY AMOUNT (calculated)
+            COALESCE(poi_delivered.invoice_no, ''), '|',               -- Invoice numbers
+            COALESCE(poi_delivered.balance_quantity_undelivered, ''), '|',  -- BALANCE (ORDERED - DELIVERED)
             COALESCE(cs_delivered.company_name, ''),
             '|',
             COALESCE(po_delivered.po_number, ''),
@@ -373,6 +457,7 @@ router.get('/', async (req, res) => {
         : [];
       
       // Parse delivered orders (all types)
+      // ⚠️ IMPORTANT: Records are included regardless of penalty_percentage value (can be empty/null)
       const deliveredOrders = item.delivered_orders_data
         ? item.delivered_orders_data.split('||').map(data => {
             const parts = data.split('|');
@@ -385,8 +470,8 @@ router.get('/', async (req, res) => {
               delivered_quantity: parts[5] ? parseFloat(parts[5]) : 0,
               delivered_unit_price: parts[6] ? parseFloat(parts[6]) : 0,
               delivered_total_price: parts[7] ? parseFloat(parts[7]) : 0,
-              penalty_percentage: parts[8] || '',
-              penalty_amount: parts[9] || '',
+              penalty_percentage: parts[8] !== undefined ? (parts[8] || '') : '',  // Preserve empty strings, default to '' if undefined
+              penalty_amount: parts[9] !== undefined ? (parts[9] || '') : '',      // Preserve empty strings, default to '' if undefined
               invoice_no: parts[10] || '',
               balance_quantity_undelivered: parts[11] || '',
               supplier_name: parts[12] || '',
@@ -519,8 +604,9 @@ router.get('/export', async (req, res) => {
         i.sold_quantity,
         i.balance,
         i.balance_amount,
+        -- Approved Orders (includes approved and delivered POs - delivered POs appear in both sections)
         GROUP_CONCAT(DISTINCT CASE 
-          WHEN po_approved.status = 'approved'
+          WHEN po_approved.status IN ('approved', 'partially_delivered', 'delivered_completed')
           THEN CONCAT(
             poi_approved.quantity, '|',
             poi_approved.unit_price, '|',
@@ -535,6 +621,10 @@ router.get('/export', async (req, res) => {
           )
           ELSE NULL 
         END SEPARATOR '||') as approved_orders_data,
+        -- Delivered Orders (only partially_delivered or delivered_completed - also appear in approved section)
+        -- ⚠️ CRITICAL: Display condition is ONLY based on status, NOT on penalty_percentage or any other field
+        -- Records are included if status === 'partially_delivered' OR status === 'delivered_completed'
+        -- This works even if penalty_percentage, penalty_amount, or delivered_quantity are NULL/empty
         GROUP_CONCAT(DISTINCT CASE 
           WHEN po_delivered.status IN ('partially_delivered', 'delivered_completed')
           THEN CONCAT(
@@ -700,112 +790,32 @@ router.get('/export', async (req, res) => {
   }
 });
 
-// POST /api/database-dashboard/calculate-delivered - Calculate delivered data from invoices
+/**
+ * POST /api/database-dashboard/calculate-delivered/:po_id
+ * 
+ * Calculate and update delivered data for a Purchase Order.
+ * 
+ * This endpoint recalculates all delivered values from invoices:
+ * - delivered_quantity: Sum of quantities from all related invoices
+ * - delivered_unit_price: Unit price from any invoice
+ * - delivered_total_price: delivered_quantity × delivered_unit_price
+ * - penalty_amount: (penalty_percentage × delivered_total_price) / 100
+ * - balance_quantity_undelivered: ORDERED QUANTITY - DELIVERED QUANTITY
+ * 
+ * Invoice Types:
+ * - Customer POs: Pull from Sales Tax Invoices
+ * - Supplier POs: Pull from Purchase Tax Invoices
+ * 
+ * This is automatically called when:
+ * - Sales/Purchase Tax Invoices are created, updated, or deleted
+ * - Purchase Order items are updated (including penalty_percentage changes)
+ */
 router.post('/calculate-delivered/:po_id', async (req, res) => {
   try {
     const { po_id } = req.params;
     
-    // Get the Purchase Order
-    const [pos] = await req.db.execute(
-      'SELECT * FROM purchase_orders WHERE id = ?',
-      [po_id]
-    );
-    
-    if (pos.length === 0) {
-      return res.status(404).json({ message: 'Purchase order not found' });
-    }
-    
-    const po = pos[0];
-    const isSupplier = po.order_type === 'supplier';
-    
-    // Get all items for this PO
-    const [items] = await req.db.execute(
-      'SELECT * FROM purchase_order_items WHERE po_id = ?',
-      [po_id]
-    );
-    
-    // For each item, calculate delivered data from invoices
-    for (const item of items) {
-      let deliveredQuantity = 0;
-      let deliveredUnitPrice = null;
-      let invoiceNumbers = [];
-      
-      if (isSupplier) {
-        // Get data from Purchase Tax Invoices
-        const [invoices] = await req.db.execute(`
-          SELECT pti.*, ptii.quantity, ptii.supplier_unit_price, ptii.total_price
-          FROM purchase_tax_invoices pti
-          INNER JOIN purchase_tax_invoice_items ptii ON pti.id = ptii.invoice_id
-          WHERE pti.po_number = ? AND ptii.part_no = ? AND ptii.material_no = ?
-        `, [po.po_number, item.part_no, item.material_no]);
-        
-        // Sum quantities and get unit price from any invoice
-        for (const inv of invoices) {
-          deliveredQuantity += parseFloat(inv.quantity) || 0;
-          if (deliveredUnitPrice === null && inv.supplier_unit_price) {
-            deliveredUnitPrice = parseFloat(inv.supplier_unit_price);
-          }
-          if (inv.invoice_number) {
-            invoiceNumbers.push(inv.invoice_number);
-          }
-        }
-      } else {
-        // Get data from Sales Tax Invoices
-        const [invoices] = await req.db.execute(`
-          SELECT sti.*, stii.quantity, stii.unit_price, stii.total_amount
-          FROM sales_tax_invoices sti
-          INNER JOIN sales_tax_invoice_items stii ON sti.id = stii.invoice_id
-          WHERE sti.po_number = ? AND stii.part_no = ? AND stii.material_no = ?
-        `, [po.po_number, item.part_no, item.material_no]);
-        
-        // Sum quantities and get unit price from any invoice
-        for (const inv of invoices) {
-          deliveredQuantity += parseFloat(inv.quantity) || 0;
-          if (deliveredUnitPrice === null && inv.unit_price) {
-            deliveredUnitPrice = parseFloat(inv.unit_price);
-          }
-          if (inv.invoice_number) {
-            invoiceNumbers.push(inv.invoice_number);
-          }
-        }
-      }
-      
-      // Calculate delivered_total_price
-      const deliveredTotalPrice = deliveredQuantity * deliveredUnitPrice || 0;
-      
-      // Get or keep penalty_percentage
-      const penaltyPercentage = item.penalty_percentage || null;
-      
-      // Calculate penalty_amount
-      let penaltyAmount = null;
-      if (penaltyPercentage && deliveredTotalPrice) {
-        penaltyAmount = (penaltyPercentage * deliveredTotalPrice) / 100;
-      }
-      
-      // Calculate balance_quantity_undelivered
-      const balanceQuantityUndelivered = (parseFloat(item.quantity) || 0) - deliveredQuantity;
-      
-      // Update the item
-      await req.db.execute(`
-        UPDATE purchase_order_items SET
-          delivered_quantity = ?,
-          delivered_unit_price = ?,
-          delivered_total_price = ?,
-          penalty_amount = ?,
-          balance_quantity_undelivered = ?,
-          invoice_no = ?,
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `, [
-        deliveredQuantity || null,
-        deliveredUnitPrice || null,
-        deliveredTotalPrice || null,
-        penaltyAmount,
-        balanceQuantityUndelivered,
-        invoiceNumbers.join(', '),
-        item.id
-      ]);
-    }
+    // Use the helper function to calculate and update delivered data
+    await calculateAndUpdateDeliveredData(req.db, po_id);
     
     res.json({ 
       success: true,

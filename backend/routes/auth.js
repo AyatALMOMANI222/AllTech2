@@ -22,8 +22,7 @@ router.post('/login', [
     // Find user by username or email
     const [users] = await req.db.execute(
       'SELECT * FROM users WHERE username = ? OR email = ?',
-      [username, username]
-    );
+      [String(username), String(username)]    );
 
     if (users.length === 0) {
       return res.status(401).json({ message: 'Invalid credentials' });

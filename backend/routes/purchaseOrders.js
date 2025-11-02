@@ -332,10 +332,10 @@ router.put('/:id', async (req, res) => {
       });
     }
     
-    // Validate status (only 'approved' and 'delivered' are allowed)
-    if (status && !['approved', 'delivered'].includes(status)) {
+    // Validate status (only 'approved', 'partially_delivered', and 'delivered_completed' are allowed)
+    if (status && !['approved', 'partially_delivered', 'delivered_completed'].includes(status)) {
       return res.status(400).json({ 
-        message: 'Status must be approved or delivered' 
+        message: 'Status must be approved, partially_delivered, or delivered_completed' 
       });
     }
     
@@ -381,6 +381,7 @@ router.put('/:id', async (req, res) => {
     }
     
     // Update penalty_percentage for all items if provided (regardless of status)
+    // ⚠️ IMPORTANT: Recalculate all delivered values after penalty_percentage update
     if (penalty_percentage !== undefined && penalty_percentage !== null && penalty_percentage !== '') {
       console.log('Updating penalty_percentage for all items:', penalty_percentage);
       
@@ -396,6 +397,7 @@ router.put('/:id', async (req, res) => {
         console.log('✅ Updated penalty_percentage for all items');
         
         // Recalculate all delivered values (including penalty_amount)
+        // This ensures penalty_amount = (penalty_percentage × delivered_total_price) / 100
         const { calculateAndUpdateDeliveredData } = require('./databaseDashboard');
         await calculateAndUpdateDeliveredData(req.db, id);
         
@@ -406,7 +408,7 @@ router.put('/:id', async (req, res) => {
     }
     
     // Handle form-level fields for delivered status
-    if (status === 'delivered' && (due_date || delivered_quantity || delivered_unit_price || delivered_total_price)) {
+    if ((status === 'partially_delivered' || status === 'delivered_completed') && (due_date || delivered_quantity || delivered_unit_price || delivered_total_price)) {
       console.log('Updating existing items with form-level fields for delivered status');
       console.log('Form-level fields:', { penalty_percentage, due_date, delivered_quantity, delivered_unit_price, delivered_total_price });
       
@@ -525,6 +527,12 @@ router.put('/:id', async (req, res) => {
         await req.db.execute(`
           UPDATE purchase_orders SET total_amount = ? WHERE id = ?
         `, [totalAmount, id]);
+        
+        // ⚠️ IMPORTANT: Recalculate all delivered values after PO item updates
+        // This ensures delivered_quantity, delivered_unit_price, delivered_total_price,
+        // penalty_amount, and balance_quantity_undelivered are always current
+        const { calculateAndUpdateDeliveredData } = require('./databaseDashboard');
+        await calculateAndUpdateDeliveredData(req.db, id);
         
       } catch (itemError) {
         console.error('Error updating items:', itemError);
