@@ -407,10 +407,10 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
 }
 
 .hero-title {
-    font-size: 4rem;
+  font-size: clamp(2.25rem, 4.5vw, 4rem);
   font-weight: 900;
-  line-height: 1.1;
-    margin-bottom: 1.5rem;
+  line-height: 1.15;
+  margin-bottom: 1.5rem;
   letter-spacing: -0.04em;
   
     .title-line {
@@ -449,11 +449,11 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
 }
 
 .hero-description {
-    font-size: 1.15rem;
+  font-size: clamp(1rem, 1.2vw + 0.5rem, 1.15rem);
   color: rgba(255, 255, 255, 0.75);
-    line-height: 1.8;
-    margin-bottom: 2rem;
-  max-width: 580px;
+  line-height: 1.75;
+  margin-bottom: 2rem;
+  max-width: 680px;
   font-weight: 400;
 }
 
@@ -2024,7 +2024,7 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
       border: 1.5px solid rgba(255, 255, 255, 0.12);
       border-radius: 12px;
       display: flex;
-      align-items: center;
+        align-items: center;
       justify-content: center;
       color: white;
       text-decoration: none;
@@ -2063,12 +2063,12 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
         transition: all 0.4s ease;
         position: relative;
         z-index: 1;
+        }
       }
     }
   }
-}
   
-.footer-contact {
+  .footer-contact {
   .contact-info {
     display: flex;
     flex-direction: column;
@@ -2176,10 +2176,10 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
     }
   }
   
-.footer-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  .footer-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   flex-wrap: wrap;
   gap: 1.5rem;
   padding-top: 1.5rem;
@@ -2206,9 +2206,9 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
 
   .footer-bottom-right {
     .footer-legal {
-      display: flex;
+        display: flex;
       gap: 1.25rem;
-      align-items: center;
+        align-items: center;
       flex-wrap: wrap;
 
       .legal-link {
@@ -2257,7 +2257,7 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
 // ============================================
 @media (max-width: 1199.98px) {
   .hero-title {
-    font-size: 4rem;
+    font-size: clamp(2.5rem, 5vw, 3.75rem);
   }
   
   .section-title {
@@ -2274,7 +2274,7 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
   }
 
   .hero-visual {
-    height: 500px;
+    height: 520px;
   }
 
   .capabilities-grid {
@@ -2329,7 +2329,7 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
   }
   
   .hero-title {
-    font-size: 3.5rem;
+    font-size: clamp(2.25rem, 6vw, 3.5rem);
   }
   
   .hero-description {
@@ -2338,44 +2338,7 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
   }
   
   .hero-visual {
-    height: 500px;
-
-    .showcase-image {
-      &.image-main {
-        width: 280px;
-        height: 210px;
-      }
-
-      &.image-secondary {
-        width: 240px;
-        height: 170px;
-      }
-
-      &.image-tertiary {
-        width: 260px;
-        height: 190px;
-      }
-
-      &.image-featured {
-        width: 300px;
-        height: 240px;
-      }
-    }
-
-    .showcase-accent {
-      width: 150px;
-      height: 150px;
-      right: 10%;
-
-      .accent-core {
-        width: 70px;
-        height: 70px;
-
-        i {
-          font-size: 1.75rem;
-        }
-      }
-    }
+    height: 480px;
   }
 
   .section-title {
@@ -2426,7 +2389,7 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
   }
   
   .hero-title {
-    font-size: 2.75rem;
+    font-size: clamp(2rem, 8vw, 2.75rem);
     margin-bottom: 1.25rem;
   }
   
@@ -2455,8 +2418,8 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
   }
 
   .hero-visual {
-    height: 400px;
-    margin-top: 3rem;
+    height: 360px;
+    margin-top: 2rem;
 
     .showcase-image {
       &.image-main {
@@ -2629,7 +2592,7 @@ $shadow-glow-lg: 0 0 64px rgba(37, 99, 235, 0.4);
   }
   
   .hero-title {
-    font-size: 2.25rem;
+    font-size: clamp(1.9rem, 9vw, 2.25rem);
   }
   
   .hero-description {
