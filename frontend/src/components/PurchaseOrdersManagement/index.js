@@ -951,7 +951,7 @@ const PurchaseOrdersManagement = () => {
                 ) : (
                   <>
                     <div className="table-responsive">
-                      <table className="table table-striped table-hover">
+                      <table className="table table-striped table-hover po-table">
                         <thead className="table-dark">
                           <tr>
                             <th>PO Number</th>

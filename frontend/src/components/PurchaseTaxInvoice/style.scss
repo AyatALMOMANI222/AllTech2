@@ -360,26 +360,79 @@
       }
     }
     
+    // Mobile-first stacked table (no horizontal scroll)
     .items-table {
-      font-size: 0.75rem;
-      
-      .table-header th {
-        padding: 0.5rem 0.3rem;
-        font-size: 0.7rem;
+      width: 100%;
+      font-size: 0.85rem;
+
+      thead {
+        display: none;
       }
-      
-      tbody td {
-        padding: 0.5rem 0.3rem;
-        
-        .table-input {
-          padding: 0.3rem 0.4rem;
-          font-size: 0.75rem;
-        }
-        
-        .btn-sm {
-          padding: 0.25rem 0.4rem;
-          font-size: 0.7rem;
-        }
+
+      tbody,
+      tr,
+      td {
+        display: block;
+        width: 100%;
+      }
+
+      tbody {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      tr {
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 0.25rem 0;
+      }
+
+      td {
+        border: none !important;
+        padding: 0.625rem 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.75rem;
+        white-space: normal;
+        word-break: break-word;
+      }
+
+      td:first-child {
+        background: transparent;
+        font-weight: 600;
+      }
+
+      // Column labels
+      td::before {
+        content: '';
+        font-weight: 700;
+        color: #6c757d;
+        flex: 0 0 46%;
+        max-width: 46%;
+        margin-right: 0.75rem;
+      }
+
+      td:nth-child(1)::before { content: 'SERIAL NO.'; }
+      td:nth-child(2)::before { content: 'PART NO.'; }
+      td:nth-child(3)::before { content: 'MATERIAL NO.'; }
+      td:nth-child(4)::before { content: 'DESCRIPTION'; }
+      td:nth-child(5)::before { content: 'UOM'; }
+      td:nth-child(6)::before { content: 'QUANTITY'; }
+      td:nth-child(7)::before { content: 'SUPPLIER UNIT PRICE'; }
+      td:nth-child(8)::before { content: 'TOTAL PRICE'; }
+      td:nth-child(9)::before { content: 'Actions'; }
+
+      .table-input {
+        padding: 0.4rem 0.5rem;
+        font-size: 0.85rem;
+        text-align: left;
+      }
+
+      .btn-sm {
+        padding: 0.35rem 0.6rem;
+        font-size: 0.8rem;
       }
     }
     

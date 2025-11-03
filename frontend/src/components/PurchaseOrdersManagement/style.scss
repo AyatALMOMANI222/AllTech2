@@ -572,6 +572,53 @@ $danger: #ef4444;
   }
 
   // Responsive Design
+  // Desktop → Tablet adjustments
+  @media (max-width: 1200px) {
+    .table thead th,
+    .table tbody td {
+      padding: 0.875rem 0.75rem;
+    }
+
+    .footer-controls,
+    .d-flex.justify-content-between.align-items-center {
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+  }
+
+  // Tablet layout
+  @media (max-width: 992px) {
+    .row.mb-3 > .col-md-4,
+    .row.mb-3 > .col-md-8 {
+      margin-bottom: 0.75rem;
+    }
+
+    .modal .modal-dialog.modal-xl {
+      max-width: 100%;
+      margin: 0 1rem;
+    }
+
+    .modal .modal-dialog.modal-lg {
+      max-width: 100%;
+      margin: 0 1rem;
+    }
+
+    .table-responsive {
+      border: 1px solid $border-color;
+    }
+
+    .table {
+      font-size: 0.85rem;
+      thead th { white-space: nowrap; }
+    }
+
+    // Wrap action buttons inside table
+    td:last-child {
+      min-width: 220px;
+      white-space: nowrap;
+    }
+  }
+
   @media (max-width: 768px) {
     padding: 1rem;
 
@@ -592,13 +639,113 @@ $danger: #ef4444;
       padding: 1rem;
     }
 
-    .table {
-      font-size: 0.813rem;
+    .table-responsive {
+      -webkit-overflow-scrolling: touch;
+    }
 
-      thead th,
-      tbody td {
-        padding: 0.75rem 0.5rem;
+    // Stacked, label-based layout on mobile (no horizontal scroll)
+    .po-table {
+      width: 100%;
+      font-size: 0.9rem;
+
+      thead {
+        display: none;
       }
+
+      tbody,
+      tr,
+      td {
+        display: block;
+        width: 100%;
+      }
+
+      tbody {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      tr {
+        background: $white;
+        border: 1px solid $border-color;
+        border-radius: 8px;
+        padding: 0.25rem 0;
+      }
+
+      td {
+        padding: 0.625rem 0.75rem;
+        border: none !important;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.75rem;
+        white-space: normal;
+        word-break: break-word;
+      }
+
+      td::before {
+        content: '';
+        font-weight: 700;
+        color: $text-light;
+        margin-right: 0.75rem;
+        flex: 0 0 46%;
+        max-width: 46%;
+      }
+
+      // Column labels
+      td:nth-child(1)::before { content: 'PO Number'; }
+      td:nth-child(2)::before { content: 'Type'; }
+      td:nth-child(3)::before { content: 'Customer/Supplier'; }
+      td:nth-child(4)::before { content: 'Created Date'; }
+      td:nth-child(5)::before { content: 'Actions'; }
+
+      // Actions wrap nicely
+      td:last-child {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+    }
+
+    // Controls stack
+    .d-flex.justify-content-between.align-items-center {
+      flex-direction: column;
+      align-items: stretch !important;
+      gap: 0.75rem;
+    }
+
+    // Filter/Search labels
+    .row.mb-3 .card .form-label {
+      min-width: auto !important;
+    }
+
+    // Buttons wrap nicely
+    .table tbody td:last-child {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+  }
+
+  // Small phones
+  @media (max-width: 576px) {
+    h2 { font-size: 1.25rem; }
+
+    .btn {
+      padding: 0.35rem 0.875rem;
+      font-size: 0.813rem;
+    }
+
+    .pagination .page-item .page-link {
+      padding: 0.4rem 0.7rem;
+    }
+
+    .modal .modal-header { padding: 1rem; }
+    .modal .modal-body { padding: 1rem; }
+
+    .list-group .list-group-item {
+      flex-direction: column;
+      align-items: flex-start !important;
+      gap: 0.5rem;
     }
   }
 
