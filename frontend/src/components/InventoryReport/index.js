@@ -232,7 +232,7 @@ const InventoryReport = () => {
                   <div className="items-section">
                     <h4>Inventory Details</h4>
                     <div className="table-responsive">
-                      <table className="items-table">
+                      <table className="items-table inventory-report-table">
                         <thead>
                           <tr>
                             <th onClick={() => handleSort("serial_no")}>
@@ -697,7 +697,7 @@ const InventoryReport = () => {
         }
 
         .table-responsive {
-          overflow-x: auto;
+          overflow-x: visible;
           border-radius: 8px;
           border: 1px solid #e2e8f0;
         }
@@ -705,7 +705,12 @@ const InventoryReport = () => {
         .items-table {
           width: 100%;
           border-collapse: collapse;
-          min-width: 800px;
+        }
+
+        @media (min-width: 769px) {
+          .items-table {
+            min-width: 800px;
+          }
         }
 
         .items-table thead {
@@ -926,12 +931,139 @@ const InventoryReport = () => {
             grid-template-columns: 1fr;
           }
 
+          .table-responsive {
+            overflow-x: visible;
+          }
+
+          .inventory-report-table {
+            width: 100%;
+            font-size: 0.9rem;
+          }
+
+          .inventory-report-table thead {
+            display: none;
+          }
+
+          .inventory-report-table tbody,
+          .inventory-report-table tr,
+          .inventory-report-table td {
+            display: block;
+            width: 100%;
+          }
+
+          .inventory-report-table tbody {
+            display: grid;
+            gap: 0.75rem;
+          }
+
+          .inventory-report-table tr {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 0.25rem 0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+          }
+
+          .inventory-report-table td {
+            padding: 0.625rem 0.75rem;
+            border: none !important;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 0.75rem;
+            white-space: normal;
+            word-break: break-word;
+          }
+
+          .inventory-report-table td:first-child {
+            padding-top: 1rem;
+          }
+
+          .inventory-report-table td:last-child {
+            padding-bottom: 1rem;
+          }
+
+          .inventory-report-table td::before {
+            content: '';
+            font-weight: 700;
+            color: #64748b;
+            margin-right: 0.75rem;
+            flex: 0 0 40%;
+            max-width: 40%;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+          }
+
+          .inventory-report-table td:nth-child(1)::before { content: 'Serial No'; }
+          .inventory-report-table td:nth-child(2)::before { content: 'Description'; }
+          .inventory-report-table td:nth-child(3)::before { content: 'Quantity'; }
+          .inventory-report-table td:nth-child(4)::before { content: 'Balance'; }
+          .inventory-report-table td:nth-child(5)::before { content: 'Balance Amount'; }
+          .inventory-report-table td:nth-child(6)::before { content: 'Action'; }
+
+          .inventory-report-table td:last-child {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .inventory-report-table td:last-child::before {
+            margin-bottom: 0.5rem;
+          }
+
+          .inventory-report-table td:last-child .btn-view {
+            width: 100%;
+            margin-top: 0.5rem;
+            justify-content: center;
+          }
+
+          .inventory-report-table td.text-center {
+            text-align: center;
+            display: block;
+          }
+
+          .inventory-report-table td.text-center::before {
+            display: none;
+          }
+
+          .inventory-report-table td.text-right {
+            text-align: right;
+            justify-content: flex-end;
+          }
+
           .modal {
             width: 95%;
           }
 
+          .modal-content {
+            width: 95% !important;
+            max-width: 95% !important;
+          }
+
           .detail-grid {
             grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 576px) {
+          .inventory-report-table {
+            font-size: 0.85rem;
+          }
+
+          .inventory-report-table td {
+            padding: 0.5rem 0.6rem;
+            font-size: 0.85rem;
+          }
+
+          .inventory-report-table td::before {
+            font-size: 0.7rem;
+            flex: 0 0 38%;
+            max-width: 38%;
+          }
+
+          .inventory-report-table td:last-child .btn-view {
+            padding: 8px 12px;
+            font-size: 12px;
           }
         }
       `}</style>

@@ -49,11 +49,22 @@ const PurchaseOrdersManagement = () => {
     penalty_percentage: "",
   });
 
-  // Generate a default PO number
+  // Generate a default PO number in format PO-YYYY-XXX
   const generatePONumber = () => {
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 1000);
-    return `PO-${timestamp}-${random}`;
+    const now = new Date();
+    const year = now.getFullYear();
+    const counterKey = `poCounter-${year}`;
+    try {
+      const current = parseInt(localStorage.getItem(counterKey) || '0', 10) || 0;
+      const next = current + 1;
+      localStorage.setItem(counterKey, String(next));
+      const seq = String(next % 1000).padStart(3, '0');
+      return `PO-${year}-${seq}`;
+    } catch (_) {
+      // Fallback if localStorage is unavailable
+      const seq = String(Math.floor(Math.random() * 1000)).padStart(3, '0');
+      return `PO-${year}-${seq}`;
+    }
   };
 
   useEffect(() => {
@@ -113,13 +124,17 @@ const PurchaseOrdersManagement = () => {
         : `${API_BASE_URL}/purchase-orders`;
 
       const method = editingOrder ? "PUT" : "POST";
+      // Ensure PO Number is generated automatically on create if missing
+      const payload = editingOrder
+        ? formData
+        : { ...formData, po_number: formData.po_number || generatePONumber() };
 
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -1108,17 +1123,18 @@ View Details                                </button>
               <form onSubmit={handleSubmit}>
                 <div className="modal-body">
                   <div className="row">
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">PO Number *</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        name="po_number"
-                        value={formData.po_number}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
+                <div className="col-md-6 mb-3">
+                  <label className="form-label">PO Number</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    name="po_number"
+                    value={formData.po_number || ''}
+                    onChange={() => {}}
+                    placeholder="Will be generated automatically (PO-YYYY-XXX)"
+                    disabled
+                  />
+                </div>
                     <div className="col-md-6 mb-3">
                       <label className="form-label">Order Type *</label>
                       <div className="d-flex gap-3">
@@ -1311,14 +1327,15 @@ View Details                                </button>
               <div className="modal-body">
                 <div className="row mb-3">
                   <div className="col-md-4">
-                    <label className="form-label">PO Number *</label>
+                    <label className="form-label">PO Number</label>
                     <input
                       type="text"
                       className="form-control"
                       name="po_number"
-                      value={formData.po_number}
-                      onChange={handleInputChange}
-                      required
+                      value={formData.po_number || ''}
+                      onChange={() => {}}
+                      placeholder="Will be generated automatically (PO-YYYY-XXX)"
+                      disabled
                     />
                   </div>
                   <div className="col-md-4">
@@ -1369,7 +1386,7 @@ View Details                                </button>
                 </div>
 
                 <div className="table-responsive">
-                  <table className="table table-striped table-sm">
+                  <table className="table table-striped table-sm verify-import-table">
                     <thead className="table-dark">
                       <tr>
                         <th>Serial No</th>
@@ -1502,7 +1519,7 @@ View Details                                </button>
 
                 <h6>Order Items</h6>
                 <div className="table-responsive">
-                  <table className="table table-striped table-sm">
+                  <table className="table table-striped table-sm po-details-table">
                     <thead className="table-dark">
                       <tr>
                         <th>Serial No</th>

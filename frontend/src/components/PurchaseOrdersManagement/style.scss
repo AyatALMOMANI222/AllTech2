@@ -637,10 +637,177 @@ $danger: #ef4444;
 
     .modal .modal-body {
       padding: 1rem;
+      max-height: calc(100vh - 200px);
+      overflow-y: auto;
+    }
+
+    // Modal content adjustments for mobile
+    .modal .row.mb-4 {
+      margin-bottom: 1.5rem !important;
+    }
+
+    .modal .row.mb-3 .col-md-4,
+    .modal .row.mb-4 .col-md-6 {
+      margin-bottom: 1rem;
+      width: 100%;
+    }
+
+    .modal h6 {
+      font-size: 1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .modal p {
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+      word-break: break-word;
+    }
+
+    // Form elements in modal
+    .modal .form-label {
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .modal .form-control,
+    .modal .form-select {
+      font-size: 0.9rem;
+      padding: 0.5rem 0.75rem;
+    }
+
+    .modal .d-flex.gap-3 {
+      flex-direction: column;
+      gap: 0.5rem !important;
     }
 
     .table-responsive {
       -webkit-overflow-scrolling: touch;
+    }
+
+    // Verify Imported Data Modal Table - Stacked layout on mobile
+    .verify-import-table {
+      width: 100%;
+      font-size: 0.9rem;
+
+      thead {
+        display: none;
+      }
+
+      tbody,
+      tr,
+      td {
+        display: block;
+        width: 100%;
+      }
+
+      tbody {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      tr {
+        background: $white;
+        border: 1px solid $border-color;
+        border-radius: 8px;
+        padding: 0.25rem 0;
+      }
+
+      td {
+        padding: 0.625rem 0.75rem;
+        border: none !important;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.75rem;
+        white-space: normal;
+        word-break: break-word;
+      }
+
+      td::before {
+        content: '';
+        font-weight: 700;
+        color: $text-light;
+        margin-right: 0.75rem;
+        flex: 0 0 40%;
+        max-width: 40%;
+      }
+
+      // Column labels for Verify Import table
+      td:nth-child(1)::before { content: 'Serial No'; }
+      td:nth-child(2)::before { content: 'Project No'; }
+      td:nth-child(3)::before { content: 'Date PO'; }
+      td:nth-child(4)::before { content: 'Part No'; }
+      td:nth-child(5)::before { content: 'Material No'; }
+      td:nth-child(6)::before { content: 'Description'; }
+      td:nth-child(7)::before { content: 'UOM'; }
+      td:nth-child(8)::before { content: 'Quantity'; }
+      td:nth-child(9)::before { content: 'Unit Price'; }
+      td:nth-child(10)::before { content: 'Total Price'; }
+      td:nth-child(11)::before { content: 'Lead Time'; }
+      td:nth-child(12)::before { content: 'Comments'; }
+    }
+
+    // Purchase Order Details Modal Table - Stacked layout on mobile
+    .po-details-table {
+      width: 100%;
+      font-size: 0.9rem;
+
+      thead {
+        display: none;
+      }
+
+      tbody,
+      tr,
+      td {
+        display: block;
+        width: 100%;
+      }
+
+      tbody {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      tr {
+        background: $white;
+        border: 1px solid $border-color;
+        border-radius: 8px;
+        padding: 0.25rem 0;
+      }
+
+      td {
+        padding: 0.625rem 0.75rem;
+        border: none !important;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.75rem;
+        white-space: normal;
+        word-break: break-word;
+      }
+
+      td::before {
+        content: '';
+        font-weight: 700;
+        color: $text-light;
+        margin-right: 0.75rem;
+        flex: 0 0 40%;
+        max-width: 40%;
+      }
+
+      // Column labels for Order Details table
+      td:nth-child(1)::before { content: 'Serial No'; }
+      td:nth-child(2)::before { content: 'Project No'; }
+      td:nth-child(3)::before { content: 'Date PO'; }
+      td:nth-child(4)::before { content: 'Part No'; }
+      td:nth-child(5)::before { content: 'Material No'; }
+      td:nth-child(6)::before { content: 'Description'; }
+      td:nth-child(7)::before { content: 'UOM'; }
+      td:nth-child(8)::before { content: 'Quantity'; }
+      td:nth-child(9)::before { content: 'Unit Price'; }
+      td:nth-child(10)::before { content: 'Total Price'; }
+      td:nth-child(11)::before { content: 'Lead Time'; }
+      td:nth-child(12)::before { content: 'Comments'; }
     }
 
     // Stacked, label-based layout on mobile (no horizontal scroll)
@@ -741,6 +908,43 @@ $danger: #ef4444;
 
     .modal .modal-header { padding: 1rem; }
     .modal .modal-body { padding: 1rem; }
+
+    .modal .modal-dialog.modal-xl {
+      max-width: 100%;
+      margin: 0.5rem;
+    }
+
+    // Purchase Order Details Table - Smaller screens
+    .po-details-table {
+      font-size: 0.85rem;
+      
+      td {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.85rem;
+      }
+
+      td::before {
+        font-size: 0.8rem;
+        flex: 0 0 38%;
+        max-width: 38%;
+      }
+    }
+
+    // Verify Imported Data Table - Smaller screens
+    .verify-import-table {
+      font-size: 0.85rem;
+      
+      td {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.85rem;
+      }
+
+      td::before {
+        font-size: 0.8rem;
+        flex: 0 0 38%;
+        max-width: 38%;
+      }
+    }
 
     .list-group .list-group-item {
       flex-direction: column;

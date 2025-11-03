@@ -498,7 +498,7 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
                   <div className="line-items-section">
                     <h4>Line Items</h4>
                     <div className="table-responsive">
-                      <table className="table table-bordered">
+                      <table className="table table-bordered invoice-items-table">
                         <thead>
                           <tr>
                             <th>QTY</th>

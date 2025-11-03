@@ -115,7 +115,7 @@ const UserManagement = () => {
             <div className="card">
               <div className="card-body">
                 <div className="table-responsive">
-                  <table className="table table-hover">
+                  <table className="table table-hover user-table">
                     <thead className='table-dark'>
                       <tr>
                         <th>ID</th>

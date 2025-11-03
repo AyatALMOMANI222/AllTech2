@@ -178,7 +178,7 @@ const CustomerSupplierManagement = () => {
             <div className="card">
               <div className="card-body">
                 <div className="table-responsive">
-                  <table className="table table-hover">
+                  <table className="table table-hover customer-supplier-table">
                     <thead>
                       <tr>
                         <th>Type</th>
