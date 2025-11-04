@@ -218,7 +218,7 @@ const DatabaseDashboard = () => {
               <div>
                 {/* Professional Data Summary */}
                 <div className="row g-3 mb-4 no-print">
-                  <div className="col-md-3">
+                  <div className="col-md-6">
                     <div className="card bg-light border-0 h-100">
                       <div className="card-body text-center">
                         <i className="fas fa-boxes fa-2x text-primary mb-2"></i>
@@ -227,35 +227,7 @@ const DatabaseDashboard = () => {
                       </div>
                     </div>
                   </div>
-                  <div className="col-md-3">
-                    <div className="card bg-light border-0 h-100">
-                      <div className="card-body text-center">
-                        <i className="fas fa-truck fa-2x text-info mb-2"></i>
-                        <h5 className="card-title">
-                          {dashboardData.filter(item => 
-                            item.supplier?.approved_purchase_orders?.length > 0 || 
-                            item.supplier?.delivered_purchase_orders?.length > 0
-                          ).length}
-                        </h5>
-                        <p className="card-text small text-muted">Supplier Orders</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-3">
-                    <div className="card bg-light border-0 h-100">
-                      <div className="card-body text-center">
-                        <i className="fas fa-users fa-2x text-success mb-2"></i>
-                        <h5 className="card-title">
-                          {dashboardData.filter(item => 
-                            item.customer?.approved_sales_orders?.length > 0 || 
-                            item.customer?.delivered_sales_orders?.length > 0
-                          ).length}
-                        </h5>
-                        <p className="card-text small text-muted">Customer Orders</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-3">
+                  <div className="col-md-6">
                     <div className="card bg-light border-0 h-100">
                       <div className="card-body text-center">
                         <i className="fas fa-chart-line fa-2x text-warning mb-2"></i>
