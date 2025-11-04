@@ -506,6 +506,432 @@ const PurchaseOrdersManagement = () => {
     setEditingOrder(null);
   };
 
+  const handleExportToExcel = () => {
+    if (importedItems.length === 0) {
+      alert("No data to export");
+      return;
+    }
+
+    // Define headers
+    const headers = [
+      "Serial No",
+      "Project No",
+      "Date PO",
+      "Part No",
+      "Material No",
+      "Description",
+      "UOM",
+      "Quantity",
+      "Unit Price",
+      "Total Price",
+      "Lead Time",
+      "Comments"
+    ];
+
+    // Create CSV content with proper Excel formatting
+    let csvContent = "\uFEFF"; // BOM for UTF-8 Excel compatibility
+    csvContent += headers.map(h => `"${h}"`).join(",") + "\n";
+
+    // Add data rows
+    importedItems.forEach((item) => {
+      const row = [
+        `"${(item.serial_no || "").replace(/"/g, '""')}"`,
+        `"${(item.project_no || "").replace(/"/g, '""')}"`,
+        `"${item.date_po || ""}"`,
+        `"${(item.part_no || "").replace(/"/g, '""')}"`,
+        `"${(item.material_no || "").replace(/"/g, '""')}"`,
+        `"${(item.description || "").replace(/"/g, '""')}"`,
+        `"${(item.uom || "").replace(/"/g, '""')}"`,
+        item.quantity || 0,
+        parseFloat(item.unit_price || 0).toFixed(2),
+        parseFloat(item.total_price || 0).toFixed(2),
+        `"${(item.lead_time || "").replace(/"/g, '""')}"`,
+        `"${(item.comments || "").replace(/"/g, '""')}"`
+      ];
+      csvContent += row.join(",") + "\n";
+    });
+
+    // Create blob with proper MIME type for Excel
+    const blob = new Blob([csvContent], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Imported_Data_${formData.po_number || "PO"}_${new Date().toISOString().split("T")[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPODetailsPDF = () => {
+    if (!selectedOrder || !selectedOrder.items || selectedOrder.items.length === 0) {
+      alert("No data to download");
+      return;
+    }
+
+    // Get the customer/supplier name
+    const csName = selectedOrder.order.customer_supplier_name || "N/A";
+
+    // Calculate totals
+    const totalQuantity = selectedOrder.items.reduce(
+      (sum, item) => sum + (parseFloat(item.quantity) || 0),
+      0
+    );
+    const totalAmount = selectedOrder.items.reduce(
+      (sum, item) => sum + (parseFloat(item.total_price) || 0),
+      0
+    );
+
+    // Create HTML content for PDF
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Purchase Order - ${selectedOrder.order.po_number}</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              margin: 20px;
+              color: #333;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 30px;
+              border-bottom: 3px solid #007bff;
+              padding-bottom: 20px;
+            }
+            .header h1 {
+              margin: 0;
+              color: #007bff;
+              font-size: 28px;
+            }
+            .header h2 {
+              margin: 5px 0 0 0;
+              color: #666;
+              font-size: 18px;
+              font-weight: normal;
+            }
+            .info-section {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 30px;
+              gap: 20px;
+            }
+            .info-box {
+              flex: 1;
+              border: 2px solid #007bff;
+              padding: 15px;
+              border-radius: 8px;
+              background-color: #f8f9fa;
+            }
+            .info-row {
+              margin-bottom: 10px;
+            }
+            .info-row:last-child {
+              margin-bottom: 0;
+            }
+            .info-label {
+              font-weight: bold;
+              color: #007bff;
+              display: inline-block;
+              min-width: 120px;
+            }
+            .info-value {
+              color: #333;
+            }
+            .items-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 30px;
+            }
+            .items-table thead {
+              background-color: #007bff;
+              color: white;
+            }
+            .items-table th {
+              padding: 12px 8px;
+              text-align: center;
+              font-weight: bold;
+              border: 1px solid #0056b3;
+              font-size: 11px;
+            }
+            .items-table td {
+              padding: 10px 8px;
+              text-align: center;
+              border: 1px solid #ddd;
+              font-size: 11px;
+            }
+            .items-table tbody tr:nth-child(even) {
+              background-color: #f8f9fa;
+            }
+            .items-table tbody tr:hover {
+              background-color: #e9ecef;
+            }
+            .totals-section {
+              margin-top: 30px;
+              display: flex;
+              justify-content: flex-end;
+            }
+            .totals-box {
+              border: 2px solid #28a745;
+              padding: 20px;
+              border-radius: 8px;
+              background-color: #f8f9fa;
+              min-width: 300px;
+            }
+            .total-row {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 10px;
+            }
+            .total-row:last-child {
+              margin-bottom: 0;
+              padding-top: 10px;
+              border-top: 2px solid #28a745;
+              font-weight: bold;
+              font-size: 16px;
+              color: #28a745;
+            }
+            .total-label {
+              font-weight: 600;
+            }
+            .total-value {
+              font-weight: 600;
+            }
+            .footer {
+              margin-top: 40px;
+              padding-top: 20px;
+              border-top: 1px solid #ddd;
+              text-align: center;
+              color: #666;
+              font-size: 12px;
+            }
+            @media print {
+              body {
+                margin: 0;
+              }
+              .items-table {
+                page-break-inside: auto;
+              }
+              .items-table tr {
+                page-break-inside: avoid;
+                page-break-after: auto;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Purchase Order</h1>
+            <h2>${selectedOrder.order.po_number}</h2>
+          </div>
+
+          <div class="info-section">
+            <div class="info-box">
+              <div class="info-row">
+                <span class="info-label">PO Number:</span>
+                <span class="info-value">${selectedOrder.order.po_number}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Order Type:</span>
+                <span class="info-value">${
+                  selectedOrder.order.order_type === "customer"
+                    ? "Customer PO (Sales)"
+                    : "Supplier PO (Purchase)"
+                }</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">${
+                  selectedOrder.order.order_type === "customer"
+                    ? "Customer Name"
+                    : "Supplier Name"
+                }:</span>
+                <span class="info-value" style="font-weight: 600; color: #007bff;">${csName}</span>
+              </div>
+            </div>
+            <div class="info-box">
+              <div class="info-row">
+                <span class="info-label">Total Items:</span>
+                <span class="info-value">${selectedOrder.items.length}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Status:</span>
+                <span class="info-value" style="font-weight: 600; text-transform: uppercase;">${
+                  selectedOrder.order.status
+                }</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Generated Date:</span>
+                <span class="info-value">${new Date().toLocaleDateString()}</span>
+              </div>
+            </div>
+          </div>
+
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th>Serial No</th>
+                <th>Project No</th>
+                <th>Date PO</th>
+                <th>Part No</th>
+                <th>Material No</th>
+                <th>Description</th>
+                <th>UOM</th>
+                <th>Quantity</th>
+                <th>Unit Price</th>
+                <th>Total Price</th>
+                <th>Lead Time</th>
+                <th>Comments</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${selectedOrder.items
+                .map(
+                  (item) => `
+                <tr>
+                  <td>${item.serial_no || ""}</td>
+                  <td>${item.project_no || ""}</td>
+                  <td>${
+                    item.date_po
+                      ? new Date(item.date_po).toLocaleDateString()
+                      : ""
+                  }</td>
+                  <td>${item.part_no || ""}</td>
+                  <td>${item.material_no || ""}</td>
+                  <td>${item.description || ""}</td>
+                  <td>${item.uom || ""}</td>
+                  <td>${item.quantity || ""}</td>
+                  <td>$${parseFloat(item.unit_price || 0).toFixed(2)}</td>
+                  <td>$${parseFloat(item.total_price || 0).toFixed(2)}</td>
+                  <td>${item.lead_time || ""}</td>
+                  <td>${item.comments || ""}</td>
+                </tr>
+              `
+                )
+                .join("")}
+            </tbody>
+          </table>
+
+          <div class="totals-section">
+            <div class="totals-box">
+              <div class="total-row">
+                <span class="total-label">Total Quantity:</span>
+                <span class="total-value">${totalQuantity.toFixed(2)}</span>
+              </div>
+              <div class="total-row">
+                <span class="total-label">Total Amount:</span>
+                <span class="total-value">$${totalAmount.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>This is a computer-generated document. No signature is required.</p>
+            <p>Generated on ${new Date().toLocaleString()} | AllTech Business Management System</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    // Create a hidden iframe for printing
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (!iframeDoc) {
+      alert("Unable to create print window");
+      return;
+    }
+
+    iframeDoc.open();
+    iframeDoc.write(htmlContent);
+    iframeDoc.close();
+
+    // Wait for content to load, then print (user can save as PDF)
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (error) {
+        console.error("Error printing:", error);
+        alert("Error generating PDF");
+      } finally {
+        // Cleanup after a short delay to allow print dialog to open
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 500);
+      }
+    }, 250);
+  };
+
+  const handleExportPODetailsToExcel = () => {
+    if (!selectedOrder || !selectedOrder.items || selectedOrder.items.length === 0) {
+      alert("No data to export");
+      return;
+    }
+
+    // Define headers
+    const headers = [
+      "Serial No",
+      "Project No",
+      "Date PO",
+      "Part No",
+      "Material No",
+      "Description",
+      "UOM",
+      "Quantity",
+      "Unit Price",
+      "Total Price",
+      "Lead Time",
+      "Comments"
+    ];
+
+    // Create CSV content with proper Excel formatting
+    let csvContent = "\uFEFF"; // BOM for UTF-8 Excel compatibility
+    csvContent += headers.map(h => `"${h}"`).join(",") + "\n";
+
+    // Add data rows
+    selectedOrder.items.forEach((item) => {
+      const row = [
+        `"${(item.serial_no || "").replace(/"/g, '""')}"`,
+        `"${(item.project_no || "").replace(/"/g, '""')}"`,
+        `"${item.date_po ? new Date(item.date_po).toLocaleDateString() : ""}"`,
+        `"${(item.part_no || "").replace(/"/g, '""')}"`,
+        `"${(item.material_no || "").replace(/"/g, '""')}"`,
+        `"${(item.description || "").replace(/"/g, '""')}"`,
+        `"${(item.uom || "").replace(/"/g, '""')}"`,
+        item.quantity || 0,
+        parseFloat(item.unit_price || 0).toFixed(2),
+        parseFloat(item.total_price || 0).toFixed(2),
+        `"${(item.lead_time || "").replace(/"/g, '""')}"`,
+        `"${(item.comments || "").replace(/"/g, '""')}"`
+      ];
+      csvContent += row.join(",") + "\n";
+    });
+
+    // Create blob with proper MIME type for Excel
+    const blob = new Blob([csvContent], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", `PO_Details_${selectedOrder.order.po_number}_${new Date().toISOString().split("T")[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleDownloadVerifiedData = () => {
     if (importedItems.length === 0) {
       alert("No data to download");
@@ -1445,6 +1871,14 @@ View Details                                </button>
                 </button>
                 <button
                   type="button"
+                  className="btn btn-warning"
+                  onClick={handleExportToExcel}
+                  disabled={importedItems.length === 0}
+                >
+                  <i className="fas fa-file-excel"></i> Export to Excel
+                </button>
+                <button
+                  type="button"
                   className="btn btn-success"
                   onClick={handleSaveImportedData}
                   disabled={
@@ -1553,6 +1987,7 @@ View Details                                </button>
                           <td>{item.quantity}</td>
                           <td>${item.unit_price}</td>
                           <td>${item.total_price}</td>
+                          <td>{item.lead_time}</td>
                           <td>{item.comments}</td>
                         </tr>
                       ))}
@@ -1561,6 +1996,22 @@ View Details                                </button>
                 </div>
               </div>
               <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-info"
+                  onClick={handleDownloadPODetailsPDF}
+                  disabled={!selectedOrder || !selectedOrder.items || selectedOrder.items.length === 0}
+                >
+                  <i className="fas fa-file-pdf"></i> Download PDF
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-warning"
+                  onClick={handleExportPODetailsToExcel}
+                  disabled={!selectedOrder || !selectedOrder.items || selectedOrder.items.length === 0}
+                >
+                  <i className="fas fa-file-excel"></i> Export to Excel
+                </button>
                 <button
                   type="button"
                   className="btn btn-secondary"
