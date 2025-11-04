@@ -395,14 +395,14 @@ const DatabaseDashboard = () => {
                                     {supplierDelivered?.delivered_total_price || '-'}
                                   </td>
                                   <td className="purchase-data">
-                                    {supplierDelivered?.penalty_percentage != null && supplierDelivered?.penalty_percentage !== '' 
+                                    {supplierDelivered?.penalty_percentage != null && supplierDelivered?.penalty_percentage !== '' && supplierDelivered?.penalty_percentage !== '0'
                                       ? supplierDelivered.penalty_percentage 
-                                      : ''}
+                                      : '0'}
                                   </td>
                                   <td className="purchase-data">
-                                    {supplierDelivered?.penalty_amount != null && supplierDelivered?.penalty_amount !== '' 
+                                    {supplierDelivered?.penalty_amount != null && supplierDelivered?.penalty_amount !== '' && supplierDelivered?.penalty_amount !== '0'
                                       ? supplierDelivered.penalty_amount 
-                                      : ''}
+                                      : '0'}
                                   </td>
                                   <td className="purchase-data">
                                     {supplierDelivered?.invoice_no || '-'}
@@ -453,14 +453,14 @@ const DatabaseDashboard = () => {
                                     {customerDelivered?.delivered_total_price || '-'}
                                   </td>
                                   <td className="delivered-sales-data">
-                                    {customerDelivered?.penalty_percentage != null && customerDelivered?.penalty_percentage !== '' 
+                                    {customerDelivered?.penalty_percentage != null && customerDelivered?.penalty_percentage !== '' && customerDelivered?.penalty_percentage !== '0'
                                       ? customerDelivered.penalty_percentage 
-                                      : ''}
+                                      : '0'}
                                   </td>
                                   <td className="delivered-sales-data">
-                                    {customerDelivered?.penalty_amount != null && customerDelivered?.penalty_amount !== '' 
+                                    {customerDelivered?.penalty_amount != null && customerDelivered?.penalty_amount !== '' && customerDelivered?.penalty_amount !== '0'
                                       ? customerDelivered.penalty_amount 
-                                      : ''}
+                                      : '0'}
                                   </td>
                                   <td className="delivered-sales-data">
                                     {customerDelivered?.invoice_no || '-'}

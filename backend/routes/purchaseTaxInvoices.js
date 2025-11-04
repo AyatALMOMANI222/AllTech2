@@ -299,30 +299,17 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
     await connection.commit();
     
     // Recalculate delivered data for the PO if exists
-    // ⚠️ IMPORTANT: This must be done AFTER commit to ensure invoice data is saved
     if (po_number) {
-      console.log(`🔄 Recalculating delivered data for PO: ${po_number}`);
       const [pos] = await connection.execute(
         'SELECT id FROM purchase_orders WHERE po_number = ?',
         [po_number]
       );
       if (pos.length > 0) {
-        console.log(`✓ Found PO id=${pos[0].id} for po_number=${po_number}`);
         // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO
         // This ensures delivered_quantity, delivered_unit_price, delivered_total_price,
         // penalty_amount, and balance_quantity_undelivered are updated from invoice data
-        try {
-          await calculateAndUpdateDeliveredData(connection, pos[0].id);
-          console.log(`✓ Successfully recalculated delivered data for PO ${pos[0].id}`);
-        } catch (calcError) {
-          console.error(`✗ Error recalculating delivered data for PO ${pos[0].id}:`, calcError);
-          // Don't fail the request, just log the error
-        }
-      } else {
-        console.log(`⚠ No PO found with po_number=${po_number}`);
+        await calculateAndUpdateDeliveredData(req.db, pos[0].id);
       }
-    } else {
-      console.log(`⚠ No po_number provided in invoice`);
     }
     
     res.status(201).json({
@@ -414,26 +401,15 @@ router.put('/:id', authenticateToken, validatePurchaseTaxInvoice, async (req, re
     }
     
     // Recalculate delivered data for the PO if exists
-    // ⚠️ IMPORTANT: This triggers recalculation after invoice update
     if (po_number) {
-      console.log(`🔄 Recalculating delivered data for PO: ${po_number}`);
       const [pos] = await req.db.execute(
         'SELECT id FROM purchase_orders WHERE po_number = ?',
         [po_number]
       );
       if (pos.length > 0) {
-        console.log(`✓ Found PO id=${pos[0].id} for po_number=${po_number}`);
         // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO
         // Triggered when invoice items are updated
-        try {
-          await calculateAndUpdateDeliveredData(req.db, pos[0].id);
-          console.log(`✓ Successfully recalculated delivered data for PO ${pos[0].id}`);
-        } catch (calcError) {
-          console.error(`✗ Error recalculating delivered data for PO ${pos[0].id}:`, calcError);
-          // Don't fail the request, just log the error
-        }
-      } else {
-        console.log(`⚠ No PO found with po_number=${po_number}`);
+        await calculateAndUpdateDeliveredData(req.db, pos[0].id);
       }
     }
     

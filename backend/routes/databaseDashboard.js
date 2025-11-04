@@ -200,7 +200,7 @@ async function calculateAndUpdateDeliveredData(db, poId) {
         totalDelivered += delQty;
         if (delQty > 0) {
           hasDeliveredItems = true;
-        }
+      }
     }
     
     // Set appropriate status
@@ -318,8 +318,8 @@ router.get('/', async (req, res) => {
             COALESCE(poi_delivered.delivered_quantity, ''), '|',       -- DELIVERED QUANTITY (sum from invoices)
             COALESCE(poi_delivered.delivered_unit_price, ''), '|',     -- DELIVERED UNIT PRICE (from invoices)
             COALESCE(poi_delivered.delivered_total_price, ''), '|',    -- DELIVERED TOTAL PRICE (calculated)
-            COALESCE(poi_delivered.penalty_percentage, ''), '|',       -- PENALTY % (preserve empty if NULL or empty - does NOT affect display)
-            COALESCE(poi_delivered.penalty_amount, ''), '|',           -- PENALTY AMOUNT (preserve empty if NULL or empty - does NOT affect display)
+            COALESCE(NULLIF(poi_delivered.penalty_percentage, ''), '0'), '|',  -- PENALTY % (convert empty/null to '0' - does NOT affect display)
+            COALESCE(NULLIF(poi_delivered.penalty_amount, ''), '0'), '|',      -- PENALTY AMOUNT (convert empty/null to '0' - does NOT affect display)
             COALESCE(poi_delivered.invoice_no, ''), '|',               -- Invoice numbers
             COALESCE(poi_delivered.balance_quantity_undelivered, ''), '|',  -- BALANCE (ORDERED - DELIVERED)
             COALESCE(cs_delivered.company_name, ''),
@@ -492,8 +492,8 @@ router.get('/', async (req, res) => {
               delivered_quantity: parts[5] ? parseFloat(parts[5]) : 0,
               delivered_unit_price: parts[6] ? parseFloat(parts[6]) : 0,
               delivered_total_price: parts[7] ? parseFloat(parts[7]) : 0,
-              penalty_percentage: parts[8] !== undefined ? (parts[8] || '') : '',  // Preserve empty strings, default to '' if undefined
-              penalty_amount: parts[9] !== undefined ? (parts[9] || '') : '',      // Preserve empty strings, default to '' if undefined
+              penalty_percentage: parts[8] !== undefined ? (parts[8] || '0') : '0',  // Convert empty/null to '0'
+              penalty_amount: parts[9] !== undefined ? (parts[9] || '0') : '0',      // Convert empty/null to '0'
               invoice_no: parts[10] || '',
               balance_quantity_undelivered: parts[11] || '',
               supplier_name: parts[12] || '',
@@ -658,8 +658,8 @@ router.get('/export', async (req, res) => {
             COALESCE(poi_delivered.delivered_quantity, ''), '|',
             COALESCE(poi_delivered.delivered_unit_price, ''), '|',
             COALESCE(poi_delivered.delivered_total_price, ''), '|',
-            COALESCE(poi_delivered.penalty_percentage, ''), '|',
-            COALESCE(poi_delivered.penalty_amount, ''), '|',
+            COALESCE(NULLIF(poi_delivered.penalty_percentage, ''), '0'), '|',
+            COALESCE(NULLIF(poi_delivered.penalty_amount, ''), '0'), '|',
             COALESCE(poi_delivered.invoice_no, ''), '|',
             COALESCE(poi_delivered.balance_quantity_undelivered, ''), '|',
             COALESCE(cs_delivered.company_name, ''),
