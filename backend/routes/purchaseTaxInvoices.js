@@ -190,7 +190,7 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
         item.description, item.uom, quantity, unitPrice, itemTotal
       ]);
       
-      // Update inventory - match by project_no, part_no, description, AND unit_price (supplier_unit_price)
+      // Update inventory - match by project_no, part_no, description, AND supplier_unit_price
       // ⚠️ IMPORTANT: Only update existing inventory if ALL four fields match exactly
       // If any field differs (including project_no), create a new inventory record
       if (item.part_no && item.description) {
@@ -263,7 +263,7 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
           console.log(`Updated existing inventory: project_no=${item.project_no || project_number}, part_no=${item.part_no}, description=${item.description}, unit_price=${unitPrice}, new_quantity=${newQuantity}`);
         } else {
           // No exact match found - CREATE new inventory record
-          // This happens when any of the key fields differ (project_no, part_no, description, or unit_price)
+          // This happens when any of the key fields differ (project_no, part_no, description, or supplier_unit_price)
           const balance = quantity; // balance = quantity - sold_quantity (0)
           const totalPrice = quantity * unitPrice;
           const balanceAmount = balance * unitPrice;
@@ -299,17 +299,30 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
     await connection.commit();
     
     // Recalculate delivered data for the PO if exists
+    // ⚠️ IMPORTANT: This must be done AFTER commit to ensure invoice data is saved
     if (po_number) {
+      console.log(`🔄 Recalculating delivered data for PO: ${po_number}`);
       const [pos] = await connection.execute(
         'SELECT id FROM purchase_orders WHERE po_number = ?',
         [po_number]
       );
       if (pos.length > 0) {
+        console.log(`✓ Found PO id=${pos[0].id} for po_number=${po_number}`);
         // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO
         // This ensures delivered_quantity, delivered_unit_price, delivered_total_price,
         // penalty_amount, and balance_quantity_undelivered are updated from invoice data
-        await calculateAndUpdateDeliveredData(req.db, pos[0].id);
+        try {
+          await calculateAndUpdateDeliveredData(connection, pos[0].id);
+          console.log(`✓ Successfully recalculated delivered data for PO ${pos[0].id}`);
+        } catch (calcError) {
+          console.error(`✗ Error recalculating delivered data for PO ${pos[0].id}:`, calcError);
+          // Don't fail the request, just log the error
+        }
+      } else {
+        console.log(`⚠ No PO found with po_number=${po_number}`);
       }
+    } else {
+      console.log(`⚠ No po_number provided in invoice`);
     }
     
     res.status(201).json({
@@ -401,15 +414,26 @@ router.put('/:id', authenticateToken, validatePurchaseTaxInvoice, async (req, re
     }
     
     // Recalculate delivered data for the PO if exists
+    // ⚠️ IMPORTANT: This triggers recalculation after invoice update
     if (po_number) {
+      console.log(`🔄 Recalculating delivered data for PO: ${po_number}`);
       const [pos] = await req.db.execute(
         'SELECT id FROM purchase_orders WHERE po_number = ?',
         [po_number]
       );
       if (pos.length > 0) {
+        console.log(`✓ Found PO id=${pos[0].id} for po_number=${po_number}`);
         // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO
         // Triggered when invoice items are updated
-        await calculateAndUpdateDeliveredData(req.db, pos[0].id);
+        try {
+          await calculateAndUpdateDeliveredData(req.db, pos[0].id);
+          console.log(`✓ Successfully recalculated delivered data for PO ${pos[0].id}`);
+        } catch (calcError) {
+          console.error(`✗ Error recalculating delivered data for PO ${pos[0].id}:`, calcError);
+          // Don't fail the request, just log the error
+        }
+      } else {
+        console.log(`⚠ No PO found with po_number=${po_number}`);
       }
     }
     
@@ -716,8 +740,8 @@ function generateInvoiceHTML(invoice, items) {
         }
         
         .table-header {
-          background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-          color: white;
+          background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+          color: white !important;
         }
         
         .table-header th {
@@ -728,6 +752,17 @@ function generateInvoiceHTML(invoice, items) {
           font-size: 0.9rem;
           text-transform: uppercase;
           letter-spacing: 0.5px;
+          color: white !important;
+          background: transparent !important;
+        }
+        
+        .items-table thead th {
+          color: white !important;
+        }
+        
+        .items-table thead .table-header {
+          background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+          color: white !important;
         }
         
         .items-table tbody tr:nth-child(even) {

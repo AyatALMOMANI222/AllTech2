@@ -1,3 +1,27 @@
+// Global styles for modal context - must be outside component scope
+.modal-body .purchase-tax-invoice .items-table thead th:not(.table-header),
+.modal-body .purchase-tax-invoice .items-table thead th,
+.modal .purchase-tax-invoice .items-table thead th:not(.table-header),
+.modal .purchase-tax-invoice .items-table thead th {
+  color: #212529 !important; // Dark text for visibility on light background
+  background-color: #f8f9fa !important;
+}
+
+.modal-body .purchase-tax-invoice .items-table .table-header th,
+.modal-body .purchase-tax-invoice .items-table thead .table-header th,
+.modal .purchase-tax-invoice .items-table .table-header th,
+.modal .purchase-tax-invoice .items-table thead .table-header th {
+  color: white !important; // White text on blue gradient background
+}
+
+.modal-body .purchase-tax-invoice .items-table .table-header,
+.modal-body .purchase-tax-invoice .items-table thead .table-header,
+.modal .purchase-tax-invoice .items-table .table-header,
+.modal .purchase-tax-invoice .items-table thead .table-header {
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+  color: white !important;
+}
+
 .purchase-tax-invoice {
   .card {
     border: none;
@@ -103,9 +127,35 @@
     .items-table {
       margin-bottom: 0;
       
+      // Override global table styles for header - Target thead and thead th directly
+      thead {
+        background: transparent !important;
+        
+        th {
+          color: #212529 !important; // Dark text for visibility
+        }
+        
+        .table-header {
+          background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+          color: white !important;
+          
+          th {
+            border: none;
+            padding: 1rem 0.75rem;
+            font-weight: 600;
+            text-align: center;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white !important; // White text on blue gradient background
+          }
+        }
+      }
+      
+      // Fallback for direct .table-header selector
       .table-header {
-        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-        color: white;
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+        color: white !important;
         
         th {
           border: none;
@@ -115,6 +165,25 @@
           font-size: 0.9rem;
           text-transform: uppercase;
           letter-spacing: 0.5px;
+          color: white !important; // White text on blue gradient background
+        }
+      }
+      
+      // Ensure header text is dark for visibility on light background
+      thead th {
+        color: #212529 !important; // Dark text for visibility
+        background-color: #f8f9fa !important; // Light gray background
+        font-weight: 600;
+      }
+      
+      // Only apply white text if blue gradient background is actually applied
+      thead .table-header {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+        color: white !important;
+        
+        th {
+          color: white !important; // White text on blue gradient background
+          background: transparent !important; // Let parent gradient show through
         }
       }
       
@@ -520,6 +589,7 @@
       .table-header th {
         padding: 0.4rem 0.2rem;
         font-size: 0.6rem;
+        color: white !important; // Ensure text is visible on small screens
       }
       
       tbody td {
@@ -557,6 +627,59 @@
         width: 100%;
       }
     }
+  }
+
+  // Modal-specific styles to ensure header text is visible
+  .modal-body & {
+    .items-table {
+      thead {
+        background: transparent !important;
+        
+        th {
+          color: white !important;
+        }
+        
+        .table-header {
+          background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+          color: white !important;
+          
+          th {
+            color: white !important;
+            background: transparent !important;
+          }
+        }
+      }
+      
+      .table-header {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+        color: white !important;
+        
+        th {
+          color: white !important;
+          background: transparent !important;
+        }
+      }
+    }
+  }
+  
+  // Global override for modal context - highest specificity
+  .modal .items-table thead th:not(.table-header),
+  .modal .items-table thead th,
+  .modal-body .items-table thead th:not(.table-header),
+  .modal-body .items-table thead th {
+    color: #212529 !important; // Dark text for visibility
+    background-color: #f8f9fa !important;
+  }
+  
+  .modal .items-table .table-header th,
+  .modal-body .items-table .table-header th {
+    color: white !important; // White text on blue gradient
+  }
+  
+  .modal .items-table .table-header,
+  .modal-body .items-table .table-header {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+    color: white !important;
   }
 
   // Print Styles

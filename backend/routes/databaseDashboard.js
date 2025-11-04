@@ -97,8 +97,10 @@ async function calculateAndUpdateDeliveredData(db, poId) {
           SELECT pti.*, ptii.quantity, ptii.supplier_unit_price, ptii.total_price
           FROM purchase_tax_invoices pti
           INNER JOIN purchase_tax_invoice_items ptii ON pti.id = ptii.invoice_id
-          WHERE pti.po_number = ? AND ptii.part_no = ? AND ptii.material_no = ?
-        `, [poNumber, item.part_no, item.material_no]);
+          WHERE pti.po_number = ? 
+            AND ptii.part_no = ? 
+            AND (ptii.material_no = ? OR (ptii.material_no IS NULL AND ? IS NULL))
+        `, [poNumber, item.part_no, item.material_no, item.material_no]);
         
         // DELIVERED QUANTITY: Sum of all quantities per item across all related invoices
         // DELIVERED UNIT PRICE: Take from any related invoice (assume same price for all invoices)
@@ -111,6 +113,7 @@ async function calculateAndUpdateDeliveredData(db, poId) {
             invoiceNumbers.push(inv.invoice_number);
           }
         }
+        console.log(`✓ Found ${invoices.length} invoice(s) for PO item part_no=${item.part_no}, material_no=${item.material_no || 'NULL'}, delivered_quantity=${deliveredQuantity}`);
       } else {
         // CUSTOMER Purchase Orders: Pull data from Sales Tax Invoices (Customer Invoices)
         // Data Source: items[].quantity, items[].unit_price, items[].total_amount
@@ -118,8 +121,10 @@ async function calculateAndUpdateDeliveredData(db, poId) {
           SELECT sti.*, stii.quantity, stii.unit_price, stii.total_amount
           FROM sales_tax_invoices sti
           INNER JOIN sales_tax_invoice_items stii ON sti.id = stii.invoice_id
-          WHERE sti.customer_po_number = ? AND stii.part_no = ? AND stii.material_no = ?
-        `, [poNumber, item.part_no, item.material_no]);
+          WHERE sti.customer_po_number = ? 
+            AND stii.part_no = ? 
+            AND (stii.material_no = ? OR (stii.material_no IS NULL AND ? IS NULL))
+        `, [poNumber, item.part_no, item.material_no, item.material_no]);
         
         // DELIVERED QUANTITY: Sum of all quantities per item across all related invoices
         // DELIVERED UNIT PRICE: Take from any related invoice (assume same price for all invoices)
@@ -132,6 +137,7 @@ async function calculateAndUpdateDeliveredData(db, poId) {
             invoiceNumbers.push(inv.invoice_number);
           }
         }
+        console.log(`✓ Found ${invoices.length} invoice(s) for PO item part_no=${item.part_no}, material_no=${item.material_no || 'NULL'}, delivered_quantity=${deliveredQuantity}`);
       }
       
       // DELIVERED TOTAL PRICE = DELIVERED QUANTITY × DELIVERED UNIT PRICE
@@ -175,6 +181,8 @@ async function calculateAndUpdateDeliveredData(db, poId) {
     
     // Update PO status based on delivery
     // Status should be 'partially_delivered' or 'delivered_completed' based on quantities
+    // ⚠️ IMPORTANT: Once an invoice is created, status should update to show in DELIVERED section
+    // This works regardless of penalty_percentage value (can be empty/null)
     const [updatedItems] = await db.execute(
       'SELECT quantity, delivered_quantity FROM purchase_order_items WHERE po_id = ?',
       [poId]
@@ -184,32 +192,38 @@ async function calculateAndUpdateDeliveredData(db, poId) {
       let totalOrdered = 0;
       let totalDelivered = 0;
       let hasDeliveredItems = false;
-      
-      for (const itm of updatedItems) {
-        const qty = parseFloat(itm.quantity) || 0;
-        const delQty = parseFloat(itm.delivered_quantity) || 0;
+    
+    for (const itm of updatedItems) {
+      const qty = parseFloat(itm.quantity) || 0;
+      const delQty = parseFloat(itm.delivered_quantity) || 0;
         totalOrdered += qty;
         totalDelivered += delQty;
         if (delQty > 0) {
           hasDeliveredItems = true;
         }
-      }
-      
-      // Set appropriate status
-      let newStatus = po.status;
+    }
+    
+    // Set appropriate status
+      // ⚠️ Once any invoice exists and has delivered quantities, update status accordingly
+      // Records appear in DELIVERED section regardless of penalty_percentage value
+      // ⚠️ IMPORTANT: Status is updated based ONLY on delivered_quantity, NOT on penalty_percentage
+      // ⚠️ Once an invoice is created (Sales or Purchase Tax Invoice), status should update to show in DELIVERED section
+    let newStatus = po.status;
       if (hasDeliveredItems) {
         if (totalDelivered >= totalOrdered) {
           newStatus = 'delivered_completed';
         } else if (totalDelivered > 0) {
-          newStatus = 'partially_delivered';
+      newStatus = 'partially_delivered';
         }
-        // If totalDelivered is 0, keep status as 'approved' (default)
-      }
-      
-      // Only update if status changed
-      if (newStatus !== po.status) {
-        await db.execute('UPDATE purchase_orders SET status = ? WHERE id = ?', [newStatus, poId]);
-        console.log(`✓ Updated PO ${poId} status to ${newStatus}`);
+        // If totalDelivered is 0, keep status as 'approved' (no invoices matched PO items)
+    }
+    
+    // Only update if status changed
+    if (newStatus !== po.status) {
+      await db.execute('UPDATE purchase_orders SET status = ? WHERE id = ?', [newStatus, poId]);
+        console.log(`✓ Updated PO ${poId} status to ${newStatus} (totalDelivered: ${totalDelivered}, totalOrdered: ${totalOrdered})`);
+      } else {
+        console.log(`✓ PO ${poId} status remains ${po.status} (totalDelivered: ${totalDelivered}, totalOrdered: ${totalOrdered})`);
       }
     }
     
@@ -290,6 +304,9 @@ router.get('/', async (req, res) => {
         -- ⚠️ CRITICAL: Display condition is ONLY based on status, NOT on penalty_percentage or any other field
         -- Records are included if status === 'partially_delivered' OR status === 'delivered_completed'
         -- This works even if penalty_percentage, penalty_amount, or delivered_quantity are NULL/empty
+        -- ⚠️ IMPORTANT: Records appear immediately when status changes to partially_delivered or delivered_completed
+        -- ⚠️ Records are displayed REGARDLESS of penalty_percentage value (NULL, empty string, or any value)
+        -- ⚠️ The only condition is the PO status - penalty_percentage does NOT affect whether records appear
         GROUP_CONCAT(DISTINCT CASE 
           WHEN po_delivered.status IN ('partially_delivered', 'delivered_completed')
           THEN CONCAT(
@@ -301,8 +318,8 @@ router.get('/', async (req, res) => {
             COALESCE(poi_delivered.delivered_quantity, ''), '|',       -- DELIVERED QUANTITY (sum from invoices)
             COALESCE(poi_delivered.delivered_unit_price, ''), '|',     -- DELIVERED UNIT PRICE (from invoices)
             COALESCE(poi_delivered.delivered_total_price, ''), '|',    -- DELIVERED TOTAL PRICE (calculated)
-            COALESCE(poi_delivered.penalty_percentage, ''), '|',       -- PENALTY % (if entered)
-            COALESCE(poi_delivered.penalty_amount, ''), '|',           -- PENALTY AMOUNT (calculated)
+            COALESCE(poi_delivered.penalty_percentage, ''), '|',       -- PENALTY % (preserve empty if NULL or empty - does NOT affect display)
+            COALESCE(poi_delivered.penalty_amount, ''), '|',           -- PENALTY AMOUNT (preserve empty if NULL or empty - does NOT affect display)
             COALESCE(poi_delivered.invoice_no, ''), '|',               -- Invoice numbers
             COALESCE(poi_delivered.balance_quantity_undelivered, ''), '|',  -- BALANCE (ORDERED - DELIVERED)
             COALESCE(cs_delivered.company_name, ''),
@@ -458,8 +475,13 @@ router.get('/', async (req, res) => {
       
       // Parse delivered orders (all types)
       // ⚠️ IMPORTANT: Records are included regardless of penalty_percentage value (can be empty/null)
+      // ⚠️ Records appear when PO status is 'partially_delivered' or 'delivered_completed'
+      // ⚠️ This happens automatically when an invoice is created (Sales or Purchase Tax Invoice)
+      // ⚠️ Records are displayed for BOTH supplier and customer orders
+      // ⚠️ CRITICAL: penalty_percentage being empty/null does NOT prevent records from appearing
+      // ⚠️ The only condition for display is PO status, NOT penalty_percentage or any other field
       const deliveredOrders = item.delivered_orders_data
-        ? item.delivered_orders_data.split('||').map(data => {
+        ? item.delivered_orders_data.split('||').filter(data => data && data.trim() !== '').map(data => {
             const parts = data.split('|');
             return {
               quantity: parseFloat(parts[0]) || 0,

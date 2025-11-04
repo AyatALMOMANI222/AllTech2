@@ -248,6 +248,72 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
     return { subtotal, claimAmount, vatAmount, grossTotal };
   };
 
+  // Convert number to words
+  const numberToWords = (num) => {
+    const ones = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+    const teens = ['ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+    const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+    const thousands = ['', 'thousand', 'million', 'billion', 'trillion'];
+
+    function convertHundreds(n) {
+      let result = '';
+      
+      if (n > 99) {
+        result += ones[Math.floor(n / 100)] + ' hundred';
+        n %= 100;
+        if (n > 0) result += ' ';
+      }
+      
+      if (n > 19) {
+        result += tens[Math.floor(n / 10)];
+        n %= 10;
+        if (n > 0) result += ' ' + ones[n];
+      } else if (n > 9) {
+        result += teens[n - 10];
+      } else if (n > 0) {
+        result += ones[n];
+      }
+      
+      return result;
+    }
+
+    if (num === 0) return 'zero';
+    
+    let result = '';
+    let thousandIndex = 0;
+    
+    while (num > 0) {
+      const chunk = num % 1000;
+      if (chunk !== 0) {
+        const chunkWords = convertHundreds(chunk);
+        if (thousandIndex > 0) {
+          result = chunkWords + ' ' + thousands[thousandIndex] + (result ? ' ' + result : '');
+        } else {
+          result = chunkWords;
+        }
+      }
+      num = Math.floor(num / 1000);
+      thousandIndex++;
+    }
+    
+    return result;
+  };
+
+  // Convert amount to words format (e.g., "AED one thousand two hundred thirty-four and 56/100 Only")
+  const convertAmountToWords = (amount) => {
+    const wholePart = Math.floor(amount);
+    const decimalPart = Math.floor((amount % 1) * 100);
+    
+    const wholePartWords = numberToWords(wholePart);
+    const decimalPartStr = decimalPart.toString().padStart(2, '0');
+    
+    if (decimalPart > 0) {
+      return `AED ${wholePartWords} and ${decimalPartStr}/100 Only`;
+    } else {
+      return `AED ${wholePartWords} Only`;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -605,7 +671,7 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
                         <div className="amount-in-words">
                           <h4>Amount in Words</h4>
                           <div className="words-box">
-                            AED {grossTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Only
+                            {convertAmountToWords(grossTotal)}
                           </div>
                         </div>
                       </div>

@@ -315,11 +315,12 @@
             top: 80px;
             z-index: 9;
             background: white;
+            color: #212529 !important; // Ensure dark text color by default
 
             // ALLTECH DATABASE Column Headers (Light Gold)
             &.alltech-col-header {
               background: linear-gradient(135deg, #fef9e7 0%, #fcf3cf 100%);
-              color: #8b6914;
+              color: #5d4e0d !important;
               border-color: #fcf3cf;
               font-weight: 700;
             }
@@ -327,7 +328,7 @@
             // APPROVED PURCHASED ORDER Column Headers (Light Blue)
             &.approved-purchase-col-header {
               background: linear-gradient(135deg, #ebf3fd 0%, #d6eaf8 100%);
-              color: #1b4f72;
+              color: #0d3a5c !important;
               border-color: #d6eaf8;
               font-weight: 700;
             }
@@ -335,7 +336,7 @@
             // DELIVERED PURCHASED ORDER Column Headers (Light Blue)
             &.delivered-purchase-col-header {
               background: linear-gradient(135deg, #ebf3fd 0%, #d6eaf8 100%);
-              color: #1b4f72;
+              color: #0d3a5c !important;
               border-color: #d6eaf8;
               font-weight: 700;
             }
@@ -343,7 +344,7 @@
             // APPROVED SALES ORDER Column Headers (Light Green)
             &.approved-sales-col-header {
               background: linear-gradient(135deg, #e8f8f5 0%, #d5f4e6 100%);
-              color: #145a32;
+              color: #0d4a2a !important;
               border-color: #d5f4e6;
               font-weight: 700;
             }
@@ -351,7 +352,7 @@
             // DELIVERED SALES ORDER Column Headers (Light Green)
             &.delivered-sales-col-header {
               background: linear-gradient(135deg, #e8f8f5 0%, #d5f4e6 100%);
-              color: #145a32;
+              color: #0d4a2a !important;
               border-color: #d5f4e6;
               font-weight: 700;
             }
