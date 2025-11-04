@@ -117,11 +117,12 @@
   font-size: 14px;
   
   thead {
-    background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+    background: #f8fafc;
+    display: table-header-group;
     
     th {
       font-weight: 600;
-      color: white;
+      color: #0f172a;
       border: none;
       padding: 16px 20px;
       text-transform: uppercase;
@@ -130,6 +131,7 @@
       vertical-align: middle;
       white-space: nowrap;
       position: relative;
+      border-bottom: 2px solid #e2e8f0;
       
       &:not(:last-child)::after {
         content: '';
@@ -138,7 +140,11 @@
         top: 25%;
         height: 50%;
         width: 1px;
-        background: rgba(255, 255, 255, 0.2);
+        background: rgba(0, 0, 0, 0.1);
+      }
+      
+      &:hover {
+        background: #f1f5f9;
       }
       
       &:first-child {
@@ -195,6 +201,22 @@
     color: #9ca3af;
     font-size: 15px;
     font-style: italic;
+  }
+}
+
+// Ensure customer-supplier-table header is visible on desktop
+@media (min-width: 769px) {
+  .customer-supplier-table {
+    thead {
+      display: table-header-group !important;
+      background: #f8fafc !important;
+      
+      th {
+        display: table-cell !important;
+        color: #0f172a !important;
+        background: transparent !important;
+      }
+    }
   }
 }
 
@@ -373,6 +395,7 @@
     width: 100%;
     font-size: 0.9rem;
 
+    // Only hide header on mobile
     thead {
       display: none;
     }

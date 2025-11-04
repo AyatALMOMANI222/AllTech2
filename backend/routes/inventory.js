@@ -357,7 +357,7 @@ router.post('/import', (req, res, next) => {
       try {
         const {
           serial_no, project_no, date_po, part_no, material_no, description,
-          uom, quantity, supplier_unit_price, total_price, sold_quantity, balance, balance_amount
+          uom, quantity, supplier_unit_price, unit_price, total_price, sold_quantity, balance, balance_amount
         } = row;
         
         // Skip rows without essential data
@@ -386,11 +386,13 @@ router.post('/import', (req, res, next) => {
         }
         
         // Parse numeric values
+        // Support both 'unit_price' and 'supplier_unit_price' from Excel
+        // Priority: unit_price > supplier_unit_price
         const importQuantity = parseFloat(quantity) || 0;
-        const unitPrice = parseFloat(supplier_unit_price) || 0;
+        const unitPrice = parseFloat(unit_price || supplier_unit_price) || 0;
         const importSoldQuantity = parseFloat(sold_quantity) || 0;
         
-        // ⚠️ IMPORTANT: Check if item exists based on project_no, part_no, description, AND supplier_unit_price
+        // ⚠️ IMPORTANT: Check if item exists based on project_no, part_no, description, AND supplier_unit_price (unit_price)
         // Only update existing record if ALL four fields match exactly
         // Handle NULL values correctly for both project_no and description
         let existingItems;
