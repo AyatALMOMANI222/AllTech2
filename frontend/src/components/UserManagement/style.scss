@@ -4,11 +4,14 @@
   padding: 2rem 0;
   min-height: 100vh;
   background-color: $light-color;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .btn-primary {
   background-color: $primary-color;
   border-color: $primary-color;
+  white-space: nowrap;
   
   &:hover {
     background-color: darken($primary-color, 10%);
@@ -42,6 +45,7 @@
   border: none;
   box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
   border-radius: 0.5rem;
+  overflow: hidden;
   
   .card-body {
     padding: 1.5rem;
@@ -49,22 +53,39 @@
 }
 
 .table {
+  width: 100%;
+  margin-bottom: 0;
+  
   th {
     font-weight: 500;
     color: #fff !important;
     border-top: none;
     background-color: $light-color;
+    white-space: nowrap;
+    padding: 0.75rem;
   }
   
   td {
     vertical-align: middle;
+    padding: 0.75rem;
   }
+}
+
+.user-table {
+  width: 100%;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .badge {
   font-size: 0.75rem;
   padding: 0.375rem 0.75rem;
   border-radius: 0.375rem;
+  white-space: nowrap;
 }
 
 .bg-danger {
@@ -79,6 +100,7 @@
   border-radius: 0.375rem;
   border: none;
   margin-bottom: 1rem;
+  word-wrap: break-word;
 }
 
 .spinner-border {
@@ -86,10 +108,25 @@
   height: 2rem;
 }
 
+// Container adjustments
+.container-fluid {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
 // Responsive design
 @media (max-width: 1199.98px) {
   .user-management-container {
     padding: 1.5rem 0;
+  }
+  
+  .container-fluid {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  .card-body {
+    padding: 1.25rem;
   }
 }
 
@@ -98,12 +135,48 @@
     padding: 1rem 0;
   }
   
+  .container-fluid {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  
+  h2 {
+    font-size: 1.5rem;
+  }
+  
   .d-flex.justify-content-between {
     flex-direction: column;
+    align-items: stretch !important;
     gap: 1rem;
+    
+    h2 {
+      margin-bottom: 0;
+      text-align: center;
+    }
     
     .btn {
       width: 100%;
+      justify-content: center;
+    }
+  }
+  
+  .card-body {
+    padding: 1rem;
+  }
+  
+  .table {
+    th, td {
+      padding: 0.625rem 0.5rem;
+      font-size: 0.9rem;
+    }
+  }
+  
+  .btn-group {
+    gap: 0.5rem;
+    
+    .btn {
+      flex: 1;
+      min-width: 0;
     }
   }
 }
@@ -113,11 +186,38 @@
     padding: 1rem 0;
   }
   
+  .container-fluid {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  
   h2 {
     font-size: 1.35rem;
   }
   
+  .d-flex.justify-content-between {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 1rem;
+    margin-bottom: 1.5rem !important;
+    
+    h2 {
+      margin-bottom: 0;
+      text-align: center;
+    }
+    
+    .btn {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+  
   // Mobile-first stacked table (no horizontal scroll)
+  .table-responsive {
+    overflow-x: visible;
+    -webkit-overflow-scrolling: touch;
+  }
+  
   .user-table {
     width: 100%;
     font-size: 0.9rem;
@@ -155,6 +255,14 @@
       gap: 0.75rem;
       white-space: normal;
       word-break: break-word;
+      
+      &:first-child {
+        padding-top: 1rem;
+      }
+      
+      &:last-child {
+        padding-bottom: 1rem;
+      }
     }
 
     // Column labels
@@ -162,9 +270,12 @@
       content: '';
       font-weight: 700;
       color: #6c757d;
-      flex: 0 0 40%;
-      max-width: 40%;
+      flex: 0 0 35%;
+      max-width: 35%;
       margin-right: 0.75rem;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.5px;
     }
 
     td:nth-child(1)::before { content: 'ID'; }
@@ -176,14 +287,13 @@
 
     // Actions column wraps nicely
     td:last-child {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
+      flex-direction: column;
+      align-items: stretch;
+      
+      &::before {
+        margin-bottom: 0.5rem;
+      }
     }
-  }
-
-  .table-responsive {
-    -webkit-overflow-scrolling: touch;
   }
   
   .btn-group {
@@ -194,14 +304,25 @@
     
     .btn {
       padding: 0.5rem 0.75rem;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       width: 100%;
       border-radius: 0.375rem !important;
+      justify-content: center;
     }
   }
   
   .card-body {
     padding: 1rem;
+  }
+  
+  .alert {
+    font-size: 0.9rem;
+    padding: 0.75rem 1rem;
+  }
+  
+  .badge {
+    font-size: 0.7rem;
+    padding: 0.3rem 0.6rem;
   }
 }
 
@@ -210,22 +331,52 @@
     padding: 0.5rem 0;
   }
   
+  .container-fluid {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+  
   h2 {
     font-size: 1.15rem;
+  }
+  
+  .d-flex.justify-content-between {
+    margin-bottom: 1rem !important;
+    
+    h2 {
+      font-size: 1.1rem;
+    }
   }
   
   .user-table {
     font-size: 0.85rem;
     
+    tbody {
+      gap: 0.5rem;
+    }
+    
+    tr {
+      border-radius: 6px;
+    }
+    
     td {
       padding: 0.5rem 0.6rem;
       font-size: 0.85rem;
+      
+      &:first-child {
+        padding-top: 0.75rem;
+      }
+      
+      &:last-child {
+        padding-bottom: 0.75rem;
+      }
     }
 
     td::before {
-      font-size: 0.8rem;
-      flex: 0 0 38%;
-      max-width: 38%;
+      font-size: 0.7rem;
+      flex: 0 0 32%;
+      max-width: 32%;
+      margin-right: 0.5rem;
     }
   }
   
@@ -248,11 +399,62 @@
   }
   
   .badge {
-    font-size: 0.7rem;
-    padding: 0.3rem 0.55rem;
+    font-size: 0.65rem;
+    padding: 0.25rem 0.5rem;
   }
   
   .card-body {
     padding: 0.75rem;
+  }
+  
+  .alert {
+    font-size: 0.85rem;
+    padding: 0.625rem 0.875rem;
+    margin-bottom: 0.75rem;
+  }
+  
+  .table-responsive {
+    margin: 0 -0.5rem;
+    padding: 0 0.5rem;
+  }
+}
+
+// Extra small devices
+@media (max-width: 480px) {
+  .user-management-container {
+    padding: 0.5rem 0;
+  }
+  
+  .container-fluid {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+  
+  h2 {
+    font-size: 1rem;
+  }
+  
+  .user-table {
+    font-size: 0.8rem;
+    
+    td {
+      padding: 0.5rem;
+      font-size: 0.8rem;
+    }
+    
+    td::before {
+      font-size: 0.65rem;
+      flex: 0 0 30%;
+      max-width: 30%;
+    }
+  }
+  
+  .btn {
+    font-size: 0.8rem;
+    padding: 0.45rem 0.65rem;
+  }
+  
+  .card-body {
+    padding: 0.625rem;
   }
 }
