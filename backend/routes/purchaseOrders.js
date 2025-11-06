@@ -678,23 +678,26 @@ router.post('/import', (req, res, next) => {
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       try {
-        // Map exact column names from the image: Serial No, Project No, Date PO, Part No, Material No, Description, UOM, Quantity, Unit Price, Total Price, Lead Time, Comments
+        // Map exact column names from the image: po_number, project_no, date_po, part_no, material_no, description, uom, quantity, unit_price, lead_time, due_date, comments
         // Also handle variations for backward compatibility
-        const serial_no = row['Serial No'] || row['Serial No.'] || row.serial_no || row['SERIAL NO'] || row['SERIAL NO.'] || row.po_number || '';
-        const project_no = row['Project No'] || row['Project No.'] || row.project_no || row['PROJECT NO'] || row['PROJECT NO.'] || '';
-        const date_po = row['Date PO'] || row['Date P.O'] || row['Date P.O.'] || row.date_po || row['date p.o'] || row['DATE PO'] || row['DATE P.O'] || row['DATE P.O.'] || '';
-        const part_no = row['Part No'] || row['Part No.'] || row.part_no || row['PART NO'] || row['PART NO.'] || '';
-        const material_no = row['Material No'] || row['Material No.'] || row.material_no || row['MATERIAL NO'] || row['MATERIAL NO.'] || '';
-        const description = row.Description || row.description || row.DESCRIPTION || '';
-        const uom = row.UOM || row.uom || row['Unit of Measure'] || row['UNIT OF MEASURE'] || '';
-        const quantity = row.Quantity || row.quantity || row.QUANTITY || 0;
-        const unit_price = row['Unit Price'] || row['Unit price'] || row.unit_price || row['UNIT PRICE'] || row.supplier_unit_price || row.customer_unit_price || 0;
-        const total_price = row['Total Price'] || row['Total price'] || row.total_price || row['TOTAL PRICE'] || 0;
-        const lead_time = row['Lead Time'] || row['Lead time'] || row.lead_time || row['LEAD TIME'] || row['lead time'] || '';
-        const comments = row.Comments || row.comments || row.COMMENTS || '';
+        const po_number = row.po_number || row['po_number'] || row['PO Number'] || row['PO NUMBER'] || row['po_number'] || '';
+        const project_no = row.project_no || row['project_no'] || row['Project No'] || row['Project No.'] || row['PROJECT NO'] || row['PROJECT NO.'] || '';
+        const date_po = row.date_po || row['date_po'] || row['Date PO'] || row['Date P.O'] || row['Date P.O.'] || row['date p.o'] || row['DATE PO'] || row['DATE P.O'] || row['DATE P.O.'] || '';
+        const part_no = row.part_no || row['part_no'] || row['Part No'] || row['Part No.'] || row['PART NO'] || row['PART NO.'] || '';
+        const material_no = row.material_no || row['material_no'] || row['Material No'] || row['Material No.'] || row['MATERIAL NO'] || row['MATERIAL NO.'] || '';
+        const description = row.description || row['description'] || row.Description || row.DESCRIPTION || '';
+        const uom = row.uom || row['uom'] || row.UOM || row['Unit of Measure'] || row['UNIT OF MEASURE'] || '';
+        const quantity = row.quantity || row['quantity'] || row.Quantity || row.QUANTITY || 0;
+        const unit_price = row.unit_price || row['unit_price'] || row['Unit Price'] || row['Unit price'] || row['UNIT PRICE'] || row.supplier_unit_price || row.customer_unit_price || 0;
+        const lead_time = row.lead_time || row['lead_time'] || row['Lead Time'] || row['Lead time'] || row['LEAD TIME'] || row['lead time'] || '';
+        const due_date = row.due_date || row['due_date'] || row['Due Date'] || row['Due date'] || row['DUE DATE'] || row['due date'] || '';
+        const comments = row.comments || row['comments'] || row.Comments || row.COMMENTS || '';
+        
+        // Calculate total_price (not in image, but needed)
+        const total_price = row.total_price || row['total_price'] || row['Total Price'] || row['Total price'] || row['TOTAL PRICE'] || 0;
         
         // Optional fields (for backward compatibility)
-        const due_date = row['Due Date'] || row['Due date'] || row.due_date || row['DUE DATE'] || row['due date'] || '';
+        const serial_no = row.serial_no || row['Serial No'] || row['Serial No.'] || row['SERIAL NO'] || row['SERIAL NO.'] || po_number || '';
         const penalty_percentage = row['Penalty %'] || row['Penalty %'] || row.penalty_percentage || row['penalty %'] || row['PENALTY %'] || '';
         const penalty_amount = row['Penalty Amount'] || row['Penalty amount'] || row.penalty_amount || row['penalty amount'] || row['PENALTY AMOUNT'] || '';
         const invoice_no = row['Invoice No'] || row['Invoice No.'] || row.invoice_no || row['invoice no'] || row['INVOICE NO'] || '';
@@ -785,7 +788,8 @@ router.post('/import', (req, res, next) => {
           penalty_amount: penalty_amount ? parseFloat(penalty_amount) : null,
           invoice_no: invoice_no || null,
           balance_quantity_undelivered: balance_quantity_undelivered ? parseFloat(balance_quantity_undelivered) : null,
-          comments: comments || ''
+          comments: comments || '',
+          po_number: po_number || '' // Add po_number from image
         });
       } catch (error) {
         console.error(`Error processing row ${i + 1}:`, error);

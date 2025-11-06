@@ -136,6 +136,7 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
       po_number,
       project_number,
       claim_percentage = 100,
+      amount_paid = 0,
       items = []
     } = req.body;
     

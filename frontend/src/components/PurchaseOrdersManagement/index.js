@@ -1814,23 +1814,23 @@ View Details                                </button>
                     <div className="form-text">
                       <strong>Required columns (exact match):</strong>
                       <ul className="mb-2 mt-2" style={{ fontSize: '0.9rem' }}>
-                        <li>Serial No</li>
-                        <li>Project No</li>
-                        <li>Date PO</li>
-                        <li>Part No</li>
-                        <li>Material No</li>
-                        <li>Description</li>
-                        <li>UOM</li>
-                        <li>Quantity</li>
-                        <li>Unit Price</li>
-                        <li>Total Price</li>
-                        <li>Lead Time</li>
-                        <li>Comments</li>
+                        <li>po_number</li>
+                        <li>project_no</li>
+                        <li>date_po</li>
+                        <li>part_no</li>
+                        <li>material_no</li>
+                        <li>description</li>
+                        <li>uom</li>
+                        <li>quantity</li>
+                        <li>unit_price</li>
+                        <li>lead_time</li>
+                        <li>due_date</li>
+                        <li>comments</li>
                       </ul>
                       <small className="text-muted">
                         <i className="fas fa-info-circle me-1"></i>
                         The Excel file should have these exact column names in the first row. 
-                        If Total Price is missing or zero, it will be calculated as Quantity × Unit Price.
+                        Total Price will be calculated automatically as Quantity × Unit Price.
                       </small>
                     </div>
                   </div>
