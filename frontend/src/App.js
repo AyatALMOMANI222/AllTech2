@@ -1,4 +1,4 @@
-import React from 'react';
+// “Please provide a way to record payments for each invoice so that the Payment Status reflects the actual paid amount.”import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './utils/AuthContext';
 import Layout from './components/Layout';
@@ -14,6 +14,7 @@ import DatabaseDashboard from './components/DatabaseDashboard';
 import PurchaseOrdersManagement from './components/PurchaseOrdersManagement';
 import SalesTaxInvoice from './components/SalesTaxInvoice';
 import PurchaseTaxInvoice from './components/PurchaseTaxInvoice';
+import InvoicesManagement from './components/InvoicesManagement';
 import './styles/index.scss';
 
 function App() {
@@ -103,6 +104,14 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <PurchaseTaxInvoice />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/invoices" element={
+              <ProtectedRoute>
+                <Layout>
+                  <InvoicesManagement />
                 </Layout>
               </ProtectedRoute>
             } />

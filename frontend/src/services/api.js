@@ -76,7 +76,7 @@ export const salesTaxInvoicesAPI = {
   getCustomerPONumbers: (customerId) => api.get(`/sales-tax-invoices/customer/${customerId}/po-numbers`),
   getCustomerPOItems: (poNumber) => api.get(`/sales-tax-invoices/customer-po/${poNumber}`),
   getCustomerAutoData: (customerId) => api.get(`/sales-tax-invoices/customer/${customerId}/auto-data`),
-  generatePDF: (id) => api.get(`/sales-tax-invoices/${id}/pdf`),
+  generatePDF: (id) => api.get(`/sales-tax-invoices/${id}/pdf`, { responseType: 'blob' }),
   getByPONumber: (poNumber) => api.get('/sales-tax-invoices', { params: { customer_po_number: poNumber } }),
 };
 
@@ -93,7 +93,7 @@ export const purchaseTaxInvoicesAPI = {
     return api.get('/purchase-tax-invoices/po/list', { params });
   },
   getPoItems: (poNumber) => api.get(`/purchase-tax-invoices/po/${poNumber}`),
-  generatePDF: (id) => api.get(`/purchase-tax-invoices/${id}/pdf`),
+  generatePDF: (id) => api.get(`/purchase-tax-invoices/${id}/pdf`, { responseType: 'blob' }),
   getByPONumber: (poNumber) => api.get('/purchase-tax-invoices', { params: { po_number: poNumber } }),
 };
 

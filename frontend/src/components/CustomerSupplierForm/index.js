@@ -10,7 +10,8 @@ const CustomerSupplierForm = ({ record, onSubmit, onClose }) => {
     contactPerson: '',
     email: '',
     phone: '',
-    documentAttachment: ''
+    documentAttachment: '',
+    country: ''
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -25,7 +26,8 @@ const CustomerSupplierForm = ({ record, onSubmit, onClose }) => {
         contactPerson: record.contact_person || '',
         email: record.email || '',
         phone: record.phone || '',
-        documentAttachment: record.document_attachment || ''
+        documentAttachment: record.document_attachment || '',
+        country: record.country || ''
       });
     }
   }, [record]);
@@ -232,7 +234,23 @@ const CustomerSupplierForm = ({ record, onSubmit, onClose }) => {
               </div>
               
               <div className="row">
-                <div className="col-12 mb-3">
+                <div className="col-md-6 mb-3">
+                  <label htmlFor="country" className="form-label">
+                    Country
+                  </label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    id="country"
+                    name="country"
+                    value={formData.country}
+                    onChange={handleChange}
+                    disabled={loading}
+                    placeholder="e.g., UAE, USA, UK"
+                  />
+                </div>
+                
+                {/* <div className="col-md-6 mb-3">
                   <label htmlFor="documentAttachment" className="form-label">
                     Document Attachment (URL)
                   </label>
@@ -246,7 +264,7 @@ const CustomerSupplierForm = ({ record, onSubmit, onClose }) => {
                     disabled={loading}
                     placeholder="https://example.com/document.pdf"
                   />
-                </div>
+                </div> */}
               </div>
             </div>
             

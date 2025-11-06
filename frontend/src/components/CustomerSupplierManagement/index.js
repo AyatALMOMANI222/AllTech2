@@ -186,6 +186,7 @@ const CustomerSupplierManagement = () => {
                         <th>Contact Person</th>
                         <th>Email</th>
                         <th>Phone</th>
+                        <th>Country</th>
                         <th>TRN Number</th>
                         <th>Actions</th>
                       </tr>
@@ -202,6 +203,7 @@ const CustomerSupplierManagement = () => {
                           <td>{record.contact_person || '-'}</td>
                           <td>{record.email || '-'}</td>
                           <td>{record.phone || '-'}</td>
+                          <td>{record.country || '-'}</td>
                           <td>{record.trn_number || '-'}</td>
                           <td>
                             <div className="btn-group" role="group">
@@ -235,7 +237,7 @@ const CustomerSupplierManagement = () => {
                       ))}
                       {records.length === 0 && (
                         <tr>
-                          <td colSpan="7" className="text-center text-muted py-4">
+                          <td colSpan="8" className="text-center text-muted py-4">
                             No records found
                           </td>
                         </tr>
@@ -294,6 +296,10 @@ const CustomerSupplierManagement = () => {
                 <div className="detail-item">
                   <label>TRN Number</label>
                   <span>{viewingRecord.trn_number || 'N/A'}</span>
+                </div>
+                <div className="detail-item">
+                  <label>Country</label>
+                  <span>{viewingRecord.country || 'N/A'}</span>
                 </div>
                 <div className="detail-item full-width">
                   <label>Address</label>

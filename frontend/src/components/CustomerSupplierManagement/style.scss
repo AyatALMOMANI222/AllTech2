@@ -170,10 +170,10 @@
       
       &:last-child {
         border-bottom: none;
-      }
-      
-      td {
-        vertical-align: middle;
+  }
+  
+  td {
+    vertical-align: middle;
         padding: 16px 20px;
         color: #1f2937;
         font-weight: 400;
@@ -467,16 +467,16 @@
       
       &::before {
         margin-bottom: 0.5rem;
-      }
-      
-      .btn-group {
+  }
+  
+  .btn-group {
         display: flex;
         flex-direction: column;
         width: 100%;
         gap: 0.5rem;
         margin-top: 0.5rem;
         
-        .btn {
+    .btn {
           width: 100%;
           justify-content: center;
         }
@@ -509,7 +509,7 @@
   h2 {
     font-size: 1.15rem;
   }
-
+  
   // Search and Filter section
   .row.mb-4 {
     .col-md-6,

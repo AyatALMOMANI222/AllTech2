@@ -81,7 +81,7 @@ const Home = () => {
             ))}
           </div>
         </div>
-
+        
         <div className="container">
           <div className="hero-content-wrapper">
             <div className="hero-content">
@@ -89,19 +89,19 @@ const Home = () => {
                 <i className="fas fa-certificate"></i>
                 <span>Enterprise-Grade Business Management</span>
               </div>
-
+              
               <h1 className="hero-title">
                 <span className="title-line title-primary">Powering</span>
                 <span className="title-line title-gradient">Automotive & Defense</span>
                 <span className="title-line title-accent">Operations Excellence</span>
               </h1>
-
+              
               <p className="hero-description">
                 AllTech delivers mission-critical business management solutions for automotive parts 
                 and defense industries. Streamline operations, optimize inventory, and drive growth 
                 with our comprehensive, enterprise-level platform built for precision and reliability.
               </p>
-
+              
               <div className="hero-cta">
                 <button className="btn btn-hero-primary" onClick={handleGetStarted}>
                   <span>Start Your Journey</span>
@@ -112,7 +112,7 @@ const Home = () => {
                   <i className="fas fa-lock"></i>
                 </button>
               </div>
-
+              
               <div className="hero-trust-indicators">
                 <div className="trust-item">
                   <div className="trust-icon-wrapper">
@@ -134,7 +134,7 @@ const Home = () => {
                 </div>
               </div>
             </div>
-
+            
             <div className="hero-visual">
               <div className="automotive-showcase">
                 <div className="showcase-image image-main">
@@ -158,7 +158,7 @@ const Home = () => {
                   </div>
                   <div className="image-shine"></div>
                 </div>
-
+                
                 <div className="showcase-image image-tertiary">
                   <div className="image-overlay"></div>
                   <div className="image-content">
@@ -169,7 +169,7 @@ const Home = () => {
                   </div>
                   <div className="image-shine"></div>
                 </div>
-
+                
                 <div className="showcase-image image-featured">
                   <div className="image-overlay"></div>
                   <div className="image-content">
@@ -181,7 +181,7 @@ const Home = () => {
                   <div className="image-shine"></div>
                   <div className="featured-glow"></div>
                 </div>
-
+                
                 <div className="showcase-accent">
                   <div className="accent-ring ring-1"></div>
                   <div className="accent-ring ring-2"></div>
@@ -193,7 +193,7 @@ const Home = () => {
             </div>
           </div>
         </div>
-
+        
         <div className="scroll-indicator">
           <div className="scroll-text">Scroll to explore</div>
           <div className="scroll-line"></div>
@@ -227,7 +227,7 @@ const Home = () => {
               Industry-leading solutions designed for automotive parts and defense operations
             </p>
           </div>
-
+          
           <div className="capabilities-grid">
             <div className="capability-card">
               <div className="card-background-pattern"></div>
@@ -240,12 +240,12 @@ const Home = () => {
                   <i className="fas fa-boxes"></i>
                 </div>
                 <div className="icon-shadow"></div>
-              </div>
-              <h3>Inventory Management</h3>
-              <p>
+                </div>
+                <h3>Inventory Management</h3>
+                <p>
                 Advanced inventory control with real-time tracking, automated reordering, 
                 and intelligent stock optimization for automotive parts and components.
-              </p>
+                </p>
               <div className="capability-features">
                 <div className="feature-tag">
                   <div className="tag-icon">
@@ -269,7 +269,7 @@ const Home = () => {
               <div className="card-hover-effect"></div>
               <div className="card-bottom-decoration"></div>
             </div>
-
+            
             <div className="capability-card">
               <div className="card-background-pattern"></div>
               <div className="card-glow"></div>
@@ -283,7 +283,7 @@ const Home = () => {
                 <div className="icon-shadow"></div>
               </div>
               <h3>Invoicing & Billing</h3>
-              <p>
+                <p>
                 Professional invoicing system with tax compliance, automated billing cycles, 
                 and comprehensive financial reporting for enterprise operations.
               </p>
@@ -310,7 +310,7 @@ const Home = () => {
               <div className="card-hover-effect"></div>
               <div className="card-bottom-decoration"></div>
             </div>
-
+            
             <div className="capability-card">
               <div className="card-background-pattern"></div>
               <div className="card-glow"></div>
@@ -322,9 +322,9 @@ const Home = () => {
                   <i className="fas fa-shopping-cart"></i>
                 </div>
                 <div className="icon-shadow"></div>
-              </div>
-              <h3>Purchase Orders</h3>
-              <p>
+                </div>
+                <h3>Purchase Orders</h3>
+                <p>
                 Streamlined procurement workflow from order creation to delivery tracking, 
                 ensuring operational efficiency across your supply chain.
               </p>
@@ -351,7 +351,7 @@ const Home = () => {
               <div className="card-hover-effect"></div>
               <div className="card-bottom-decoration"></div>
             </div>
-
+            
             <div className="capability-card">
               <div className="card-background-pattern"></div>
               <div className="card-glow"></div>
@@ -365,7 +365,7 @@ const Home = () => {
                 <div className="icon-shadow"></div>
               </div>
               <h3>Customer & Supplier</h3>
-              <p>
+                <p>
                 Comprehensive relationship management with centralized data, 
                 interaction history, and integrated communication tools.
               </p>
@@ -392,7 +392,7 @@ const Home = () => {
               <div className="card-hover-effect"></div>
               <div className="card-bottom-decoration"></div>
             </div>
-
+            
             <div className="capability-card">
               <div className="card-background-pattern"></div>
               <div className="card-glow"></div>
@@ -404,12 +404,12 @@ const Home = () => {
                   <i className="fas fa-chart-pie"></i>
                 </div>
                 <div className="icon-shadow"></div>
-              </div>
-              <h3>Analytics & Reports</h3>
-              <p>
+                </div>
+                <h3>Analytics & Reports</h3>
+                <p>
                 Advanced business intelligence with customizable dashboards, 
                 predictive analytics, and comprehensive reporting suite.
-              </p>
+                </p>
               <div className="capability-features">
                 <div className="feature-tag">
                   <div className="tag-icon">
@@ -433,7 +433,7 @@ const Home = () => {
               <div className="card-hover-effect"></div>
               <div className="card-bottom-decoration"></div>
             </div>
-
+            
             <div className="capability-card">
               <div className="card-background-pattern"></div>
               <div className="card-glow"></div>
@@ -447,7 +447,7 @@ const Home = () => {
                 <div className="icon-shadow"></div>
               </div>
               <h3>Cloud Infrastructure</h3>
-              <p>
+                <p>
                 Enterprise cloud platform with global data centers, automatic backups, 
                 and scalable infrastructure designed for mission-critical operations.
               </p>
@@ -488,36 +488,36 @@ const Home = () => {
         <div className="container">
           <div className="stats-grid">
             <div className="stat-item">
-              <div className="stat-icon">
-                <i className="fas fa-building"></i>
+                <div className="stat-icon">
+                  <i className="fas fa-building"></i>
               </div>
               <div className="stat-number" data-target="500">0</div>
               <div className="stat-label">Enterprise Clients</div>
               <div className="stat-suffix">+</div>
             </div>
-
+            
             <div className="stat-item">
-              <div className="stat-icon">
-                <i className="fas fa-file-invoice"></i>
+                <div className="stat-icon">
+                  <i className="fas fa-file-invoice"></i>
               </div>
               <div className="stat-number" data-target="1000000">0</div>
               <div className="stat-label">Invoices Processed</div>
               <div className="stat-suffix">+</div>
             </div>
-
+            
             <div className="stat-item">
-              <div className="stat-icon">
+                <div className="stat-icon">
                 <i className="fas fa-globe-americas"></i>
               </div>
               <div className="stat-number" data-target="50">0</div>
               <div className="stat-label">Countries Served</div>
               <div className="stat-suffix">+</div>
             </div>
-
+            
             <div className="stat-item">
-              <div className="stat-icon">
-                <i className="fas fa-award"></i>
-              </div>
+                <div className="stat-icon">
+                  <i className="fas fa-award"></i>
+                </div>
               <div className="stat-number" data-target="15">0</div>
               <div className="stat-label">Years Excellence</div>
               <div className="stat-suffix">+</div>
@@ -595,7 +595,7 @@ const Home = () => {
           <div className="cta-container">
             <div className="cta-content">
               <h2 className="cta-title">Ready to Transform Your Operations?</h2>
-              <p className="cta-description">
+            <p className="cta-description">
                 Join leading enterprises in automotive and defense industries 
                 that trust AllTech for mission-critical business management.
               </p>
@@ -615,7 +615,7 @@ const Home = () => {
                 <div className="graphic-circle circle-1"></div>
                 <div className="graphic-circle circle-2"></div>
                 <div className="graphic-icon">
-                  <i className="fas fa-rocket"></i>
+              <i className="fas fa-rocket"></i>
                 </div>
               </div>
             </div>
@@ -636,12 +636,12 @@ const Home = () => {
                 <div className="footer-brand-logo">
                   <div className="brand-icon">
                     <i className="fas fa-industry"></i>
-                  </div>
+            </div>
                   <div className="brand-text">
                     <h4 className="brand-name">ALLTECH</h4>
                     <p className="brand-tagline">Enterprise Solutions</p>
-                  </div>
-                </div>
+            </div>
+            </div>
                 <p className="footer-description">
                   Leading provider of enterprise business management solutions for 
                   automotive parts and defense industries, delivering excellence 
@@ -658,7 +658,7 @@ const Home = () => {
                     <i className="fab fa-facebook-f"></i>
                   </a>
                   <a href="#" aria-label="Email" className="social-link">
-                    <i className="fas fa-envelope"></i>
+                  <i className="fas fa-envelope"></i>
                   </a>
                 </div>
               </div>
@@ -677,17 +677,17 @@ const Home = () => {
                       <span className="contact-label">Location</span>
                       <span className="contact-value">Abu Dhabi, United Arab Emirates</span>
                     </div>
-                  </div>
-                  <div className="contact-item">
+                </div>
+                <div className="contact-item">
                     <div className="contact-icon-wrapper">
-                      <i className="fas fa-phone"></i>
+                  <i className="fas fa-phone"></i>
                     </div>
                     <div className="contact-text">
                       <span className="contact-label">Phone</span>
                       <a href="tel:+971506213247" className="contact-value">+971 50 621 3247</a>
                     </div>
-                  </div>
-                  <div className="contact-item">
+                </div>
+                <div className="contact-item">
                     <div className="contact-icon-wrapper">
                       <i className="fas fa-envelope"></i>
                     </div>
@@ -695,12 +695,12 @@ const Home = () => {
                       <span className="contact-label">Email</span>
                       <a href="mailto:Info@alltech-defence.ae" className="contact-value">Info@alltech-defence.ae</a>
                     </div>
-                  </div>
                 </div>
               </div>
             </div>
-
-            <div className="footer-bottom">
+          </div>
+          
+          <div className="footer-bottom">
               <div className="footer-bottom-left">
                 <p className="copyright">&copy; {new Date().getFullYear()} AllTech. All rights reserved.</p>
                 <p className="footer-tagline">Empowering businesses with enterprise-grade solutions</p>

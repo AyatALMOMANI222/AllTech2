@@ -80,6 +80,224 @@ app.use((req, res, next) => {
   next();
 });
 
+// Auto-migration: Ensure inventory table has new columns
+async function ensureInventoryColumns() {
+  try {
+    const connection = await pool.getConnection();
+    
+    // Check if inventory table exists
+    const [tables] = await connection.execute(`
+      SELECT COUNT(*) as count 
+      FROM information_schema.tables 
+      WHERE table_schema = DATABASE() 
+      AND table_name = 'inventory'
+    `);
+    
+    if (tables[0].count === 0) {
+      console.log('Note: inventory table does not exist yet. It will be created with new columns when /api/initialize-database is called.');
+      connection.release();
+      return;
+    }
+    
+    // Add manufacturer_part_number column if it doesn't exist
+    try {
+      await connection.execute(`
+        ALTER TABLE inventory 
+        ADD COLUMN manufacturer_part_number VARCHAR(100) AFTER balance_amount
+      `);
+      console.log('✓ manufacturer_part_number column added to inventory table');
+    } catch (error) {
+      if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+        console.log('✓ manufacturer_part_number column already exists');
+      } else {
+        console.log('Note: manufacturer_part_number check:', error.message);
+      }
+    }
+    
+    // Add cost_price column if it doesn't exist
+    try {
+      await connection.execute(`
+        ALTER TABLE inventory 
+        ADD COLUMN cost_price DECIMAL(10,2) DEFAULT 0.0 AFTER manufacturer_part_number
+      `);
+      console.log('✓ cost_price column added to inventory table');
+    } catch (error) {
+      if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+        console.log('✓ cost_price column already exists');
+      } else {
+        console.log('Note: cost_price check:', error.message);
+      }
+    }
+    
+    connection.release();
+  } catch (error) {
+    console.error('Error checking inventory columns:', error.message);
+  }
+}
+
+// Auto-migration: Ensure customers_suppliers table has country column
+async function ensureCustomersSuppliersColumns() {
+  try {
+    const connection = await pool.getConnection();
+    
+    // Check if customers_suppliers table exists
+    const [tables] = await connection.execute(`
+      SELECT COUNT(*) as count 
+      FROM information_schema.tables 
+      WHERE table_schema = DATABASE() 
+      AND table_name = 'customers_suppliers'
+    `);
+    
+    if (tables[0].count === 0) {
+      console.log('Note: customers_suppliers table does not exist yet. It will be created with new columns when /api/initialize-database is called.');
+      connection.release();
+      return;
+    }
+    
+    // Add country column if it doesn't exist
+    try {
+      await connection.execute(`
+        ALTER TABLE customers_suppliers 
+        ADD COLUMN country VARCHAR(100) AFTER document_attachment
+      `);
+      console.log('✓ country column added to customers_suppliers table');
+    } catch (error) {
+      if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+        console.log('✓ country column already exists in customers_suppliers table');
+      } else {
+        console.log('Note: country column check:', error.message);
+      }
+    }
+    
+    connection.release();
+  } catch (error) {
+    console.error('Error checking customers_suppliers columns:', error.message);
+  }
+}
+
+// Auto-migration: Ensure purchase_orders table has linked_customer_po_id column
+async function ensurePurchaseOrdersColumns() {
+  try {
+    const connection = await pool.getConnection();
+    
+    // Check if purchase_orders table exists
+    const [tables] = await connection.execute(`
+      SELECT COUNT(*) as count 
+      FROM information_schema.tables 
+      WHERE table_schema = DATABASE() 
+      AND table_name = 'purchase_orders'
+    `);
+    
+    if (tables[0].count === 0) {
+      console.log('Note: purchase_orders table does not exist yet. It will be created with new columns when /api/initialize-database is called.');
+      connection.release();
+      return;
+    }
+    
+    // Add linked_customer_po_id column if it doesn't exist
+    try {
+      await connection.execute(`
+        ALTER TABLE purchase_orders 
+        ADD COLUMN linked_customer_po_id INT AFTER total_amount
+      `);
+      console.log('✓ linked_customer_po_id column added to purchase_orders table');
+    } catch (error) {
+      if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+        console.log('✓ linked_customer_po_id column already exists in purchase_orders table');
+      } else {
+        console.log('Note: linked_customer_po_id column check:', error.message);
+      }
+    }
+    
+    // Add foreign key constraint if it doesn't exist
+    try {
+      await connection.execute(`
+        ALTER TABLE purchase_orders 
+        ADD CONSTRAINT fk_linked_customer_po 
+        FOREIGN KEY (linked_customer_po_id) REFERENCES purchase_orders(id) ON DELETE SET NULL
+      `);
+      console.log('✓ Foreign key constraint for linked_customer_po_id added to purchase_orders table');
+    } catch (error) {
+      if (error.code === 'ER_DUP_KEY' || error.message.includes('Duplicate key name') || error.message.includes('already exists')) {
+        console.log('✓ Foreign key constraint for linked_customer_po_id already exists in purchase_orders table');
+      } else {
+        console.log('Note: Foreign key constraint check:', error.message);
+      }
+    }
+    
+    connection.release();
+  } catch (error) {
+    console.error('Error checking purchase_orders columns:', error.message);
+  }
+}
+
+// Auto-migration: Ensure invoice tables have amount_paid column
+async function ensureInvoiceColumns() {
+  try {
+    const connection = await pool.getConnection();
+    
+    // Check if sales_tax_invoices table exists
+    const [salesTables] = await connection.execute(`
+      SELECT COUNT(*) as count 
+      FROM information_schema.tables 
+      WHERE table_schema = DATABASE() 
+      AND table_name = 'sales_tax_invoices'
+    `);
+    
+    if (salesTables[0].count > 0) {
+      // Add amount_paid column to sales_tax_invoices if it doesn't exist
+      try {
+        await connection.execute(`
+          ALTER TABLE sales_tax_invoices 
+          ADD COLUMN amount_paid DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER gross_total
+        `);
+        console.log('✓ amount_paid column added to sales_tax_invoices table');
+      } catch (error) {
+        if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+          console.log('✓ amount_paid column already exists in sales_tax_invoices table');
+        } else {
+          console.log('Note: amount_paid column check for sales_tax_invoices:', error.message);
+        }
+      }
+    }
+    
+    // Check if purchase_tax_invoices table exists
+    const [purchaseTables] = await connection.execute(`
+      SELECT COUNT(*) as count 
+      FROM information_schema.tables 
+      WHERE table_schema = DATABASE() 
+      AND table_name = 'purchase_tax_invoices'
+    `);
+    
+    if (purchaseTables[0].count > 0) {
+      // Add amount_paid column to purchase_tax_invoices if it doesn't exist
+      try {
+        await connection.execute(`
+          ALTER TABLE purchase_tax_invoices 
+          ADD COLUMN amount_paid DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER gross_total
+        `);
+        console.log('✓ amount_paid column added to purchase_tax_invoices table');
+      } catch (error) {
+        if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+          console.log('✓ amount_paid column already exists in purchase_tax_invoices table');
+        } else {
+          console.log('Note: amount_paid column check for purchase_tax_invoices:', error.message);
+        }
+      }
+    }
+    
+    connection.release();
+  } catch (error) {
+    console.error('Error checking invoice columns:', error.message);
+  }
+}
+
+// Run migrations on server startup
+ensureInventoryColumns();
+ensureCustomersSuppliersColumns();
+ensurePurchaseOrdersColumns();
+ensureInvoiceColumns();
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
@@ -142,10 +360,27 @@ app.get('/api/initialize-database', async (req, res) => {
         email VARCHAR(100),
         phone VARCHAR(20),
         document_attachment VARCHAR(500),
+        country VARCHAR(100),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
+    
+    // Add country column if it doesn't exist (for existing databases)
+    try {
+      await connection.execute(`
+        ALTER TABLE customers_suppliers 
+        ADD COLUMN country VARCHAR(100) AFTER document_attachment
+      `);
+      console.log('✓ country column added to customers_suppliers table');
+    } catch (error) {
+      // Column might already exist, ignore duplicate column error
+      if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+        console.log('✓ country column already exists');
+      } else {
+        console.log('Note: country column check:', error.message);
+      }
+    }
 
     // Create inventory table
     await connection.execute(`
@@ -164,10 +399,43 @@ app.get('/api/initialize-database', async (req, res) => {
         sold_quantity DECIMAL(10,2) DEFAULT 0,
         balance DECIMAL(10,2) DEFAULT 0,
         balance_amount DECIMAL(10,2) DEFAULT 0.0,
+        manufacturer_part_number VARCHAR(100),
+        cost_price DECIMAL(10,2) DEFAULT 0.0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
+    
+    // Add new columns if they don't exist (for existing databases)
+    try {
+      await connection.execute(`
+        ALTER TABLE inventory 
+        ADD COLUMN manufacturer_part_number VARCHAR(100) AFTER balance_amount
+      `);
+      console.log('✓ manufacturer_part_number column added');
+    } catch (error) {
+      // Column might already exist, ignore duplicate column error
+      if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+        console.log('✓ manufacturer_part_number column already exists');
+      } else {
+        console.log('Note: manufacturer_part_number column check:', error.message);
+      }
+    }
+    
+    try {
+      await connection.execute(`
+        ALTER TABLE inventory 
+        ADD COLUMN cost_price DECIMAL(10,2) DEFAULT 0.0 AFTER manufacturer_part_number
+      `);
+      console.log('✓ cost_price column added');
+    } catch (error) {
+      // Column might already exist, ignore duplicate column error
+      if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+        console.log('✓ cost_price column already exists');
+      } else {
+        console.log('Note: cost_price column check:', error.message);
+      }
+    }
 
     // Create purchase_orders table
     await connection.execute(`
@@ -179,15 +447,50 @@ app.get('/api/initialize-database', async (req, res) => {
         customer_supplier_name VARCHAR(255),
         status ENUM('approved', 'partially_delivered', 'delivered_completed') DEFAULT 'approved',
         total_amount DECIMAL(10,2) DEFAULT 0.0,
+        linked_customer_po_id INT,
         created_by INT,
         approved_by INT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (customer_supplier_id) REFERENCES customers_suppliers(id) ON DELETE SET NULL,
+        FOREIGN KEY (linked_customer_po_id) REFERENCES purchase_orders(id) ON DELETE SET NULL,
         FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
         FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
+    
+    // Add linked_customer_po_id column if it doesn't exist (for existing databases)
+    try {
+      await connection.execute(`
+        ALTER TABLE purchase_orders 
+        ADD COLUMN linked_customer_po_id INT AFTER total_amount
+      `);
+      console.log('✓ linked_customer_po_id column added to purchase_orders table');
+    } catch (error) {
+      // Column might already exist, ignore duplicate column error
+      if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+        console.log('✓ linked_customer_po_id column already exists');
+      } else {
+        console.log('Note: linked_customer_po_id column check:', error.message);
+      }
+    }
+    
+    // Add foreign key constraint if it doesn't exist
+    try {
+      await connection.execute(`
+        ALTER TABLE purchase_orders 
+        ADD CONSTRAINT fk_linked_customer_po 
+        FOREIGN KEY (linked_customer_po_id) REFERENCES purchase_orders(id) ON DELETE SET NULL
+      `);
+      console.log('✓ Foreign key constraint for linked_customer_po_id added');
+    } catch (error) {
+      // Constraint might already exist
+      if (error.code === 'ER_DUP_KEY' || error.message.includes('Duplicate key name') || error.message.includes('already exists')) {
+        console.log('✓ Foreign key constraint for linked_customer_po_id already exists');
+      } else {
+        console.log('Note: Foreign key constraint check:', error.message);
+      }
+    }
 
     // Create purchase_order_items table
     await connection.execute(`
@@ -252,6 +555,7 @@ app.get('/api/initialize-database', async (req, res) => {
         claim_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         vat_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         gross_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        amount_paid DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         amount_in_words TEXT,
         status ENUM('draft', 'sent', 'paid', 'cancelled') DEFAULT 'draft',
         created_by INT,
@@ -291,6 +595,7 @@ app.get('/api/initialize-database', async (req, res) => {
         subtotal DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         vat_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         gross_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        amount_paid DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         status ENUM('draft', 'received', 'paid', 'cancelled') DEFAULT 'draft',
         created_by INT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

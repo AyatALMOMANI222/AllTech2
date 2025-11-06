@@ -327,16 +327,18 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
     
     // Create invoice
     const createdBy = req.user?.id || null;
+    const amountPaid = req.body.amount_paid || 0;
+    
     const [result] = await connection.execute(`
       INSERT INTO sales_tax_invoices (
         invoice_number, invoice_date, customer_id, customer_po_number, customer_po_date,
         payment_terms, contract_number, delivery_terms, claim_percentage,
-        subtotal, claim_amount, vat_amount, gross_total, amount_in_words, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        subtotal, claim_amount, vat_amount, gross_total, amount_paid, amount_in_words, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       invoiceNumber, invoice_date, customer_id, customer_po_number, customer_po_date,
       payment_terms, contract_number, delivery_terms, claim_percentage,
-      subtotal, claimAmount, vatAmount, grossTotal, amountInWords, createdBy
+      subtotal, claimAmount, vatAmount, grossTotal, amountPaid, amountInWords, createdBy
     ]);
     
     const invoiceId = result.insertId;
@@ -455,12 +457,8 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
 });
 
 // PUT /api/sales-tax-invoices/:id - Update sales tax invoice
-router.put('/:id', validateSalesTaxInvoice, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
     
     const { id } = req.params;
     const {
@@ -472,8 +470,27 @@ router.put('/:id', validateSalesTaxInvoice, async (req, res) => {
       contract_number,
       delivery_terms,
       claim_percentage,
+      amount_paid,
       items
     } = req.body;
+    
+    // If only amount_paid is being updated, handle it separately
+    const bodyKeys = Object.keys(req.body);
+    const hasOnlyAmountPaid = bodyKeys.length === 1 && bodyKeys[0] === 'amount_paid';
+    
+    if (hasOnlyAmountPaid) {
+      // Only updating amount_paid
+      const [result] = await req.db.execute(
+        'UPDATE sales_tax_invoices SET amount_paid = ? WHERE id = ?',
+        [amount_paid || 0, id]
+      );
+      
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: 'Sales tax invoice not found' });
+      }
+      
+      return res.json({ message: 'Payment amount updated successfully' });
+    }
     
     // Validate customer exists
     const [customer] = await req.db.execute(
@@ -515,16 +532,18 @@ router.put('/:id', validateSalesTaxInvoice, async (req, res) => {
     const amountInWords = `AED ${numberToWords(Math.floor(grossTotal))} and ${Math.floor((grossTotal % 1) * 100).toString().padStart(2, '0')}/100 Only`;
     
     // Update invoice
+    const amountPaid = amount_paid !== undefined ? amount_paid : null;
     const [result] = await req.db.execute(`
       UPDATE sales_tax_invoices SET
         invoice_date = ?, customer_id = ?, customer_po_number = ?, customer_po_date = ?,
         payment_terms = ?, contract_number = ?, delivery_terms = ?, claim_percentage = ?,
-        subtotal = ?, claim_amount = ?, vat_amount = ?, gross_total = ?, amount_in_words = ?
+        subtotal = ?, claim_amount = ?, vat_amount = ?, gross_total = ?, 
+        amount_paid = COALESCE(?, amount_paid), amount_in_words = ?
       WHERE id = ?
     `, [
       invoice_date, customer_id, customer_po_number, customer_po_date,
       payment_terms, contract_number, delivery_terms, claim_percentage,
-      subtotal, claimAmount, vatAmount, grossTotal, amountInWords, id
+      subtotal, claimAmount, vatAmount, grossTotal, amountPaid, amountInWords, id
     ]);
     
     if (result.affectedRows === 0) {

@@ -70,7 +70,8 @@ router.post('/', authenticateToken, [
   body('contactPerson').optional().isString(),
   body('email').optional().isEmail().withMessage('Valid email is required'),
   body('phone').optional().isString(),
-  body('documentAttachment').optional().isString()
+  body('documentAttachment').optional().isString(),
+  body('country').optional().isString()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -86,17 +87,18 @@ router.post('/', authenticateToken, [
       contactPerson,
       email,
       phone,
-      documentAttachment
+      documentAttachment,
+      country
     } = req.body;
 
     const id = generateUUID();
 
     await req.db.execute(
       `INSERT INTO customers_suppliers 
-       (id, type, company_name, address, trn_number, contact_person, email, phone, document_attachment) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, type, company_name, address, trn_number, contact_person, email, phone, document_attachment, country) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [id, type, companyName, address || null, trnNumber || null, contactPerson || null, 
-       email || null, phone || null, documentAttachment || null]
+       email || null, phone || null, documentAttachment || null, country || null]
     );
 
     res.status(201).json({
@@ -110,7 +112,8 @@ router.post('/', authenticateToken, [
         contactPerson,
         email,
         phone,
-        documentAttachment
+        documentAttachment,
+        country
       }
     });
   } catch (error) {
@@ -128,7 +131,8 @@ router.put('/:id', authenticateToken, [
   body('contactPerson').optional().isString(),
   body('email').optional().isEmail().withMessage('Valid email is required'),
   body('phone').optional().isString(),
-  body('documentAttachment').optional().isString()
+  body('documentAttachment').optional().isString(),
+  body('country').optional().isString()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -145,7 +149,8 @@ router.put('/:id', authenticateToken, [
       contactPerson,
       email,
       phone,
-      documentAttachment
+      documentAttachment,
+      country
     } = req.body;
 
     // Check if record exists
@@ -193,6 +198,10 @@ router.put('/:id', authenticateToken, [
     if (documentAttachment !== undefined) {
       updates.push('document_attachment = ?');
       values.push(documentAttachment);
+    }
+    if (country !== undefined) {
+      updates.push('country = ?');
+      values.push(country);
     }
 
     if (updates.length === 0) {

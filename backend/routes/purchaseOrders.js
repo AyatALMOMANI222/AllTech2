@@ -103,11 +103,17 @@ router.get('/', async (req, res) => {
       SELECT po.*, 
              cs.company_name as customer_supplier_name,
              u1.username as created_by_name,
-             u2.username as approved_by_name
+             u2.username as approved_by_name,
+             linked_po.po_number as linked_customer_po_number,
+             linked_po.id as linked_customer_po_id,
+             supplier_po.po_number as linked_supplier_po_number,
+             supplier_po.id as linked_supplier_po_id
       FROM purchase_orders po
       LEFT JOIN customers_suppliers cs ON po.customer_supplier_id = cs.id
       LEFT JOIN users u1 ON po.created_by = u1.id
       LEFT JOIN users u2 ON po.approved_by = u2.id
+      LEFT JOIN purchase_orders linked_po ON po.linked_customer_po_id = linked_po.id
+      LEFT JOIN purchase_orders supplier_po ON supplier_po.linked_customer_po_id = po.id AND supplier_po.order_type = 'supplier'
     `;
     
     let countQuery = 'SELECT COUNT(*) as total FROM purchase_orders po';
@@ -164,11 +170,17 @@ router.get('/:id', async (req, res) => {
       SELECT po.*, 
              cs.company_name as customer_supplier_name,
              u1.username as created_by_name,
-             u2.username as approved_by_name
+             u2.username as approved_by_name,
+             linked_po.po_number as linked_customer_po_number,
+             linked_po.id as linked_customer_po_id,
+             supplier_po.po_number as linked_supplier_po_number,
+             supplier_po.id as linked_supplier_po_id
       FROM purchase_orders po
       LEFT JOIN customers_suppliers cs ON po.customer_supplier_id = cs.id
       LEFT JOIN users u1 ON po.created_by = u1.id
       LEFT JOIN users u2 ON po.approved_by = u2.id
+      LEFT JOIN purchase_orders linked_po ON po.linked_customer_po_id = linked_po.id
+      LEFT JOIN purchase_orders supplier_po ON supplier_po.linked_customer_po_id = po.id AND supplier_po.order_type = 'supplier'
       WHERE po.id = ?
     `, [id]);
     
@@ -208,7 +220,8 @@ router.post('/', validatePurchaseOrder, async (req, res) => {
     const { 
       po_number, order_type, customer_supplier_id, items = [],
       penalty_percentage, due_date,
-      delivered_quantity, delivered_unit_price, delivered_total_price
+      delivered_quantity, delivered_unit_price, delivered_total_price,
+      linked_customer_po_id
     } = req.body;
     
     // Auto-generate PO number if not provided
@@ -235,12 +248,42 @@ router.post('/', validatePurchaseOrder, async (req, res) => {
       actualCustomerSupplierId = null;
     }
     
+    // Validate linked_customer_po_id if provided (must be a valid customer PO)
+    let actualLinkedCustomerPOId = null;
+    if (linked_customer_po_id) {
+      if (order_type !== 'supplier') {
+        return res.status(400).json({ 
+          message: 'linked_customer_po_id can only be set for supplier orders' 
+        });
+      }
+      
+      // Verify the linked PO exists and is a customer PO
+      const [linkedPO] = await req.db.execute(
+        'SELECT id, order_type FROM purchase_orders WHERE id = ?',
+        [linked_customer_po_id]
+      );
+      
+      if (linkedPO.length === 0) {
+        return res.status(400).json({ 
+          message: 'Linked customer PO not found' 
+        });
+      }
+      
+      if (linkedPO[0].order_type !== 'customer') {
+        return res.status(400).json({ 
+          message: 'Linked PO must be a customer order' 
+        });
+      }
+      
+      actualLinkedCustomerPOId = linked_customer_po_id;
+    }
+    
     // Create purchase order
     const createdBy = req.user?.id || null; // Use null if no user ID available
     const [result] = await req.db.execute(`
-      INSERT INTO purchase_orders (po_number, order_type, customer_supplier_id, customer_supplier_name, created_by)
-      VALUES (?, ?, ?, ?, ?)
-    `, [finalPONumber, order_type, actualCustomerSupplierId, customerSupplierName, createdBy]);
+      INSERT INTO purchase_orders (po_number, order_type, customer_supplier_id, customer_supplier_name, linked_customer_po_id, created_by)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [finalPONumber, order_type, actualCustomerSupplierId, customerSupplierName, actualLinkedCustomerPOId, createdBy]);
     
     const poId = result.insertId;
     
@@ -635,26 +678,33 @@ router.post('/import', (req, res, next) => {
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       try {
-        // Handle both header formats
-        const {
-          serial_no = row.serial_no || row.po_number,
-          project_no = row.project_no,
-          date_po = row.date_po || row['date p.o'] || row['DATE P.O'],
-          part_no = row.part_no,
-          material_no = row.material_no,
-          description = row.description,
-          uom = row.uom,
-          quantity = row.quantity,
-          unit_price = row.unit_price || row.supplier_unit_price || row.customer_unit_price,
-          total_price = row.total_price,
-          lead_time = row.lead_time || row['lead time'] || row['LEAD TIME'],
-          due_date = row.due_date || row['due date'] || row['DUE DATE'],
-          penalty_percentage = row.penalty_percentage || row['penalty %'] || row['PENALTY %'],
-          penalty_amount = row.penalty_amount || row['penalty amount'] || row['PENALTY AMOUNT'],
-          invoice_no = row.invoice_no || row['invoice no'] || row['INVOICE NO'],
-          balance_quantity_undelivered = row.balance_quantity_undelivered || row['balance quantity undelivered'] || row['BALANCE QUANTITY UNDELIVERED'],
-          comments = row.comments
-        } = row;
+        // Map exact column names from the image: Serial No, Project No, Date PO, Part No, Material No, Description, UOM, Quantity, Unit Price, Total Price, Lead Time, Comments
+        // Also handle variations for backward compatibility
+        const serial_no = row['Serial No'] || row['Serial No.'] || row.serial_no || row['SERIAL NO'] || row['SERIAL NO.'] || row.po_number || '';
+        const project_no = row['Project No'] || row['Project No.'] || row.project_no || row['PROJECT NO'] || row['PROJECT NO.'] || '';
+        const date_po = row['Date PO'] || row['Date P.O'] || row['Date P.O.'] || row.date_po || row['date p.o'] || row['DATE PO'] || row['DATE P.O'] || row['DATE P.O.'] || '';
+        const part_no = row['Part No'] || row['Part No.'] || row.part_no || row['PART NO'] || row['PART NO.'] || '';
+        const material_no = row['Material No'] || row['Material No.'] || row.material_no || row['MATERIAL NO'] || row['MATERIAL NO.'] || '';
+        const description = row.Description || row.description || row.DESCRIPTION || '';
+        const uom = row.UOM || row.uom || row['Unit of Measure'] || row['UNIT OF MEASURE'] || '';
+        const quantity = row.Quantity || row.quantity || row.QUANTITY || 0;
+        const unit_price = row['Unit Price'] || row['Unit price'] || row.unit_price || row['UNIT PRICE'] || row.supplier_unit_price || row.customer_unit_price || 0;
+        const total_price = row['Total Price'] || row['Total price'] || row.total_price || row['TOTAL PRICE'] || 0;
+        const lead_time = row['Lead Time'] || row['Lead time'] || row.lead_time || row['LEAD TIME'] || row['lead time'] || '';
+        const comments = row.Comments || row.comments || row.COMMENTS || '';
+        
+        // Optional fields (for backward compatibility)
+        const due_date = row['Due Date'] || row['Due date'] || row.due_date || row['DUE DATE'] || row['due date'] || '';
+        const penalty_percentage = row['Penalty %'] || row['Penalty %'] || row.penalty_percentage || row['penalty %'] || row['PENALTY %'] || '';
+        const penalty_amount = row['Penalty Amount'] || row['Penalty amount'] || row.penalty_amount || row['penalty amount'] || row['PENALTY AMOUNT'] || '';
+        const invoice_no = row['Invoice No'] || row['Invoice No.'] || row.invoice_no || row['invoice no'] || row['INVOICE NO'] || '';
+        const balance_quantity_undelivered = row['Balance Quantity Undelivered'] || row['Balance quantity undelivered'] || row.balance_quantity_undelivered || row['balance quantity undelivered'] || row['BALANCE QUANTITY UNDELIVERED'] || '';
+        
+        // Validate required fields
+        if (!part_no || !material_no) {
+          console.warn(`Row ${i + 1}: Skipping row - missing Part No or Material No`);
+          continue;
+        }
         
         // Convert Excel date if needed
         let formattedDatePo = null;
@@ -662,9 +712,29 @@ router.post('/import', (req, res, next) => {
           if (!isNaN(date_po) && date_po > 0) {
             formattedDatePo = convertExcelDate(date_po);
           } else if (typeof date_po === 'string') {
-            const parsedDate = new Date(date_po);
-            if (!isNaN(parsedDate.getTime())) {
-              formattedDatePo = parsedDate.toISOString().split('T')[0];
+            // Try parsing various date formats (DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD, etc.)
+            const dateStr = date_po.trim();
+            // Handle DD/MM/YYYY format (common in Excel)
+            if (dateStr.includes('/')) {
+              const parts = dateStr.split('/');
+              if (parts.length === 3) {
+                // Try DD/MM/YYYY first
+                const parsedDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                if (!isNaN(parsedDate.getTime())) {
+                  formattedDatePo = parsedDate.toISOString().split('T')[0];
+                } else {
+                  // Try MM/DD/YYYY
+                  const parsedDate2 = new Date(`${parts[2]}-${parts[0]}-${parts[1]}`);
+                  if (!isNaN(parsedDate2.getTime())) {
+                    formattedDatePo = parsedDate2.toISOString().split('T')[0];
+                  }
+                }
+              }
+            } else {
+              const parsedDate = new Date(date_po);
+              if (!isNaN(parsedDate.getTime())) {
+                formattedDatePo = parsedDate.toISOString().split('T')[0];
+              }
             }
           }
         }
@@ -675,12 +745,28 @@ router.post('/import', (req, res, next) => {
           if (!isNaN(due_date) && due_date > 0) {
             formattedDueDate = convertExcelDate(due_date);
           } else if (typeof due_date === 'string') {
-            const parsedDate = new Date(due_date);
-            if (!isNaN(parsedDate.getTime())) {
-              formattedDueDate = parsedDate.toISOString().split('T')[0];
+            const dateStr = due_date.trim();
+            if (dateStr.includes('/')) {
+              const parts = dateStr.split('/');
+              if (parts.length === 3) {
+                const parsedDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                if (!isNaN(parsedDate.getTime())) {
+                  formattedDueDate = parsedDate.toISOString().split('T')[0];
+                }
+              }
+            } else {
+              const parsedDate = new Date(due_date);
+              if (!isNaN(parsedDate.getTime())) {
+                formattedDueDate = parsedDate.toISOString().split('T')[0];
+              }
             }
           }
         }
+
+        // Calculate total_price if not provided or if it's 0
+        const calculatedTotalPrice = total_price && parseFloat(total_price) > 0 
+          ? parseFloat(total_price) 
+          : (parseFloat(quantity) || 0) * (parseFloat(unit_price) || 0);
 
         processedItems.push({
           serial_no: serial_no || '',
@@ -692,7 +778,7 @@ router.post('/import', (req, res, next) => {
           uom: uom || '',
           quantity: parseFloat(quantity) || 0,
           unit_price: parseFloat(unit_price) || 0,
-          total_price: parseFloat(total_price) || 0,
+          total_price: calculatedTotalPrice,
           lead_time: lead_time || '',
           due_date: formattedDueDate,
           penalty_percentage: penalty_percentage ? parseFloat(penalty_percentage) : null,
@@ -760,6 +846,176 @@ router.get('/customers-suppliers/list', async (req, res) => {
   } catch (error) {
     console.error('Error fetching customers/suppliers:', error);
     res.status(500).json({ message: 'Error fetching customers/suppliers' });
+  }
+});
+
+// POST /api/purchase-orders/:id/create-supplier-po - Create supplier PO from customer PO
+router.post('/:id/create-supplier-po', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { supplier_id, items = [] } = req.body;
+    
+    // Get the customer PO
+    const [customerPOs] = await req.db.execute(
+      'SELECT * FROM purchase_orders WHERE id = ? AND order_type = ?',
+      [id, 'customer']
+    );
+    
+    if (customerPOs.length === 0) {
+      return res.status(404).json({ 
+        message: 'Customer purchase order not found' 
+      });
+    }
+    
+    const customerPO = customerPOs[0];
+    
+    // Check if supplier PO already exists for this customer PO
+    const [existingSupplierPOs] = await req.db.execute(
+      'SELECT id, po_number FROM purchase_orders WHERE linked_customer_po_id = ?',
+      [id]
+    );
+    
+    if (existingSupplierPOs.length > 0) {
+      return res.status(400).json({ 
+        message: 'Supplier PO already exists for this customer PO',
+        existing_supplier_po: {
+          id: existingSupplierPOs[0].id,
+          po_number: existingSupplierPOs[0].po_number
+        }
+      });
+    }
+    
+    // Validate supplier_id
+    if (!supplier_id) {
+      return res.status(400).json({ 
+        message: 'Supplier ID is required' 
+      });
+    }
+    
+    // Get supplier name
+    const [suppliers] = await req.db.execute(
+      'SELECT company_name FROM customers_suppliers WHERE id = ? AND type = ?',
+      [supplier_id, 'supplier']
+    );
+    
+    if (suppliers.length === 0) {
+      return res.status(400).json({ 
+        message: 'Supplier not found' 
+      });
+    }
+    
+    const supplierName = suppliers[0].company_name;
+    
+    // Generate supplier PO number
+    const supplierPONumber = await generatePONumber(req.db);
+    
+    // Create supplier PO
+    const createdBy = req.user?.id || null;
+    const [result] = await req.db.execute(`
+      INSERT INTO purchase_orders (po_number, order_type, customer_supplier_id, customer_supplier_name, linked_customer_po_id, created_by)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [supplierPONumber, 'supplier', supplier_id, supplierName, id, createdBy]);
+    
+    const supplierPOId = result.insertId;
+    
+    // Copy items from customer PO if items not provided, otherwise use provided items
+    let itemsToAdd = items;
+    if (itemsToAdd.length === 0) {
+      // Get items from customer PO
+      const [customerItems] = await req.db.execute(
+        'SELECT * FROM purchase_order_items WHERE po_id = ?',
+        [id]
+      );
+      
+      // Copy items to supplier PO
+      for (const item of customerItems) {
+        await req.db.execute(`
+          INSERT INTO purchase_order_items (
+            po_id, serial_no, project_no, date_po, part_no, material_no,
+            description, uom, quantity, unit_price, total_price, comments,
+            lead_time, due_date, penalty_percentage, penalty_amount, invoice_no, balance_quantity_undelivered,
+            delivered_quantity, delivered_unit_price, delivered_total_price
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          supplierPOId,
+          item.serial_no,
+          item.project_no,
+          item.date_po,
+          item.part_no,
+          item.material_no,
+          item.description,
+          item.uom,
+          item.quantity,
+          item.unit_price,
+          item.total_price,
+          item.comments,
+          item.lead_time,
+          item.due_date,
+          item.penalty_percentage,
+          item.penalty_amount,
+          item.invoice_no,
+          item.balance_quantity_undelivered,
+          item.delivered_quantity,
+          item.delivered_unit_price,
+          item.delivered_total_price
+        ]);
+      }
+    } else {
+      // Add provided items
+      for (const item of itemsToAdd) {
+        const {
+          serial_no, project_no, date_po, part_no, material_no,
+          description, uom, quantity, unit_price, total_price, comments,
+          lead_time, due_date, penalty_percentage, invoice_no,
+          delivered_quantity, delivered_unit_price, delivered_total_price
+        } = item;
+        
+        await req.db.execute(`
+          INSERT INTO purchase_order_items (
+            po_id, serial_no, project_no, date_po, part_no, material_no,
+            description, uom, quantity, unit_price, total_price, comments,
+            lead_time, due_date, penalty_percentage, penalty_amount, invoice_no, balance_quantity_undelivered,
+            delivered_quantity, delivered_unit_price, delivered_total_price
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          supplierPOId, 
+          serial_no || null, 
+          project_no || null, 
+          date_po || null, 
+          part_no, 
+          material_no,
+          description || null, 
+          uom || null, 
+          parseFloat(quantity) || 0, 
+          parseFloat(unit_price) || 0, 
+          parseFloat(total_price) || (parseFloat(quantity) * parseFloat(unit_price)), 
+          comments || null,
+          lead_time || null,
+          due_date || null,
+          penalty_percentage ? parseFloat(penalty_percentage) : null,
+          penalty_percentage && quantity ? (parseFloat(quantity) * parseFloat(penalty_percentage) / 100) : null,
+          invoice_no || null,
+          delivered_quantity && quantity ? (parseFloat(quantity) - parseFloat(delivered_quantity)) : null,
+          delivered_quantity ? parseFloat(delivered_quantity) : null,
+          delivered_unit_price ? parseFloat(delivered_unit_price) : null,
+          delivered_total_price ? parseFloat(delivered_total_price) : null
+        ]);
+      }
+    }
+    
+    res.status(201).json({
+      message: 'Supplier purchase order created successfully',
+      id: supplierPOId,
+      po_number: supplierPONumber,
+      linked_customer_po_id: id,
+      linked_customer_po_number: customerPO.po_number
+    });
+  } catch (error) {
+    console.error('Error creating supplier PO from customer PO:', error);
+    res.status(500).json({ 
+      message: 'Error creating supplier purchase order',
+      error: error.message 
+    });
   }
 });
 

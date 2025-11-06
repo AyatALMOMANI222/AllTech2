@@ -74,7 +74,9 @@ const validateInventoryItem = [
   body('total_price').optional().isNumeric(),
   body('sold_quantity').optional().isNumeric(),
   body('balance').optional().isNumeric(),
-  body('balance_amount').optional().isNumeric()
+  body('balance_amount').optional().isNumeric(),
+  body('manufacturer_part_number').optional().isString().trim(),
+  body('cost_price').optional().isNumeric()
 ];
 
 // GET /api/inventory - Get all inventory items with filtering
@@ -88,11 +90,11 @@ router.get('/', async (req, res) => {
     
     // Add search filter
     if (search) {
-      const searchCondition = `WHERE serial_no LIKE ? OR project_no LIKE ? OR part_no LIKE ? OR material_no LIKE ? OR description LIKE ?`;
+      const searchCondition = `WHERE serial_no LIKE ? OR project_no LIKE ? OR part_no LIKE ? OR material_no LIKE ? OR description LIKE ? OR manufacturer_part_number LIKE ?`;
       query += ` ${searchCondition}`;
       countQuery += ` ${searchCondition}`;
       const searchParam = `%${search}%`;
-      params = [searchParam, searchParam, searchParam, searchParam, searchParam];
+      params = [searchParam, searchParam, searchParam, searchParam, searchParam, searchParam];
     }
     
     // Add sorting
@@ -148,7 +150,7 @@ router.post('/', validateInventoryItem, async (req, res) => {
     
     const {
       serial_no, project_no, date_po, part_no, material_no, description,
-      uom, quantity, supplier_unit_price
+      uom, quantity, supplier_unit_price, manufacturer_part_number, cost_price
     } = req.body;
     
     // Parse numeric values
@@ -168,11 +170,15 @@ router.post('/', validateInventoryItem, async (req, res) => {
     // 4. balance_amount = balance × supplier_unit_price
     const calculatedBalanceAmount = calculatedBalance * parsedUnitPrice;
     
+    // Parse numeric values for new fields
+    const parsedCostPrice = parseFloat(cost_price) || 0;
+    
     const [result] = await req.db.execute(`
       INSERT INTO inventory (
         serial_no, project_no, date_po, part_no, material_no, description,
-        uom, quantity, supplier_unit_price, total_price, sold_quantity, balance, balance_amount
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        uom, quantity, supplier_unit_price, total_price, sold_quantity, balance, balance_amount,
+        manufacturer_part_number, cost_price
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       serial_no, 
       project_no, 
@@ -186,7 +192,9 @@ router.post('/', validateInventoryItem, async (req, res) => {
       calculatedTotalPrice, 
       calculatedSoldQuantity, 
       calculatedBalance, 
-      calculatedBalanceAmount
+      calculatedBalanceAmount,
+      manufacturer_part_number,
+      parsedCostPrice
     ]);
     
     console.log(`✓ Inventory item created: part_no=${part_no}, material_no=${material_no}, quantity=${parsedQuantity}, balance=${calculatedBalance}, total_price=${calculatedTotalPrice.toFixed(2)}`);
@@ -218,13 +226,14 @@ router.put('/:id', validateInventoryItem, async (req, res) => {
     const { id } = req.params;
     const {
       serial_no, project_no, date_po, part_no, material_no, description,
-      uom, quantity, supplier_unit_price, sold_quantity
+      uom, quantity, supplier_unit_price, sold_quantity, manufacturer_part_number, cost_price
     } = req.body;
     
     // Parse numeric values
     const parsedQuantity = parseFloat(quantity) || 0;
     const parsedUnitPrice = parseFloat(supplier_unit_price) || 0;
     const parsedSoldQuantity = parseFloat(sold_quantity) || 0;
+    const parsedCostPrice = parseFloat(cost_price) || 0;
     
     // AUTOMATIC CALCULATIONS
     // 1. total_price = quantity × supplier_unit_price
@@ -239,7 +248,8 @@ router.put('/:id', validateInventoryItem, async (req, res) => {
     const [result] = await req.db.execute(`
       UPDATE inventory SET
         serial_no = ?, project_no = ?, date_po = ?, part_no = ?, material_no = ?, description = ?,
-        uom = ?, quantity = ?, supplier_unit_price = ?, total_price = ?, sold_quantity = ?, balance = ?, balance_amount = ?
+        uom = ?, quantity = ?, supplier_unit_price = ?, total_price = ?, sold_quantity = ?, balance = ?, balance_amount = ?,
+        manufacturer_part_number = ?, cost_price = ?
       WHERE id = ?
     `, [
       serial_no, 
@@ -254,7 +264,9 @@ router.put('/:id', validateInventoryItem, async (req, res) => {
       calculatedTotalPrice, 
       parsedSoldQuantity, 
       calculatedBalance, 
-      calculatedBalanceAmount, 
+      calculatedBalanceAmount,
+      manufacturer_part_number,
+      parsedCostPrice,
       id
     ]);
     
@@ -357,7 +369,8 @@ router.post('/import', (req, res, next) => {
       try {
         const {
           serial_no, project_no, date_po, part_no, material_no, description,
-          uom, quantity, supplier_unit_price, unit_price, total_price, sold_quantity, balance, balance_amount
+          uom, quantity, supplier_unit_price, unit_price, total_price, sold_quantity, balance, balance_amount,
+          manufacturer_part_number, cost_price
         } = row;
         
         // Skip rows without essential data
@@ -488,12 +501,15 @@ router.post('/import', (req, res, next) => {
           const newTotalPrice = newQuantity * unitPrice;
           const newBalanceAmount = newBalance * unitPrice;
           
+          // Parse cost_price for import
+          const importCostPrice = parseFloat(cost_price) || 0;
+          
           const [result] = await connection.execute(`
           INSERT INTO inventory (
             serial_no, project_no, date_po, part_no, material_no, description,
               uom, quantity, supplier_unit_price, total_price, sold_quantity,
-              balance, balance_amount
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              balance, balance_amount, manufacturer_part_number, cost_price
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             serial_no,
             project_no,
@@ -507,7 +523,9 @@ router.post('/import', (req, res, next) => {
             newTotalPrice,
             newSoldQuantity,
             newBalance,
-            newBalanceAmount
+            newBalanceAmount,
+            manufacturer_part_number,
+            importCostPrice
           ]);
           
           insertedItems.push({

@@ -31,6 +31,9 @@ const PurchaseOrdersManagement = () => {
   const supplierInvoiceModalBodyRef = React.useRef(null);
   const [editingOrder, setEditingOrder] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [showCreateSupplierPOModal, setShowCreateSupplierPOModal] = useState(false);
+  const [selectedCustomerPO, setSelectedCustomerPO] = useState(null);
+  const [selectedSupplierId, setSelectedSupplierId] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showAll, setShowAll] = useState(false);
@@ -109,8 +112,8 @@ const PurchaseOrdersManagement = () => {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
-      ...prev,
-      [name]: value,
+        ...prev,
+        [name]: value,
     }));
   };
 
@@ -249,6 +252,66 @@ const PurchaseOrdersManagement = () => {
   const openSupplierInvoiceView = (invoiceId) => {
     setViewSupplierInvoiceId(invoiceId);
     setShowSupplierInvoiceViewModal(true);
+  };
+
+  const handleCreateSupplierPO = (customerOrder) => {
+    setSelectedCustomerPO(customerOrder);
+    setSelectedSupplierId("");
+    setShowCreateSupplierPOModal(true);
+  };
+
+  const handleSubmitCreateSupplierPO = async () => {
+    if (!selectedSupplierId) {
+      alert("Please select a supplier");
+      return;
+    }
+
+    if (!selectedCustomerPO) {
+      alert("Customer PO not found");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/purchase-orders/${selectedCustomerPO.id}/create-supplier-po`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            supplier_id: selectedSupplierId,
+            items: [], // Empty array means copy items from customer PO
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(
+          `Supplier PO created successfully!\n\nPO Number: ${data.po_number}\nLinked to Customer PO: ${data.linked_customer_po_number}`
+        );
+        setShowCreateSupplierPOModal(false);
+        setSelectedCustomerPO(null);
+        setSelectedSupplierId("");
+        fetchPurchaseOrders();
+      } else {
+        if (data.existing_supplier_po) {
+          alert(
+            `Supplier PO already exists for this customer PO!\n\nExisting Supplier PO: ${data.existing_supplier_po.po_number}`
+          );
+        } else {
+          alert("Error: " + (data.message || "Failed to create supplier PO"));
+        }
+      }
+    } catch (error) {
+      console.error("Error creating supplier PO:", error);
+      alert("Error creating supplier PO");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const printInvoiceOnly = () => {
@@ -1398,6 +1461,7 @@ const PurchaseOrdersManagement = () => {
                             <th>PO Number</th>
                             <th>Type</th>
                             <th>Customer/Supplier</th>
+                            <th>Linked Customer PO</th>
                             <th>Created Date</th>
                             <th>Actions</th>
                           </tr>
@@ -1418,6 +1482,23 @@ const PurchaseOrdersManagement = () => {
                               </td>
                               <td>{order.customer_supplier_name}</td>
                               <td>
+                                {order.linked_customer_po_number ? (
+                                  <span className="badge bg-info" title="Linked Customer PO">
+                                    <i className="fas fa-link me-1"></i>
+                                    {order.linked_customer_po_number}
+                                  </span>
+                                ) : order.linked_supplier_po_number ? (
+                                  <span className="badge bg-success" title="Linked Supplier PO">
+                                    <i className="fas fa-link me-1"></i>
+                                    {order.linked_supplier_po_number}
+                                  </span>
+                                ) : order.order_type === "supplier" ? (
+                                  <span className="text-muted">-</span>
+                                ) : (
+                                  <span className="text-muted">N/A</span>
+                                )}
+                              </td>
+                              <td>
                                 {new Date(
                                   order.created_at
                                 ).toLocaleDateString()}
@@ -1430,6 +1511,41 @@ const PurchaseOrdersManagement = () => {
                                 >
 View Details                                </button>
                                 {order.order_type === "customer" && (
+                                  <>
+                                    {!order.linked_supplier_po_number ? (
+                                      <button
+                                        className="btn btn-sm btn-success me-1"
+                                        onClick={() => handleCreateSupplierPO(order)}
+                                        title="Create Supplier PO"
+                                      >
+                                        <i className="fas fa-plus-circle"></i> Create Supplier PO
+                                      </button>
+                                    ) : (
+                                      <button
+                                        className="btn btn-sm btn-outline-success me-1"
+                                        onClick={async () => {
+                                          // Fetch and view the linked supplier PO
+                                          try {
+                                            const response = await fetch(
+                                              `${API_BASE_URL}/purchase-orders/${order.linked_supplier_po_id}`
+                                            );
+                                            const data = await response.json();
+                                            if (data.order) {
+                                              setSelectedOrder(data);
+                                              setShowDetailsModal(true);
+                                            } else {
+                                              alert("Linked supplier PO not found");
+                                            }
+                                          } catch (error) {
+                                            console.error("Error fetching linked supplier PO:", error);
+                                            alert("Error fetching linked supplier PO");
+                                          }
+                                        }}
+                                        title="View Linked Supplier PO"
+                                      >
+                                        <i className="fas fa-link"></i> View Supplier PO
+                                      </button>
+                                    )}
                                   <button
                                     className="btn btn-sm btn-warning me-1"
                                     onClick={() => handleViewInvoices(order)}
@@ -1437,6 +1553,7 @@ View Details                                </button>
                                   >
                                     View 
                                   </button>
+                                  </>
                                 )}
                                 {order.order_type === "supplier" && (
                                   <button
@@ -1549,18 +1666,18 @@ View Details                                </button>
               <form onSubmit={handleSubmit}>
                 <div className="modal-body">
                   <div className="row">
-                <div className="col-md-6 mb-3">
+                    <div className="col-md-6 mb-3">
                   <label className="form-label">PO Number</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    name="po_number"
+                      <input
+                        type="text"
+                        className="form-control"
+                        name="po_number"
                     value={formData.po_number || ''}
                     onChange={() => {}}
                     placeholder="Will be generated automatically (PO-YYYY-XXX)"
                     disabled
-                  />
-                </div>
+                      />
+                    </div>
                     <div className="col-md-6 mb-3">
                       <label className="form-label">Order Type *</label>
                       <div className="d-flex gap-3">
@@ -1616,30 +1733,30 @@ View Details                                </button>
                   </div>
 
                   {/* Additional Fields */}
-                  <div className="row">
-                    <div className="col-md-6 mb-3">
-                      <label className="form-label">Penalty %</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        className="form-control"
-                        name="penalty_percentage"
-                        value={formData.penalty_percentage || ""}
-                        onChange={handleInputChange}
-                        placeholder="Enter penalty percentage"
-                      />
-                      <small className="form-text text-muted">
+                    <div className="row">
+                      <div className="col-md-6 mb-3">
+                        <label className="form-label">Penalty %</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="form-control"
+                          name="penalty_percentage"
+                          value={formData.penalty_percentage || ""}
+                          onChange={handleInputChange}
+                          placeholder="Enter penalty percentage"
+                        />
+                        <small className="form-text text-muted">
                         Optional penalty percentage (will be used in automatic calculations when invoices are created)
-                      </small>
-                    </div>
-                  </div>
+                        </small>
+                      </div>
+                      </div>
 
                   {/* Info Message */}
                   <div className="alert alert-info mt-3 mb-0">
                     <i className="fas fa-info-circle me-2"></i>
                     <strong>Note:</strong> Status, Delivered Quantity, Delivered Unit Price, and Delivered Total Price 
                     are automatically calculated and updated by the system when invoices are created or updated.
-                  </div>
+                      </div>
                 </div>
                 <div className="modal-footer">
                   <button
@@ -1695,16 +1812,25 @@ View Details                                </button>
                       onChange={(e) => setImportFile(e.target.files[0])}
                     />
                     <div className="form-text">
-                      <strong>Required columns:</strong> SERIAL NO (or
-                      po_number), PROJECT NO, DATE P.O (or date_po), PART NO,
-                      MATERIAL NO, DESCRIPTION, UOM, QUANTITY, UNIT PRICE (or
-                      supplier_unit_price), TOTAL PRICE, LEAD TIME, DUE DATE,
-                      COMMENTS
-                      <br />
-                      {/* <strong>Optional columns:</strong> PENALTY %, PENALTY AMOUNT, INVOICE NO, BALANCE QUANTITY UNDELIVERED<br/> */}
+                      <strong>Required columns (exact match):</strong>
+                      <ul className="mb-2 mt-2" style={{ fontSize: '0.9rem' }}>
+                        <li>Serial No</li>
+                        <li>Project No</li>
+                        <li>Date PO</li>
+                        <li>Part No</li>
+                        <li>Material No</li>
+                        <li>Description</li>
+                        <li>UOM</li>
+                        <li>Quantity</li>
+                        <li>Unit Price</li>
+                        <li>Total Price</li>
+                        <li>Lead Time</li>
+                        <li>Comments</li>
+                      </ul>
                       <small className="text-muted">
-                        Note: Column names are flexible - both formats are
-                        accepted
+                        <i className="fas fa-info-circle me-1"></i>
+                        The Excel file should have these exact column names in the first row. 
+                        If Total Price is missing or zero, it will be calculated as Quantity × Unit Price.
                       </small>
                     </div>
                   </div>
@@ -1939,6 +2065,24 @@ View Details                                </button>
                         {selectedOrder.order.status}
                       </span>
                     </p>
+                    {selectedOrder.order.linked_customer_po_number && (
+                      <p>
+                        <strong>Linked Customer PO:</strong>{" "}
+                        <span className="badge bg-info">
+                          <i className="fas fa-link me-1"></i>
+                          {selectedOrder.order.linked_customer_po_number}
+                        </span>
+                      </p>
+                    )}
+                    {selectedOrder.order.linked_supplier_po_number && (
+                      <p>
+                        <strong>Linked Supplier PO:</strong>{" "}
+                        <span className="badge bg-success">
+                          <i className="fas fa-link me-1"></i>
+                          {selectedOrder.order.linked_supplier_po_number}
+                        </span>
+                      </p>
+                    )}
                   </div>
                   {/* <div className="col-md-6">
                     <h6>Additional Details</h6>
@@ -2272,6 +2416,99 @@ View Details                                </button>
         </div>
       )}
 
+      {/* Create Supplier PO Modal */}
+      {showCreateSupplierPOModal && selectedCustomerPO && (
+        <div className="modal show d-block" tabIndex="-1">
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">
+                  Create Supplier PO from Customer PO
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => {
+                    setShowCreateSupplierPOModal(false);
+                    setSelectedCustomerPO(null);
+                    setSelectedSupplierId("");
+                  }}
+                  disabled={loading}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label">
+                    <strong>Customer PO:</strong>
+                  </label>
+                  <p className="form-control-plaintext">
+                    {selectedCustomerPO.po_number} - {selectedCustomerPO.customer_supplier_name}
+                  </p>
+                </div>
+                <div className="mb-3">
+                  <label htmlFor="supplierSelect" className="form-label">
+                    Select Supplier <span className="text-danger">*</span>
+                  </label>
+                  <select
+                    id="supplierSelect"
+                    className="form-select"
+                    value={selectedSupplierId}
+                    onChange={(e) => setSelectedSupplierId(e.target.value)}
+                    disabled={loading}
+                  >
+                    <option value="">-- Select Supplier --</option>
+                    {customersSuppliers
+                      .filter((cs) => cs.type === "supplier")
+                      .map((supplier) => (
+                        <option key={supplier.id} value={supplier.id}>
+                          {supplier.company_name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="alert alert-info">
+                  <i className="fas fa-info-circle me-2"></i>
+                  This will create a new supplier PO linked to the customer PO above.
+                  All items from the customer PO will be copied to the supplier PO.
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setShowCreateSupplierPOModal(false);
+                    setSelectedCustomerPO(null);
+                    setSelectedSupplierId("");
+                  }}
+                  disabled={loading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-success"
+                  onClick={handleSubmitCreateSupplierPO}
+                  disabled={loading || !selectedSupplierId}
+                >
+                  {loading ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm me-2"></span>
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-plus-circle me-2"></i>
+                      Create Supplier PO
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Backdrop */}
       {(showModal ||
         showImportModal ||
@@ -2280,7 +2517,8 @@ View Details                                </button>
         showInvoicesModal ||
         showInvoiceViewModal ||
         showSupplierInvoicesModal ||
-        showSupplierInvoiceViewModal) && (
+        showSupplierInvoiceViewModal ||
+        showCreateSupplierPOModal) && (
         <div className="modal-backdrop show"></div>
       )}
     </div>

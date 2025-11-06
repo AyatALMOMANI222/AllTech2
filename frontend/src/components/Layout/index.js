@@ -124,6 +124,17 @@ const Layout = ({ children }) => {
               </Link>
             </li>
             
+            <li className="nav-item">
+              <Link 
+                to="/invoices" 
+                className={`nav-link ${isActive('/invoices') ? 'active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <i className="fas fa-file-invoice me-2"></i>
+                Invoices Management
+              </Link>
+            </li>
+            
             {isAdmin() && (
               <li className="nav-item">
                 <Link 
@@ -177,6 +188,7 @@ const Layout = ({ children }) => {
               {location.pathname === '/purchase-orders' && 'Purchase Orders Management'}
               {location.pathname === '/sales-tax-invoice' && 'Sales Tax Invoice'}
               {location.pathname === '/purchase-tax-invoice' && 'Purchase Tax Invoice'}
+              {location.pathname === '/invoices' && 'Invoices Management'}
               {location.pathname === '/users' && 'User Management'}
             </h5>
           </div>

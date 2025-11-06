@@ -164,11 +164,11 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
     const [result] = await connection.execute(`
       INSERT INTO purchase_tax_invoices (
         invoice_number, invoice_date, supplier_id, po_number, project_number,
-        claim_percentage, subtotal, vat_amount, gross_total, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        claim_percentage, subtotal, vat_amount, gross_total, amount_paid, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       invoice_number, invoice_date, supplier_id, po_number, project_number,
-      claim_percentage, subtotal, vatAmount, grossTotal, createdBy
+      claim_percentage, subtotal, vatAmount, grossTotal, amount_paid, createdBy
     ]);
     
     const invoiceId = result.insertId;
@@ -204,8 +204,8 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
         if (projectNoForMatching === null || projectNoForMatching === '') {
           // If project_no is NULL/empty, match only records with NULL/empty project_no
           [existingItems] = await connection.execute(`
-            SELECT id, quantity, sold_quantity, supplier_unit_price
-            FROM inventory 
+          SELECT id, quantity, sold_quantity, supplier_unit_price
+          FROM inventory 
             WHERE (project_no IS NULL OR project_no = '')
               AND part_no = ? 
               AND description = ? 
@@ -249,7 +249,7 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
                 total_price = ?,
                 balance = ?,
                 balance_amount = ?,
-                updated_at = CURRENT_TIMESTAMP
+              updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
           `, [
             newQuantity,
@@ -332,13 +332,8 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
 });
 
 // PUT /api/purchase-tax-invoices/:id - Update purchase tax invoice
-router.put('/:id', authenticateToken, validatePurchaseTaxInvoice, async (req, res) => {
+router.put('/:id', authenticateToken, async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-    
     const { id } = req.params;
     const {
       invoice_number,
@@ -347,8 +342,27 @@ router.put('/:id', authenticateToken, validatePurchaseTaxInvoice, async (req, re
       po_number,
       project_number,
       claim_percentage = 100,
+      amount_paid,
       items = []
     } = req.body;
+    
+    // If only amount_paid is being updated, handle it separately
+    const bodyKeys = Object.keys(req.body);
+    const hasOnlyAmountPaid = bodyKeys.length === 1 && bodyKeys[0] === 'amount_paid';
+    
+    if (hasOnlyAmountPaid) {
+      // Only updating amount_paid
+      const [result] = await req.db.execute(
+        'UPDATE purchase_tax_invoices SET amount_paid = ? WHERE id = ?',
+        [amount_paid || 0, id]
+      );
+      
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: 'Purchase tax invoice not found' });
+      }
+      
+      return res.json({ message: 'Payment amount updated successfully' });
+    }
     
     // Calculate totals according to specifications
     let subtotal = 0;
@@ -368,14 +382,16 @@ router.put('/:id', authenticateToken, validatePurchaseTaxInvoice, async (req, re
     const grossTotal = amountOfClaim + vatAmount;
     
     // Update invoice
+    const amountPaid = amount_paid !== undefined ? amount_paid : null;
     const [result] = await req.db.execute(`
       UPDATE purchase_tax_invoices SET
         invoice_number = ?, invoice_date = ?, supplier_id = ?, po_number = ?,
-        project_number = ?, claim_percentage = ?, subtotal = ?, vat_amount = ?, gross_total = ?
+        project_number = ?, claim_percentage = ?, subtotal = ?, vat_amount = ?, 
+        gross_total = ?, amount_paid = COALESCE(?, amount_paid)
       WHERE id = ?
     `, [
       invoice_number, invoice_date, supplier_id, po_number, project_number,
-      claim_percentage, subtotal, vatAmount, grossTotal, id
+      claim_percentage, subtotal, vatAmount, grossTotal, amountPaid, id
     ]);
     
     if (result.affectedRows === 0) {
@@ -945,35 +961,35 @@ function generateInvoiceHTML(invoice, items) {
         <div class="invoice-header-section">
           <div class="header-row">
             <div class="supplier-info-box">
-              <div class="info-row">
-                <span class="label">Company:</span>
+            <div class="info-row">
+              <span class="label">Company:</span>
                 <span class="value">${invoice.supplier_name || ''}</span>
-              </div>
-              <div class="info-row">
-                <span class="label">Address:</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Address:</span>
                 <span class="value">${invoice.supplier_address || ''}</span>
-              </div>
-              <div class="info-row">
-                <span class="label">Contact:</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Contact:</span>
                 <span class="value">${invoice.supplier_phone || ''}</span>
-              </div>
-              <div class="info-row">
+            </div>
+            <div class="info-row">
                 <span class="label">Email add.:</span>
                 <span class="value">${invoice.supplier_email || ''}</span>
-              </div>
             </div>
-            
+          </div>
+          
             <div class="invoice-details-box">
-              <div class="info-row">
-                <span class="label">Inv. No.:</span>
+            <div class="info-row">
+              <span class="label">Inv. No.:</span>
                 <span class="value">${invoice.invoice_number}</span>
-              </div>
-              <div class="info-row">
-                <span class="label">Inv. Date:</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Inv. Date:</span>
                 <span class="value">${new Date(invoice.invoice_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-              </div>
-              <div class="info-row">
-                <span class="label">Project no.:</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Project no.:</span>
                 <span class="value">${invoice.project_number || ''}</span>
               </div>
             </div>
@@ -983,34 +999,34 @@ function generateInvoiceHTML(invoice, items) {
         <!-- Items Table -->
         <div class="items-section">
           <div class="table-responsive">
-            <table class="items-table">
+        <table class="items-table">
               <thead class="table-header">
-                <tr>
-                  <th>SERI AL NO.</th>
-                  <th>PART NO.</th>
-                  <th>MATERIAL NO.</th>
-                  <th>DESCRIPTION</th>
-                  <th>UOM</th>
-                  <th>QUANTITY</th>
-                  <th>SUPPLIER UNIT PRICE</th>
-                  <th>TOTAL PRICE</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${items.map(item => `
-                  <tr>
+            <tr>
+              <th>SERI AL NO.</th>
+              <th>PART NO.</th>
+              <th>MATERIAL NO.</th>
+              <th>DESCRIPTION</th>
+              <th>UOM</th>
+              <th>QUANTITY</th>
+              <th>SUPPLIER UNIT PRICE</th>
+              <th>TOTAL PRICE</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(item => `
+              <tr>
                     <td>${item.serial_no || ''}</td>
-                    <td>${item.part_no || ''}</td>
-                    <td>${item.material_no || ''}</td>
-                    <td>${item.description || ''}</td>
-                    <td>${item.uom || ''}</td>
+                <td>${item.part_no || ''}</td>
+                <td>${item.material_no || ''}</td>
+                <td>${item.description || ''}</td>
+                <td>${item.uom || ''}</td>
                     <td>${parseFloat(item.quantity).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    <td>${formatCurrency(item.supplier_unit_price)}</td>
-                    <td>${formatCurrency(item.total_price)}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
+                <td>${formatCurrency(item.supplier_unit_price)}</td>
+                <td>${formatCurrency(item.total_price)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
           </div>
         </div>
         

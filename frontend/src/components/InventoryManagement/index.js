@@ -30,7 +30,9 @@ const InventoryManagement = () => {
     uom: '',
     quantity: 0,
     supplier_unit_price: 0.0,
-    sold_quantity: 0
+    sold_quantity: 0,
+    manufacturer_part_number: '',
+    cost_price: 0.0
   });
 
   useEffect(() => {
@@ -133,7 +135,9 @@ const InventoryManagement = () => {
       uom: item.uom || '',
       quantity: item.quantity || 0,
       supplier_unit_price: item.supplier_unit_price || 0.0,
-      sold_quantity: item.sold_quantity || 0
+      sold_quantity: item.sold_quantity || 0,
+      manufacturer_part_number: item.manufacturer_part_number || '',
+      cost_price: item.cost_price || 0.0
     });
     setShowModal(true);
   };
@@ -223,7 +227,9 @@ const InventoryManagement = () => {
       uom: '',
       quantity: 0,
       supplier_unit_price: 0.0,
-      sold_quantity: 0
+      sold_quantity: 0,
+      manufacturer_part_number: '',
+      cost_price: 0.0
     });
     setEditingItem(null);
   };
@@ -325,6 +331,7 @@ const InventoryManagement = () => {
                     <th>Quantity</th>
                     <th>Balance</th>
                     <th>Unit Price</th>
+                    <th>Cost Price</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -343,6 +350,7 @@ const InventoryManagement = () => {
                         </span>
                       </td>
                       <td data-label="Unit Price">${item.supplier_unit_price}</td>
+                      <td data-label="Cost Price">${item.cost_price || 0}</td>
                       <td data-label="Actions">
                         <div className="action-buttons">
                           <button
@@ -476,6 +484,14 @@ const InventoryManagement = () => {
                   <label>Balance Amount</label>
                   <span className="amount">${viewingItem.balance_amount}</span>
                 </div>
+                <div className="detail-item">
+                  <label>Manufacturer Part Number</label>
+                  <span>{viewingItem.manufacturer_part_number || 'N/A'}</span>
+                </div>
+                <div className="detail-item highlight">
+                  <label>Cost Price</label>
+                  <span className="amount">${viewingItem.cost_price || 0}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -582,6 +598,26 @@ const InventoryManagement = () => {
                       min="0"
                     />
                   </div>
+                  <div className="form-group">
+                    <label>Manufacturer Part Number</label>
+                    <input
+                      type="text"
+                      name="manufacturer_part_number"
+                      value={formData.manufacturer_part_number}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Cost Price</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      name="cost_price"
+                      value={formData.cost_price}
+                      onChange={handleInputChange}
+                      min="0"
+                    />
+                  </div>
                   
                   {editingItem && (
                     <div className="form-group">
@@ -656,7 +692,7 @@ const InventoryManagement = () => {
                 </div>
                 <div className="file-info">
                   <p><strong>Required columns:</strong> part_no, material_no, quantity, supplier_unit_price</p>
-                  <p><strong>Optional columns:</strong> serial_no, project_no, date_po, description, uom, sold_quantity</p>
+                  <p><strong>Optional columns:</strong> serial_no, project_no, date_po, description, uom, sold_quantity, manufacturer_part_number, cost_price</p>
                   <p><strong>Auto-calculated:</strong> total_price, balance, balance_amount</p>
                 </div>
               </div>
