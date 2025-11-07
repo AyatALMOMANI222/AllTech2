@@ -71,9 +71,10 @@ async function generatePONumber(db) {
     
     if (existingPOs.length > 0) {
       // Extract numbers from all PO numbers and find the maximum
+      // This ensures we get the correct maximum even with concurrent requests
       for (const po of existingPOs) {
         const poNumber = po.po_number;
-        // Extract the numeric part after the prefix
+        // Extract the numeric part after the prefix (e.g., "PO-2025-" -> get "001", "002", etc.)
         const numberPart = poNumber.replace(prefix, '');
         const number = parseInt(numberPart) || 0;
         if (number > maxNumber) {
@@ -91,14 +92,47 @@ async function generatePONumber(db) {
     return poNumber;
   } catch (error) {
     console.error('Error generating PO number:', error);
-    // Fallback to timestamp-based number if error occurs
-    return `${prefix}${String(Date.now() % 1000).padStart(3, '0')}`;
+    // Fallback: try to get max number using simpler query
+    try {
+      const [existingPOs] = await db.execute(
+        'SELECT po_number FROM purchase_orders WHERE po_number LIKE ? ORDER BY po_number DESC LIMIT 100',
+        [`${prefix}%`]
+      );
+      
+      let maxNumber = 0;
+      if (existingPOs.length > 0) {
+        for (const po of existingPOs) {
+          const poNumber = po.po_number;
+          const numberPart = poNumber.replace(prefix, '');
+          const number = parseInt(numberPart) || 0;
+          if (number > maxNumber) {
+            maxNumber = number;
+          }
+        }
+      }
+      
+      const nextNumber = maxNumber + 1;
+      return `${prefix}${String(nextNumber).padStart(3, '0')}`;
+    } catch (fallbackError) {
+      console.error('Fallback PO number generation also failed:', fallbackError);
+      // Last resort: timestamp-based number
+      return `${prefix}${String(Date.now() % 1000).padStart(3, '0')}`;
+    }
   }
 }
 
 // Validation middleware
 const validatePurchaseOrder = [
-  body('po_number').optional().isString().withMessage('PO Number must be a string'),
+  body('po_number')
+    .optional({ nullable: true, checkFalsy: true })
+    .custom((value) => {
+      // Allow null, undefined, empty string, or valid string
+      if (value === null || value === undefined || value === '') {
+        return true;
+      }
+      return typeof value === 'string';
+    })
+    .withMessage('PO Number must be a string or null'),
   body('order_type').isIn(['customer', 'supplier']).withMessage('Order type must be customer or supplier'),
   body('customer_supplier_id').optional().isString().withMessage('Customer/Supplier ID must be a string')
 ];

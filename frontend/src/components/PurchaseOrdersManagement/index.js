@@ -156,15 +156,11 @@ const PurchaseOrdersManagement = () => {
         : `${API_BASE_URL}/purchase-orders`;
 
       const method = editingOrder ? "PUT" : "POST";
-      // Ensure PO Number is generated automatically on create if missing
-      // For new orders, fetch from database to ensure proper sequence
-      let finalPONumber = formData.po_number;
-      if (!editingOrder && !finalPONumber) {
-        finalPONumber = await fetchNextPONumber();
-      }
+      // For new orders, always let backend generate PO number automatically
+      // This ensures proper sequence without skipping numbers
       const payload = editingOrder
         ? formData
-        : { ...formData, po_number: finalPONumber };
+        : { ...formData, po_number: null }; // Always let backend generate for new orders
 
       const response = await fetch(url, {
         method,
@@ -179,23 +175,13 @@ const PurchaseOrdersManagement = () => {
         setEditingOrder(null);
         // Refresh purchase orders list
         fetchPurchaseOrders();
-        // Update PO number in formData to ensure next PO uses correct sequence (only for new orders)
-        if (!editingOrder) {
-          const nextPONumber = await fetchNextPONumber();
-          setFormData({
-            po_number: nextPONumber,
-            order_type: "customer",
-            customer_supplier_id: "",
-            penalty_percentage: "",
-          });
-        } else {
-          setFormData({
-            po_number: "",
-            order_type: "customer",
-            customer_supplier_id: "",
-            penalty_percentage: "",
-          });
-        }
+        // Reset formData - PO number will be generated automatically when creating new PO
+        setFormData({
+          po_number: "",
+          order_type: "customer",
+          customer_supplier_id: "",
+          penalty_percentage: "",
+        });
         alert(
           editingOrder
             ? "Purchase order updated successfully!"
@@ -344,12 +330,8 @@ const PurchaseOrdersManagement = () => {
         setSelectedSupplierId("");
         // Refresh purchase orders list
         fetchPurchaseOrders();
-        // Update PO number in formData to ensure next PO uses correct sequence
-        const nextPONumber = await fetchNextPONumber();
-        setFormData((prev) => ({
-          ...prev,
-          po_number: nextPONumber,
-        }));
+        // Don't update formData.po_number here - it will be generated automatically when needed
+        // This prevents skipping PO numbers in the sequence
       } else {
         if (data.existing_supplier_po) {
           alert(
@@ -543,11 +525,11 @@ const PurchaseOrdersManagement = () => {
           total_price: (parseFloat(item.unit_price) || 0) * (parseFloat(item.quantity) || 0),
         }));
         setImportedItems(processedItems);
-        // Fetch the next PO number from database to ensure proper sequence
-        const nextPONumber = await fetchNextPONumber();
+        // Leave PO number empty - backend will generate it automatically when saving
+        // This ensures proper sequence without skipping numbers
         setFormData((prev) => ({
           ...prev,
-          po_number: nextPONumber,
+          po_number: "", // Leave empty - backend will generate it
         }));
         setShowVerificationModal(true);
         alert(
@@ -565,10 +547,6 @@ const PurchaseOrdersManagement = () => {
   };
 
   const handleSaveImportedData = async () => {
-    if (!formData.po_number) {
-      alert("Please enter a PO Number");
-      return;
-    }
     if (!formData.customer_supplier_id) {
       alert("Please select a customer/supplier first");
       return;
@@ -576,6 +554,14 @@ const PurchaseOrdersManagement = () => {
 
     setLoading(true);
     try {
+      // Always let backend generate PO number automatically to ensure proper sequence
+      // This prevents skipping numbers in the sequence
+      const payload = {
+        ...formData,
+        po_number: null, // Always let backend generate - ignore any value from formData
+        items: importedItems,
+      };
+      
       const response = await fetch(
         `${API_BASE_URL}/purchase-orders`,
         {
@@ -583,10 +569,7 @@ const PurchaseOrdersManagement = () => {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            ...formData,
-            items: importedItems,
-          }),
+          body: JSON.stringify(payload),
         }
       );
 
@@ -595,10 +578,9 @@ const PurchaseOrdersManagement = () => {
         setImportedItems([]);
         // Refresh purchase orders list
         fetchPurchaseOrders();
-        // Update PO number in formData to ensure next PO uses correct sequence
-        const nextPONumber = await fetchNextPONumber();
+        // Reset formData - PO number will be generated automatically when importing next time
         setFormData({
-          po_number: nextPONumber,
+          po_number: "",
           order_type: "customer",
           customer_supplier_id: "",
           penalty_percentage: "",
@@ -2066,8 +2048,8 @@ View Details                                </button>
                   onClick={handleSaveImportedData}
                   disabled={
                     loading ||
-                    !formData.po_number ||
-                    !formData.customer_supplier_id
+                    !formData.customer_supplier_id ||
+                    importedItems.length === 0
                   }
                 >
                   {loading ? "Saving..." : "Save to Database"}
