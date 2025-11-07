@@ -52,7 +52,7 @@ const PurchaseOrdersManagement = () => {
     penalty_percentage: "",
   });
 
-  // Generate a default PO number in format PO-YYYY-XXX
+  // Generate a default PO number in format PO-YYYY-XXX (fallback using localStorage)
   const generatePONumber = () => {
     const now = new Date();
     const year = now.getFullYear();
@@ -67,6 +67,35 @@ const PurchaseOrdersManagement = () => {
       // Fallback if localStorage is unavailable
       const seq = String(Math.floor(Math.random() * 1000)).padStart(3, '0');
       return `PO-${year}-${seq}`;
+    }
+  };
+
+  // Fetch the next PO number from the database to ensure proper sequence
+  const fetchNextPONumber = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/purchase-orders/next-po-number`, {
+        headers: headers
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return data.po_number;
+      } else {
+        console.warn('Failed to fetch next PO number from API, using fallback');
+        return generatePONumber();
+      }
+    } catch (error) {
+      console.error('Error fetching next PO number:', error);
+      // Fallback to localStorage-based generation if API fails
+      return generatePONumber();
     }
   };
 
@@ -128,9 +157,14 @@ const PurchaseOrdersManagement = () => {
 
       const method = editingOrder ? "PUT" : "POST";
       // Ensure PO Number is generated automatically on create if missing
+      // For new orders, fetch from database to ensure proper sequence
+      let finalPONumber = formData.po_number;
+      if (!editingOrder && !finalPONumber) {
+        finalPONumber = await fetchNextPONumber();
+      }
       const payload = editingOrder
         ? formData
-        : { ...formData, po_number: formData.po_number || generatePONumber() };
+        : { ...formData, po_number: finalPONumber };
 
       const response = await fetch(url, {
         method,
@@ -143,13 +177,25 @@ const PurchaseOrdersManagement = () => {
       if (response.ok) {
         setShowModal(false);
         setEditingOrder(null);
-        setFormData({
-          po_number: "",
-          order_type: "customer",
-          customer_supplier_id: "",
-          penalty_percentage: "",
-        });
+        // Refresh purchase orders list
         fetchPurchaseOrders();
+        // Update PO number in formData to ensure next PO uses correct sequence (only for new orders)
+        if (!editingOrder) {
+          const nextPONumber = await fetchNextPONumber();
+          setFormData({
+            po_number: nextPONumber,
+            order_type: "customer",
+            customer_supplier_id: "",
+            penalty_percentage: "",
+          });
+        } else {
+          setFormData({
+            po_number: "",
+            order_type: "customer",
+            customer_supplier_id: "",
+            penalty_percentage: "",
+          });
+        }
         alert(
           editingOrder
             ? "Purchase order updated successfully!"
@@ -296,7 +342,14 @@ const PurchaseOrdersManagement = () => {
         setShowCreateSupplierPOModal(false);
         setSelectedCustomerPO(null);
         setSelectedSupplierId("");
+        // Refresh purchase orders list
         fetchPurchaseOrders();
+        // Update PO number in formData to ensure next PO uses correct sequence
+        const nextPONumber = await fetchNextPONumber();
+        setFormData((prev) => ({
+          ...prev,
+          po_number: nextPONumber,
+        }));
       } else {
         if (data.existing_supplier_po) {
           alert(
@@ -490,10 +543,11 @@ const PurchaseOrdersManagement = () => {
           total_price: (parseFloat(item.unit_price) || 0) * (parseFloat(item.quantity) || 0),
         }));
         setImportedItems(processedItems);
-        // Generate a default PO number for imported data
+        // Fetch the next PO number from database to ensure proper sequence
+        const nextPONumber = await fetchNextPONumber();
         setFormData((prev) => ({
           ...prev,
-          po_number: generatePONumber(),
+          po_number: nextPONumber,
         }));
         setShowVerificationModal(true);
         alert(
@@ -539,13 +593,16 @@ const PurchaseOrdersManagement = () => {
       if (response.ok) {
         setShowVerificationModal(false);
         setImportedItems([]);
+        // Refresh purchase orders list
+        fetchPurchaseOrders();
+        // Update PO number in formData to ensure next PO uses correct sequence
+        const nextPONumber = await fetchNextPONumber();
         setFormData({
-          po_number: "",
+          po_number: nextPONumber,
           order_type: "customer",
           customer_supplier_id: "",
           penalty_percentage: "",
         });
-        fetchPurchaseOrders();
         alert("Purchase order created successfully with imported data!");
       } else {
         const error = await response.json();

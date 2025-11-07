@@ -63,18 +63,27 @@ async function generatePONumber(db) {
   try {
     // Get all existing PO numbers for the current year
     const [existingPOs] = await db.execute(
-      'SELECT po_number FROM purchase_orders WHERE po_number LIKE ? ORDER BY po_number DESC LIMIT 1',
+      'SELECT po_number FROM purchase_orders WHERE po_number LIKE ?',
       [`${prefix}%`]
     );
     
-    let nextNumber = 1;
+    let maxNumber = 0;
     
     if (existingPOs.length > 0) {
-      // Extract the number from the last PO number
-      const lastPO = existingPOs[0].po_number;
-      const lastNumber = parseInt(lastPO.replace(prefix, '')) || 0;
-      nextNumber = lastNumber + 1;
+      // Extract numbers from all PO numbers and find the maximum
+      for (const po of existingPOs) {
+        const poNumber = po.po_number;
+        // Extract the numeric part after the prefix
+        const numberPart = poNumber.replace(prefix, '');
+        const number = parseInt(numberPart) || 0;
+        if (number > maxNumber) {
+          maxNumber = number;
+        }
+      }
     }
+    
+    // Next number is max + 1
+    const nextNumber = maxNumber + 1;
     
     // Format as PO-YYYY-XXX where XXX is padded with zeros
     const poNumber = `${prefix}${String(nextNumber).padStart(3, '0')}`;
@@ -734,9 +743,9 @@ router.post('/import', (req, res, next) => {
                 }
               }
             } else {
-              const parsedDate = new Date(date_po);
-              if (!isNaN(parsedDate.getTime())) {
-                formattedDatePo = parsedDate.toISOString().split('T')[0];
+            const parsedDate = new Date(date_po);
+            if (!isNaN(parsedDate.getTime())) {
+              formattedDatePo = parsedDate.toISOString().split('T')[0];
               }
             }
           }
@@ -758,9 +767,9 @@ router.post('/import', (req, res, next) => {
                 }
               }
             } else {
-              const parsedDate = new Date(due_date);
-              if (!isNaN(parsedDate.getTime())) {
-                formattedDueDate = parsedDate.toISOString().split('T')[0];
+            const parsedDate = new Date(due_date);
+            if (!isNaN(parsedDate.getTime())) {
+              formattedDueDate = parsedDate.toISOString().split('T')[0];
               }
             }
           }
