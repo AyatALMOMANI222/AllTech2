@@ -2633,7 +2633,7 @@ View Details                                </button>
                               </div>
                               <div className="document-card__actions">
                         <a
-                          href={buildSafeDocumentUrl(document.storage_url)}
+                          href={`https://${buildSafeDocumentUrl(document.storage_url)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="btn btn-sm btn-outline-info"
