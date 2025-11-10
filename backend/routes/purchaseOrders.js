@@ -5,6 +5,12 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 const path = require('path');
 const fs = require('fs');
+const archiver = require('archiver');
+const {
+  uploadFile: uploadToBunny,
+  deleteFile: deleteFromBunny,
+  downloadFile: downloadFromBunny,
+} = require('../services/bunnyStorage');
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, '..', 'uploads');
@@ -36,6 +42,26 @@ const upload = multer({
       cb(new Error('Only Excel and CSV files are allowed'), false);
     }
   }
+});
+
+const PO_DOCUMENT_MAX_FILE_SIZE = parseInt(
+  process.env.PO_DOCUMENT_MAX_FILE_SIZE || `${25 * 1024 * 1024}`,
+  10
+);
+
+const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: PO_DOCUMENT_MAX_FILE_SIZE,
+    files: 10,
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf' || /\.pdf$/i.test(file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed.'), false);
+    }
+  },
 });
 
 // Helper function to convert Excel date serial number to MySQL DATE format
@@ -121,6 +147,8 @@ async function generatePONumber(db) {
   }
 }
 
+const APPROVED_PO_STATUSES = ['approved', 'partially_delivered', 'delivered_completed'];
+
 // Validation middleware
 const validatePurchaseOrder = [
   body('po_number')
@@ -204,6 +232,306 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/purchase-orders/:id - Get single purchase order with items
+router.get('/:id/documents', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [poRows] = await req.db.execute(
+      'SELECT po_number FROM purchase_orders WHERE id = ? LIMIT 1',
+      [id]
+    );
+
+    if (poRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Purchase order not found.',
+      });
+    }
+
+    const [documents] = await req.db.execute(
+      `SELECT id, po_id, document_name, document_type, storage_path, storage_url, uploaded_by, created_at
+       FROM po_documents
+       WHERE po_id = ?
+       ORDER BY created_at DESC`,
+      [id]
+    );
+
+    return res.json({
+      success: true,
+      records: documents,
+    });
+  } catch (error) {
+    console.error('Error fetching purchase order documents:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch purchase order documents.',
+      error: error.message,
+    });
+  }
+});
+
+router.post('/:id/documents', pdfUpload.array('documents', 10), async (req, res) => {
+  const { id } = req.params;
+
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide at least one PDF document to upload.',
+    });
+  }
+
+  let connection;
+  const uploadedRemotePaths = [];
+
+  try {
+    const [poRows] = await req.db.execute(
+      'SELECT id, po_number, status FROM purchase_orders WHERE id = ? LIMIT 1',
+      [id]
+    );
+
+    if (poRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Purchase order not found.',
+      });
+    }
+
+    const po = poRows[0];
+
+    if (!APPROVED_PO_STATUSES.includes(po.status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Documents can only be uploaded for approved purchase orders.',
+      });
+    }
+
+    connection = await req.db.getConnection();
+    await connection.beginTransaction();
+
+    const createdBy = req.user?.id || null;
+    const directory = `purchase-orders/${po.po_number || po.id}`;
+    const insertedRecords = [];
+
+    for (const file of req.files) {
+      const { remotePath, url } = await uploadToBunny(
+        file.buffer,
+        file.originalname,
+        directory,
+        file.mimetype || 'application/pdf'
+      );
+
+      uploadedRemotePaths.push(remotePath);
+
+      const [result] = await connection.execute(
+        `INSERT INTO po_documents
+          (po_id, document_name, document_type, storage_path, storage_url, uploaded_by)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          po.id,
+          file.originalname,
+          'pdf',
+          remotePath,
+          url,
+          createdBy,
+        ]
+      );
+
+      insertedRecords.push({
+        id: result.insertId,
+        po_id: po.id,
+        document_name: file.originalname,
+        document_type: 'pdf',
+        storage_path: remotePath,
+        storage_url: url,
+        uploaded_by: createdBy,
+        created_at: new Date(),
+      });
+    }
+
+    await connection.commit();
+
+    return res.json({
+      success: true,
+      message: 'Documents uploaded successfully.',
+      records: insertedRecords,
+    });
+  } catch (error) {
+    if (connection) {
+      await connection.rollback().catch(() => {});
+    }
+
+    for (const remotePath of uploadedRemotePaths) {
+      try {
+        await deleteFromBunny(remotePath);
+      } catch (cleanupError) {
+        console.error('Failed to cleanup Bunny file after PO upload failure:', cleanupError.message);
+      }
+    }
+
+    console.error('Error uploading purchase order documents:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to upload purchase order documents.',
+      error: error.message,
+    });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+router.post('/:id/documents/export', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [poRows] = await req.db.execute(
+      'SELECT po_number FROM purchase_orders WHERE id = ? LIMIT 1',
+      [id]
+    );
+
+    if (poRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Purchase order not found.',
+      });
+    }
+
+    const poNumber = poRows[0].po_number || `purchase-order-${id}`;
+
+    const [documents] = await req.db.execute(
+      `SELECT id, document_name, storage_path
+       FROM po_documents
+       WHERE po_id = ?
+       ORDER BY created_at ASC`,
+      [id]
+    );
+
+    if (documents.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No documents available for this purchase order.',
+      });
+    }
+
+    const zipName = `${poNumber.replace(/[^A-Za-z0-9-_]+/g, '_')}-documents.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+
+    archive.on('error', (err) => {
+      throw err;
+    });
+
+    archive.pipe(res);
+
+    for (const document of documents) {
+      try {
+        const file = await downloadFromBunny(document.storage_path);
+        const safeName = document.document_name || `purchase-order-document-${document.id}.pdf`;
+        archive.append(file.data, { name: safeName });
+      } catch (error) {
+        console.error(`Failed to add document ${document.id} to archive:`, error.message);
+      }
+    }
+
+    await archive.finalize();
+  } catch (error) {
+    console.error('Error exporting purchase order documents:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to export purchase order documents.',
+        error: error.message,
+      });
+    }
+  }
+});
+
+router.get('/documents/:documentId/download', async (req, res) => {
+  const { documentId } = req.params;
+
+  try {
+    const [documents] = await req.db.execute(
+      `SELECT document_name, storage_path
+       FROM po_documents
+       WHERE id = ? LIMIT 1`,
+      [documentId]
+    );
+
+    if (documents.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Document not found.',
+      });
+    }
+
+    const document = documents[0];
+    const file = await downloadFromBunny(document.storage_path);
+    const fileName = document.document_name || `purchase-order-document-${documentId}.pdf`;
+
+    res.setHeader('Content-Type', file.contentType || 'application/pdf');
+    if (file.contentLength) {
+      res.setHeader('Content-Length', file.contentLength);
+    }
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${encodeURIComponent(fileName)}"`
+    );
+
+    return res.send(file.data);
+  } catch (error) {
+    console.error('Error downloading purchase order document:', error);
+    const statusCode = error.message?.includes('404') ? 404 : 500;
+    return res.status(statusCode).json({
+      success: false,
+      message: 'Failed to download document.',
+      error: error.message,
+    });
+  }
+});
+
+router.delete('/documents/:documentId', async (req, res) => {
+  const { documentId } = req.params;
+
+  try {
+    const [documents] = await req.db.execute(
+      `SELECT storage_path
+       FROM po_documents
+       WHERE id = ? LIMIT 1`,
+      [documentId]
+    );
+
+    if (documents.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Document not found.',
+      });
+    }
+
+    const document = documents[0];
+
+    try {
+      await deleteFromBunny(document.storage_path);
+    } catch (error) {
+      console.error('Failed to delete Bunny file for PO document:', error.message);
+    }
+
+    await req.db.execute('DELETE FROM po_documents WHERE id = ?', [documentId]);
+
+    return res.json({
+      success: true,
+      message: 'Document deleted successfully.',
+    });
+  } catch (error) {
+    console.error('Error deleting purchase order document:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete document.',
+      error: error.message,
+    });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;

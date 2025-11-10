@@ -479,6 +479,129 @@ async function ensureCustomerSupplierDocumentsTable() {
   }
 }
 
+// Auto-migration: Ensure po_documents table has Bunny storage columns
+async function ensurePODocumentsTable() {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS po_documents (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        po_id INT NOT NULL,
+        document_name VARCHAR(255) NOT NULL,
+        document_type ENUM('pdf', 'excel', 'image', 'other') DEFAULT 'pdf',
+        storage_path VARCHAR(500) NOT NULL,
+        storage_url VARCHAR(500) NOT NULL,
+        uploaded_by INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (po_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+        FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+
+    const [documentPathColumns] = await connection.execute(
+      `SHOW COLUMNS FROM po_documents LIKE 'document_path'`
+    );
+
+    if (documentPathColumns.length > 0) {
+      try {
+        await connection.execute(`
+          ALTER TABLE po_documents
+          CHANGE COLUMN document_path storage_path VARCHAR(500) NOT NULL
+        `);
+        console.log('✓ Renamed document_path column to storage_path');
+      } catch (error) {
+        if (
+          error.code === 'ER_BAD_FIELD_ERROR' ||
+          error.message.includes('Unknown column') ||
+          error.message.includes("doesn't exist")
+        ) {
+          // document_path column not present, nothing to rename
+        } else if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+          try {
+            await connection.execute(`
+              UPDATE po_documents
+              SET storage_path = COALESCE(storage_path, document_path)
+              WHERE document_path IS NOT NULL
+            `);
+            await connection.execute(`
+              ALTER TABLE po_documents
+              DROP COLUMN document_path
+            `);
+            console.log('✓ Migrated document_path values and removed legacy column');
+          } catch (migrationError) {
+            console.log('Note: document_path migration check:', migrationError.message);
+          }
+        } else {
+          console.log('Note: document_path rename check:', error.message);
+        }
+      }
+    }
+
+    const [storagePathColumns] = await connection.execute(
+      `SHOW COLUMNS FROM po_documents LIKE 'storage_path'`
+    );
+    if (storagePathColumns.length === 0) {
+      await connection.execute(`
+        ALTER TABLE po_documents
+        ADD COLUMN storage_path VARCHAR(500) NOT NULL AFTER document_name
+      `);
+      console.log('✓ storage_path column added to po_documents table');
+    }
+
+    const [storageUrlColumns] = await connection.execute(
+      `SHOW COLUMNS FROM po_documents LIKE 'storage_url'`
+    );
+    if (storageUrlColumns.length === 0) {
+      await connection.execute(`
+        ALTER TABLE po_documents
+        ADD COLUMN storage_url VARCHAR(500) NOT NULL AFTER storage_path
+      `);
+      console.log('✓ storage_url column added to po_documents table');
+    }
+
+    try {
+      await connection.execute(`
+        ALTER TABLE po_documents
+        MODIFY COLUMN document_type ENUM('pdf', 'excel', 'image', 'other') DEFAULT 'pdf'
+      `);
+    } catch (error) {
+      console.log('Note: document_type column update:', error.message);
+    }
+
+    try {
+      await connection.execute(`
+        UPDATE po_documents
+        SET storage_path = document_path
+        WHERE storage_path IS NULL AND document_path IS NOT NULL
+      `);
+    } catch (error) {
+      if (
+        !(error.code === 'ER_BAD_FIELD_ERROR' || error.message.includes('Unknown column'))
+      ) {
+        console.log('Note: storage_path backfill:', error.message);
+      }
+    }
+
+    try {
+      await connection.execute(`
+        UPDATE po_documents
+        SET storage_url = storage_path
+        WHERE storage_url IS NULL OR storage_url = ''
+      `);
+    } catch (error) {
+      console.log('Note: storage_url backfill:', error.message);
+    }
+
+    console.log('✓ po_documents table ensured');
+  } catch (error) {
+    console.error('Error ensuring po_documents table:', error.message);
+  } finally {
+    if (connection) connection.release();
+  }
+}
+
 // Run migrations on server startup
 ensureInventoryColumns();
 ensureCustomersSuppliersColumns();
@@ -486,6 +609,7 @@ ensurePurchaseOrdersColumns();
 ensureInvoiceColumns();
 ensureWarrantyTable();
 ensureCustomerSupplierDocumentsTable();
+ensurePODocumentsTable();
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));

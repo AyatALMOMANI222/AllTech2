@@ -3,6 +3,7 @@ import "./style.scss";
 import {
   salesTaxInvoicesAPI,
   purchaseTaxInvoicesAPI,
+  purchaseOrderDocumentsAPI,
 } from "../../services/api";
 import SalesTaxInvoice from "../SalesTaxInvoice";
 import PurchaseTaxInvoice from "../PurchaseTaxInvoice";
@@ -29,6 +30,7 @@ const PurchaseOrdersManagement = () => {
   const [showSupplierInvoiceViewModal, setShowSupplierInvoiceViewModal] =
     useState(false);
   const supplierInvoiceModalBodyRef = React.useRef(null);
+const documentFileInputRef = React.useRef(null);
   const [editingOrder, setEditingOrder] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showCreateSupplierPOModal, setShowCreateSupplierPOModal] = useState(false);
@@ -43,6 +45,24 @@ const PurchaseOrdersManagement = () => {
   const [importedItems, setImportedItems] = useState([]);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [typeFilter, setTypeFilter] = useState("all");
+  const [poDocuments, setPODocuments] = useState([]);
+  const [documentFiles, setDocumentFiles] = useState([]);
+  const [documentUploading, setDocumentUploading] = useState(false);
+  const [documentDownloadAllLoading, setDocumentDownloadAllLoading] =
+    useState(false);
+  const [documentDeletingId, setDocumentDeletingId] = useState(null);
+  const [documentDownloadingId, setDocumentDownloadingId] = useState(null);
+  const [documentMessage, setDocumentMessage] = useState({ type: "", text: "" });
+  const [documentLoading, setDocumentLoading] = useState(false);
+
+  const allowedDocumentStatuses = [
+    "approved",
+    "partially_delivered",
+    "delivered_completed",
+  ];
+  const canUploadDocuments =
+    selectedOrder?.order &&
+    allowedDocumentStatuses.includes(selectedOrder.order.status);
   const [searchTerm, setSearchTerm] = useState("");
 
   const [formData, setFormData] = useState({
@@ -240,16 +260,46 @@ const PurchaseOrdersManagement = () => {
 
   const handleViewDetails = async (order) => {
     try {
+      setDocumentLoading(true);
       const response = await fetch(
         `${API_BASE_URL}/purchase-orders/${order.id}`
       );
       const data = await response.json();
       setSelectedOrder(data);
+      setPODocuments(data.documents || []);
+      setDocumentFiles([]);
+      setDocumentMessage({ type: "", text: "" });
+      setDocumentDeletingId(null);
+      setDocumentDownloadingId(null);
+      setDocumentDownloadAllLoading(false);
+      if (documentFileInputRef.current) {
+        documentFileInputRef.current.value = "";
+      }
       setShowDetailsModal(true);
     } catch (error) {
       console.error("Error fetching order details:", error);
       alert("Error fetching order details");
+    } finally {
+      setDocumentLoading(false);
     }
+  };
+
+  const resetDocumentStates = () => {
+    setPODocuments([]);
+    setDocumentFiles([]);
+    setDocumentMessage({ type: "", text: "" });
+    setDocumentDeletingId(null);
+    setDocumentDownloadingId(null);
+    setDocumentDownloadAllLoading(false);
+    if (documentFileInputRef.current) {
+      documentFileInputRef.current.value = "";
+    }
+  };
+
+  const handleCloseDetailsModal = () => {
+    resetDocumentStates();
+    setShowDetailsModal(false);
+    setSelectedOrder(null);
   };
 
   const handleViewInvoices = async (order) => {
@@ -261,6 +311,234 @@ const PurchaseOrdersManagement = () => {
     } catch (err) {
       console.error("Error fetching invoices for PO:", err);
       alert("Error fetching invoices for this PO");
+    }
+  };
+
+  const buildSafeDocumentUrl = (url) => {
+    if (!url) return "#";
+    try {
+      const parsed = new URL(url);
+      const encodedPath = parsed.pathname
+        .split("/")
+        .map((segment) => encodeURIComponent(decodeURIComponent(segment)))
+        .join("/");
+      parsed.pathname = encodedPath;
+      return parsed.toString();
+    } catch (error) {
+      return url;
+    }
+  };
+
+  const refreshPurchaseOrderDocuments = async (poId) => {
+    try {
+      setDocumentLoading(true);
+      const response = await purchaseOrderDocumentsAPI.list(poId);
+      setPODocuments(response.data.records || []);
+    } catch (error) {
+      console.error("Error fetching purchase order documents:", error);
+      setDocumentMessage({
+        type: "error",
+        text:
+          error.response?.data?.message ||
+          "Failed to refresh purchase order documents.",
+      });
+    } finally {
+      setDocumentLoading(false);
+    }
+  };
+
+  const handleDocumentFileChange = (event) => {
+    setDocumentMessage({ type: "", text: "" });
+    const files = Array.from(event.target.files || []);
+    setDocumentFiles(files);
+  };
+
+  const handleClearDocumentSelection = () => {
+    setDocumentFiles([]);
+    if (documentFileInputRef.current) {
+      documentFileInputRef.current.value = "";
+    }
+    setDocumentMessage({ type: "", text: "" });
+  };
+
+  const triggerFileDownload = (blob, fileName) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleUploadPODocuments = async () => {
+    if (!selectedOrder?.order) {
+      setDocumentMessage({
+        type: "error",
+        text: "Purchase order details are not available.",
+      });
+      return;
+    }
+
+    const canUploadDocuments = allowedDocumentStatuses.includes(
+      selectedOrder.order.status
+    );
+
+    if (!canUploadDocuments) {
+      setDocumentMessage({
+        type: "error",
+        text: "Documents can only be uploaded after the PO is approved.",
+      });
+      return;
+    }
+
+    if (documentFiles.length === 0) {
+      setDocumentMessage({
+        type: "error",
+        text: "Please select at least one PDF file to upload.",
+      });
+      return;
+    }
+
+    try {
+      setDocumentUploading(true);
+      setDocumentMessage({ type: "", text: "" });
+
+      await purchaseOrderDocumentsAPI.upload(
+        selectedOrder.order.id,
+        documentFiles
+      );
+
+      setDocumentMessage({
+        type: "success",
+        text: "Documents uploaded successfully.",
+      });
+      handleClearDocumentSelection();
+      refreshPurchaseOrderDocuments(selectedOrder.order.id);
+    } catch (error) {
+      console.error("Error uploading PO documents:", error);
+      setDocumentMessage({
+        type: "error",
+        text:
+          error.response?.data?.message ||
+          "Failed to upload purchase order documents.",
+      });
+    } finally {
+      setDocumentUploading(false);
+    }
+  };
+
+  const handleDownloadDocument = async (document) => {
+    try {
+      setDocumentMessage({ type: "", text: "" });
+      setDocumentDownloadingId(document.id);
+      const response = await purchaseOrderDocumentsAPI.download(document.id);
+      const { data, headers } = response;
+      const contentType = headers?.["content-type"] || "";
+
+      if (contentType.includes("application/json")) {
+        const text = await data.text();
+        let message = "Failed to download the selected document.";
+        try {
+          const parsed = JSON.parse(text);
+          message = parsed.message || message;
+        } catch (_) {
+          /* ignore parse error */
+        }
+        setDocumentMessage({ type: "error", text: message });
+        return;
+      }
+
+      const blob = data instanceof Blob ? data : new Blob([data], { type: "application/pdf" });
+      const fileName =
+        document.document_name || `purchase-order-document-${document.id}.pdf`;
+      triggerFileDownload(blob, fileName);
+    } catch (error) {
+      console.error("Error downloading PO document:", error);
+      setDocumentMessage({
+        type: "error",
+        text:
+          error.response?.data?.message ||
+          "Failed to download the selected document.",
+      });
+    } finally {
+      setDocumentDownloadingId(null);
+    }
+  };
+
+  const handleDownloadAllDocuments = async () => {
+    if (!selectedOrder?.order) return;
+
+    try {
+      setDocumentDownloadAllLoading(true);
+      setDocumentMessage({ type: "", text: "" });
+      const response = await purchaseOrderDocumentsAPI.downloadAll(
+        selectedOrder.order.id
+      );
+      const { data, headers } = response;
+      const contentType = headers?.["content-type"] || "";
+
+      if (contentType.includes("application/json")) {
+        const text = await data.text();
+        let message = "Failed to download purchase order documents.";
+        try {
+          const parsed = JSON.parse(text);
+          message = parsed.message || message;
+        } catch (_) {
+          /* ignore */
+        }
+        setDocumentMessage({ type: "error", text: message });
+        return;
+      }
+
+      const blob =
+        data instanceof Blob ? data : new Blob([data], { type: "application/zip" });
+      const fileName = `${
+        selectedOrder.order.po_number || "purchase-order"
+      }-documents.zip`;
+      triggerFileDownload(blob, fileName);
+    } catch (error) {
+      console.error("Error exporting PO documents:", error);
+      setDocumentMessage({
+        type: "error",
+        text:
+          error.response?.data?.message ||
+          "Failed to download purchase order documents.",
+      });
+    } finally {
+      setDocumentDownloadAllLoading(false);
+    }
+  };
+
+  const handleDeleteDocument = async (document) => {
+    if (
+      !window.confirm(
+        `Delete "${document.document_name || "document"}"? This action cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setDocumentDeletingId(document.id);
+      setDocumentMessage({ type: "", text: "" });
+      await purchaseOrderDocumentsAPI.delete(document.id);
+      setDocumentMessage({
+        type: "success",
+        text: "Document deleted successfully.",
+      });
+      refreshPurchaseOrderDocuments(selectedOrder.order.id);
+    } catch (error) {
+      console.error("Error deleting PO document:", error);
+      setDocumentMessage({
+        type: "error",
+        text:
+          error.response?.data?.message ||
+          "Failed to delete the selected document.",
+      });
+    } finally {
+      setDocumentDeletingId(null);
     }
   };
 
@@ -2072,11 +2350,10 @@ View Details                                </button>
                 <button
                   type="button"
                   className="btn-close"
-                  onClick={() => {
-                    setShowDetailsModal(false);
-                    setSelectedOrder(null);
-                  }}
-                >×</button>
+                  onClick={handleCloseDetailsModal}
+                >
+                  ×
+                </button>
               </div>
               <div className="modal-body">
                 <div className="row mb-4">
@@ -2177,6 +2454,229 @@ View Details                                </button>
                     </tbody>
                   </table>
                 </div>
+
+                <div className="po-documents-section mt-4">
+                  <h6 className="mb-3">Documents Storage</h6>
+                  {documentMessage.text && (
+                    <div
+                      className={`alert alert-${
+                        documentMessage.type === "error" ? "danger" : "success"
+                      } mb-3`}
+                    >
+                      {documentMessage.text}
+                    </div>
+                  )}
+
+                  <div className="documents-upload-card">
+                    <h4>Upload Documents</h4>
+                    <p className="documents-upload-card__hint">
+                      Upload supporting PDF documents for this purchase order.
+                      Only approved or delivered POs can accept documents.
+                    </p>
+                    <div
+                      className={`documents-upload-card__input${
+                        !canUploadDocuments ? " disabled" : ""
+                      }`}
+                    >
+                      <input
+                        ref={documentFileInputRef}
+                        type="file"
+                        accept=".pdf"
+                        multiple
+                        onChange={handleDocumentFileChange}
+                        disabled={!canUploadDocuments || documentUploading}
+                      />
+                      {documentFiles.length > 0 && (
+                        <div className="selected-files-list">
+                          <strong>
+                            Selected ({documentFiles.length}):
+                          </strong>
+                          <ul>
+                            {documentFiles.map((file) => (
+                              <li
+                                key={`${file.name}-${file.lastModified}`}
+                              >
+                                {file.name}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                    {!canUploadDocuments && (
+                      <p className="documents-upload-card__notice text-warning mt-2 mb-0">
+                        Documents can be uploaded once this purchase order is approved.
+                      </p>
+                    )}
+                    <div className="documents-upload-card__actions">
+                      <button
+                        className="btn btn-outline-secondary"
+                        type="button"
+                        onClick={handleClearDocumentSelection}
+                        disabled={documentUploading}
+                      >
+                        Clear Selection
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        onClick={handleUploadPODocuments}
+                        disabled={
+                          documentUploading ||
+                          documentFiles.length === 0 ||
+                          !canUploadDocuments
+                        }
+                      >
+                        {documentUploading ? (
+                          <>
+                            <span className="spinner-border spinner-border-sm me-2" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <i className="fas fa-cloud-upload-alt me-2"></i>
+                            Upload PDFs
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="documents-table-card mt-4">
+                    <div className="documents-table-card__header">
+                      <div>
+                        <h4>
+                          Stored Documents{" "}
+                          {poDocuments.length > 0 ? (
+                            <span>({poDocuments.length})</span>
+                          ) : null}
+                        </h4>
+                        <p className="documents-table-card__subtitle">
+                          Open, download, or remove uploaded documents without leaving this page.
+                        </p>
+                      </div>
+                      {poDocuments.length > 0 && (
+                        <div className="documents-table-card__actions">
+                          <button
+                            className="btn btn-outline-success"
+                            type="button"
+                            onClick={handleDownloadAllDocuments}
+                            disabled={documentDownloadAllLoading}
+                          >
+                            {documentDownloadAllLoading ? (
+                              <>
+                                <span className="spinner-border spinner-border-sm me-2" />
+                                Preparing...
+                              </>
+                            ) : (
+                              <>
+                                <i className="fas fa-file-archive me-2"></i>
+                                Download All
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="documents-collection">
+                      {documentLoading ? (
+                        <div className="documents-collection__placeholder">
+                          <div
+                            className="spinner-border text-primary"
+                            role="status"
+                          >
+                            <span className="visually-hidden">Loading...</span>
+                          </div>
+                          <p className="mt-2 text-muted">
+                            Fetching stored documents...
+                          </p>
+                        </div>
+                      ) : poDocuments.length === 0 ? (
+                        <div className="documents-collection__placeholder">
+                          <i className="far fa-folder-open mb-3"></i>
+                          <p className="mb-1">No documents uploaded yet.</p>
+                          <p className="text-muted mb-0">
+                            Use the upload section above to attach PDF documents.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="documents-grid">
+                          {poDocuments.map((document) => (
+                            <div className="document-card" key={document.id}>
+                              <div className="document-card__icon">
+                                <i className="far fa-file-pdf"></i>
+                              </div>
+                              <div className="document-card__content">
+                                <div className="document-card__title">
+                                  <h5
+                                    title={
+                                      document.document_name ||
+                                      "Untitled Document"
+                                    }
+                                  >
+                                    {document.document_name ||
+                                      "Untitled Document"}
+                                  </h5>
+                                  <span className="document-card__type">
+                                    {document.document_type || "PDF"}
+                                  </span>
+                                </div>
+                                <p className="document-card__meta">
+                                  Uploaded{" "}
+                                  {document.created_at
+                                    ? new Date(
+                                        document.created_at
+                                      ).toLocaleString()
+                                    : "N/A"}
+                                </p>
+                              </div>
+                              <div className="document-card__actions">
+                        <a
+                          href={buildSafeDocumentUrl(document.storage_url)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-sm btn-outline-info"
+                        >
+                                  <i className="fas fa-external-link-alt"></i>
+                                  <span>Open</span>
+                                </a>
+                                <button
+                                  className="btn btn-sm btn-outline-primary"
+                                  type="button"
+                                  onClick={() => handleDownloadDocument(document)}
+                                  disabled={
+                                    documentDownloadingId === document.id
+                                  }
+                                >
+                                  {documentDownloadingId === document.id ? (
+                                    <span className="spinner-border spinner-border-sm" />
+                                  ) : (
+                                    <i className="fas fa-download"></i>
+                                  )}
+                                  <span>Download</span>
+                                </button>
+                                <button
+                                  className="btn btn-sm btn-outline-danger"
+                                  type="button"
+                                  onClick={() => handleDeleteDocument(document)}
+                                  disabled={documentDeletingId === document.id}
+                                >
+                                  {documentDeletingId === document.id ? (
+                                    <span className="spinner-border spinner-border-sm" />
+                                  ) : (
+                                    <i className="fas fa-trash-alt"></i>
+                                  )}
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="modal-footer">
                 <button
@@ -2198,10 +2698,7 @@ View Details                                </button>
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => {
-                    setShowDetailsModal(false);
-                    setSelectedOrder(null);
-                  }}
+                  onClick={handleCloseDetailsModal}
                 >
                   Close
                 </button>

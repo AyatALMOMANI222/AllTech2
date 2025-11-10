@@ -165,4 +165,28 @@ export const warrantyAPI = {
   },
 };
 
+export const purchaseOrderDocumentsAPI = {
+  list: (poId) => api.get(`/purchase-orders/${poId}/documents`),
+  upload: (poId, files) => {
+    const formData = new FormData();
+    files.forEach((file) => formData.append('documents', file));
+    return api.post(`/purchase-orders/${poId}/documents`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+  download: (documentId) =>
+    api.get(`/purchase-orders/documents/${documentId}/download`, {
+      responseType: 'blob',
+    }),
+  downloadAll: (poId) =>
+    api.post(
+      `/purchase-orders/${poId}/documents/export`,
+      {},
+      { responseType: 'blob' }
+    ),
+  delete: (documentId) => api.delete(`/purchase-orders/documents/${documentId}`),
+};
+
 export default api;
