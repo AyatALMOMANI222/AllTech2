@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { customersSuppliersAPI } from '../../services/api';
 import CustomerSupplierForm from '../CustomerSupplierForm';
+import CustomerSupplierDocumentsModal from './CustomerSupplierDocumentsModal';
 import './style.scss';
 
 const CustomerSupplierManagement = () => {
@@ -14,6 +15,8 @@ const CustomerSupplierManagement = () => {
   const [filterType, setFilterType] = useState('');
   const [viewingRecord, setViewingRecord] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [showDocumentsModal, setShowDocumentsModal] = useState(false);
+  const [documentsRecord, setDocumentsRecord] = useState(null);
 
   useEffect(() => {
     fetchRecords();
@@ -101,6 +104,19 @@ const CustomerSupplierManagement = () => {
   const handleCloseViewModal = () => {
     setShowViewModal(false);
     setViewingRecord(null);
+  };
+
+  const handleOpenDocuments = (record) => {
+    setDocumentsRecord(record);
+    setShowDocumentsModal(true);
+  };
+
+  const handleCloseDocumentsModal = (refresh = false) => {
+    setShowDocumentsModal(false);
+    setDocumentsRecord(null);
+    if (refresh) {
+      fetchRecords();
+    }
   };
 
   if (loading) {
@@ -330,6 +346,18 @@ const CustomerSupplierManagement = () => {
                 Close
               </button>
               <button
+                className="btn btn-info"
+                onClick={() => {
+                  const recordToOpen = viewingRecord;
+                  handleCloseViewModal();
+                  handleOpenDocuments(recordToOpen);
+                }}
+                type="button"
+              >
+                <i className="fas fa-file-upload me-2"></i>
+                Upload Documents
+              </button>
+              <button
                 className="btn btn-primary"
                 onClick={() => {
                   handleCloseViewModal();
@@ -342,6 +370,13 @@ const CustomerSupplierManagement = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {showDocumentsModal && documentsRecord && (
+        <CustomerSupplierDocumentsModal
+          record={documentsRecord}
+          onClose={handleCloseDocumentsModal}
+        />
       )}
     </div>
   );

@@ -135,6 +135,17 @@ const Layout = ({ children }) => {
               </Link>
             </li>
             
+            <li className="nav-item">
+              <Link 
+                to="/warranty" 
+                className={`nav-link ${isActive('/warranty') ? 'active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <i className="fas fa-shield-alt me-2"></i>
+                Warranty Management
+              </Link>
+            </li>
+            
             {isAdmin() && (
               <li className="nav-item">
                 <Link 
@@ -189,6 +200,7 @@ const Layout = ({ children }) => {
               {location.pathname === '/sales-tax-invoice' && 'Sales Tax Invoice'}
               {location.pathname === '/purchase-tax-invoice' && 'Purchase Tax Invoice'}
               {location.pathname === '/invoices' && 'Invoices Management'}
+              {location.pathname === '/warranty' && 'Warranty Management'}
               {location.pathname === '/users' && 'User Management'}
             </h5>
           </div>

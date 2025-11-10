@@ -372,6 +372,33 @@ async function initializeDatabase() {
       }
     }
 
+    // Create warranty_management table
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS warranty_management (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        sr_no VARCHAR(100),
+        part_no VARCHAR(100),
+        material_no VARCHAR(100),
+        description TEXT,
+        project_no VARCHAR(100),
+        part_cost DECIMAL(10,2) DEFAULT 0.00,
+        serial_number VARCHAR(100),
+        warranty_start_date DATE,
+        warranty_end_date DATE,
+        remarks TEXT,
+        warranty_type ENUM('sales', 'purchase') NOT NULL DEFAULT 'sales',
+        linked_po_id INT,
+        linked_invoice_id INT,
+        linked_invoice_type ENUM('sales', 'purchase'),
+        created_by INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (linked_po_id) REFERENCES purchase_orders(id) ON DELETE SET NULL,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    console.log('✓ Warranty Management table created');
+
     // Insert default admin user
     const bcrypt = require('bcryptjs');
     const hashedPassword = await bcrypt.hash('admin123', 10);
@@ -384,7 +411,7 @@ async function initializeDatabase() {
     console.log('\n==============================================');
     console.log('✅ Database initialization completed successfully!');
     console.log('==============================================');
-    console.log('✓ All 10 tables created');
+    console.log('✓ All 11 tables created');
     console.log('✓ Default admin user created:');
     console.log('   Username: admin');
     console.log('   Password: admin123');

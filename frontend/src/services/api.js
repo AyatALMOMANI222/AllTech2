@@ -66,6 +66,31 @@ export const customersSuppliersAPI = {
   delete: (id) => api.delete(`/customers-suppliers/${id}`),
 };
 
+export const customerSupplierDocumentsAPI = {
+  list: (customerSupplierId) => api.get(`/customer-supplier-documents/${customerSupplierId}`),
+  upload: (customerSupplierId, files, documentType = 'Other') => {
+    const formData = new FormData();
+    files.forEach((file) => formData.append('documents', file));
+    formData.append('documentType', documentType);
+    return api.post(`/customer-supplier-documents/${customerSupplierId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+  delete: (documentId) => api.delete(`/customer-supplier-documents/item/${documentId}`),
+  download: (documentId) =>
+    api.get(`/customer-supplier-documents/item/${documentId}/download`, {
+      responseType: 'blob',
+    }),
+  export: (documentIds) =>
+    api.post(
+      `/customer-supplier-documents/export`,
+      { documentIds },
+      { responseType: 'blob' }
+    ),
+};
+
 // Sales Tax Invoices API
 export const salesTaxInvoicesAPI = {
   getAll: (params = {}) => api.get('/sales-tax-invoices', { params }),
@@ -118,6 +143,25 @@ export const databaseDashboardAPI = {
       responseType: 'blob'
     });
     return response.data;
+  },
+};
+
+// Warranty API
+export const warrantyAPI = {
+  getAll: (params = {}) => api.get('/warranty', { params }),
+  getById: (id) => api.get(`/warranty/${id}`),
+  create: (data) => api.post('/warranty', data),
+  update: (id, data) => api.put(`/warranty/${id}`, data),
+  delete: (id) => api.delete(`/warranty/${id}`),
+  import: (file, warrantyType) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('warranty_type', warrantyType);
+    return api.post('/warranty/import', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
   },
 };
 

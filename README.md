@@ -108,6 +108,13 @@ The frontend will run on `http://localhost:3000`
 - `PUT /api/customers-suppliers/:id` - Update record
 - `DELETE /api/customers-suppliers/:id` - Delete record
 
+### Storage (Bunny.net)
+- `POST /api/storage/upload` - Upload a file (use `multipart/form-data` with a `file` field and optional `directory`)
+- `GET /api/storage/files/<path>` - Retrieve a stored file (append `?download=true` to force download)
+- `DELETE /api/storage/files/<path>` - Delete a stored file
+
+Successful uploads return the canonical storage path together with the CDN URL derived from `BUNNY_STORAGE_URL`.
+
 ## Database Schema
 
 ### Users Table
@@ -146,7 +153,20 @@ DB_USERNAME=root
 DB_PASSWORD=
 CORS_ORIGIN=http://localhost:3000
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+BUNNY_STORAGE_HOSTNAME=storage.bunnycdn.com
+BUNNY_STORAGE_USERNAME=your-storage-zone
+BUNNY_STORAGE_PASSWORD=your-storage-access-key
+BUNNY_STORAGE_URL=https://your-cdn-pullzone.b-cdn.net
 ```
+
+### Bunny.net Storage Integration
+
+- `BUNNY_STORAGE_HOSTNAME`: Bunny.net storage hostname (for example, `storage.bunnycdn.com`).
+- `BUNNY_STORAGE_USERNAME`: The storage zone name.
+- `BUNNY_STORAGE_PASSWORD`: Storage access key (sent as the `AccessKey` header).
+- `BUNNY_STORAGE_URL`: Public CDN base URL used to serve uploaded files.
+
+All four variables are required. On Railway, add them through **Variables**—the backend will refuse Bunny operations if any are missing.
 
 ## Project Structure
 

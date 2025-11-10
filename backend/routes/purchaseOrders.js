@@ -116,7 +116,7 @@ async function generatePONumber(db) {
     } catch (fallbackError) {
       console.error('Fallback PO number generation also failed:', fallbackError);
       // Last resort: timestamp-based number
-      return `${prefix}${String(Date.now() % 1000).padStart(3, '0')}`;
+    return `${prefix}${String(Date.now() % 1000).padStart(3, '0')}`;
     }
   }
 }

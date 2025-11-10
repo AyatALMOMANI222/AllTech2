@@ -292,11 +292,200 @@ async function ensureInvoiceColumns() {
   }
 }
 
+// Auto-migration: Ensure warranty_management table exists
+async function ensureWarrantyTable() {
+  try {
+    const connection = await pool.getConnection();
+    
+    // Check if warranty_management table exists
+    const [tables] = await connection.execute(`
+      SELECT COUNT(*) as count 
+      FROM information_schema.tables 
+      WHERE table_schema = DATABASE() 
+      AND table_name = 'warranty_management'
+    `);
+    
+    if (tables[0].count === 0) {
+      console.log('Creating warranty_management table...');
+      // Create warranty_management table
+      await connection.execute(`
+        CREATE TABLE IF NOT EXISTS warranty_management (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          sr_no VARCHAR(100),
+          part_no VARCHAR(100),
+          material_no VARCHAR(100),
+          description TEXT,
+          project_no VARCHAR(100),
+          part_cost DECIMAL(10,2) DEFAULT 0.00,
+          serial_number VARCHAR(100),
+          warranty_start_date DATE,
+          warranty_end_date DATE,
+          remarks TEXT,
+          warranty_type ENUM('sales', 'purchase') NOT NULL DEFAULT 'sales',
+          linked_po_id INT,
+          linked_invoice_id INT,
+          linked_invoice_type ENUM('sales', 'purchase'),
+          created_by INT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          FOREIGN KEY (linked_po_id) REFERENCES purchase_orders(id) ON DELETE SET NULL,
+          FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+      `);
+      console.log('✓ warranty_management table created');
+    } else {
+      console.log('✓ warranty_management table already exists');
+    }
+    
+    connection.release();
+  } catch (error) {
+    console.error('Error checking/creating warranty_management table:', error.message);
+    // Try to create table without foreign keys if they fail
+    try {
+      const connection = await pool.getConnection();
+      await connection.execute(`
+        CREATE TABLE IF NOT EXISTS warranty_management (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          sr_no VARCHAR(100),
+          part_no VARCHAR(100),
+          material_no VARCHAR(100),
+          description TEXT,
+          project_no VARCHAR(100),
+          part_cost DECIMAL(10,2) DEFAULT 0.00,
+          serial_number VARCHAR(100),
+          warranty_start_date DATE,
+          warranty_end_date DATE,
+          remarks TEXT,
+          warranty_type ENUM('sales', 'purchase') NOT NULL DEFAULT 'sales',
+          linked_po_id INT,
+          linked_invoice_id INT,
+          linked_invoice_type ENUM('sales', 'purchase'),
+          created_by INT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('✓ warranty_management table created (without foreign keys)');
+      connection.release();
+    } catch (fallbackError) {
+      console.error('Error creating warranty_management table (fallback):', fallbackError.message);
+    }
+  }
+}
+
+// Auto-migration: Ensure customer_supplier_documents table exists
+async function ensureCustomerSupplierDocumentsTable() {
+  try {
+    const connection = await pool.getConnection();
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS customer_supplier_documents (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        customer_supplier_id VARCHAR(50) NOT NULL,
+        file_name VARCHAR(255),
+        file_type VARCHAR(100),
+        document_type VARCHAR(100) DEFAULT 'Other',
+        storage_path VARCHAR(500) NOT NULL,
+        storage_url VARCHAR(500) NOT NULL,
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_supplier_id) REFERENCES customers_suppliers(id) ON DELETE CASCADE
+      )
+    `);
+
+    try {
+      await connection.execute(`
+        ALTER TABLE customer_supplier_documents
+        CHANGE COLUMN file_path storage_path VARCHAR(500) NOT NULL
+      `);
+      console.log('✓ Renamed file_path column to storage_path');
+    } catch (error) {
+      if (
+        error.code === 'ER_BAD_FIELD_ERROR' ||
+        error.message.includes('Unknown column') ||
+        error.message.includes("doesn't exist")
+      ) {
+        // file_path column not present, nothing to rename
+      } else if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+        try {
+          await connection.execute(`
+            UPDATE customer_supplier_documents
+            SET storage_path = COALESCE(storage_path, file_path)
+            WHERE file_path IS NOT NULL
+          `);
+          await connection.execute(`
+            ALTER TABLE customer_supplier_documents
+            DROP COLUMN file_path
+          `);
+          console.log('✓ Migrated file_path values and removed legacy column');
+        } catch (migrationError) {
+          console.log('Note: file_path migration check:', migrationError.message);
+        }
+      } else {
+        console.log('Note: file_path rename check:', error.message);
+      }
+    }
+
+    try {
+      await connection.execute(`
+        ALTER TABLE customer_supplier_documents
+        ADD COLUMN document_type VARCHAR(100) DEFAULT 'Other' AFTER file_type
+      `);
+      console.log('✓ document_type column added to customer_supplier_documents table');
+    } catch (error) {
+      if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+        // column already exists
+      } else {
+        console.log('Note: document_type column check:', error.message);
+      }
+    }
+
+    try {
+      await connection.execute(`
+        ALTER TABLE customer_supplier_documents
+        CHANGE COLUMN document_name file_name VARCHAR(255)
+      `);
+      console.log('✓ Renamed document_name column to file_name');
+    } catch (error) {
+      if (
+        error.code === 'ER_BAD_FIELD_ERROR' ||
+        error.message.includes('Unknown column') ||
+        error.message.includes("doesn't exist")
+      ) {
+        // document_name column not present, nothing to rename
+      } else if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+        try {
+          await connection.execute(`
+            UPDATE customer_supplier_documents
+            SET file_name = COALESCE(file_name, document_name)
+            WHERE document_name IS NOT NULL
+          `);
+          await connection.execute(`
+            ALTER TABLE customer_supplier_documents
+            DROP COLUMN document_name
+          `);
+          console.log('✓ Migrated document_name values and removed legacy column');
+        } catch (migrationError) {
+          console.log('Note: document_name migration check:', migrationError.message);
+        }
+      } else {
+        console.log('Note: document_name rename check:', error.message);
+      }
+    }
+
+    connection.release();
+    console.log('✓ customer_supplier_documents table ensured');
+  } catch (error) {
+    console.error('Error ensuring customer_supplier_documents table:', error.message);
+  }
+}
+
 // Run migrations on server startup
 ensureInventoryColumns();
 ensureCustomersSuppliersColumns();
 ensurePurchaseOrdersColumns();
 ensureInvoiceColumns();
+ensureWarrantyTable();
+ensureCustomerSupplierDocumentsTable();
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
@@ -308,6 +497,9 @@ app.use('/api/database-dashboard', require('./routes/databaseDashboard'));
 app.use('/api/purchase-orders', require('./routes/purchaseOrders'));
 app.use('/api/sales-tax-invoices', require('./routes/salesTaxInvoices'));
 app.use('/api/purchase-tax-invoices', require('./routes/purchaseTaxInvoices'));
+app.use('/api/warranty', require('./routes/warranty'));
+app.use('/api/storage', require('./routes/storage'));
+app.use('/api/customer-supplier-documents', require('./routes/customerSupplierDocuments'));
 
 // Health check endpoint with database connectivity test
 app.get('/api/health', async (req, res) => {
@@ -381,6 +573,21 @@ app.get('/api/initialize-database', async (req, res) => {
         console.log('Note: country column check:', error.message);
       }
     }
+
+    // Create customer_supplier_documents table
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS customer_supplier_documents (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        customer_supplier_id VARCHAR(50) NOT NULL,
+        file_name VARCHAR(255),
+        file_type VARCHAR(100),
+        document_type VARCHAR(100) DEFAULT 'Other',
+        storage_path VARCHAR(500) NOT NULL,
+        storage_url VARCHAR(500) NOT NULL,
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_supplier_id) REFERENCES customers_suppliers(id) ON DELETE CASCADE
+      )
+    `);
 
     // Create inventory table
     await connection.execute(`
@@ -624,6 +831,64 @@ app.get('/api/initialize-database', async (req, res) => {
       )
     `);
 
+    // Create warranty_management table
+    try {
+      await connection.execute(`
+        CREATE TABLE IF NOT EXISTS warranty_management (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          sr_no VARCHAR(100),
+          part_no VARCHAR(100),
+          material_no VARCHAR(100),
+          description TEXT,
+          project_no VARCHAR(100),
+          part_cost DECIMAL(10,2) DEFAULT 0.00,
+          serial_number VARCHAR(100),
+          warranty_start_date DATE,
+          warranty_end_date DATE,
+          remarks TEXT,
+          warranty_type ENUM('sales', 'purchase') NOT NULL DEFAULT 'sales',
+          linked_po_id INT,
+          linked_invoice_id INT,
+          linked_invoice_type ENUM('sales', 'purchase'),
+          created_by INT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          FOREIGN KEY (linked_po_id) REFERENCES purchase_orders(id) ON DELETE SET NULL,
+          FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+        )
+      `);
+      console.log('✓ Warranty Management table created');
+    } catch (error) {
+      // If foreign keys fail, create without them
+      try {
+        await connection.execute(`
+          CREATE TABLE IF NOT EXISTS warranty_management (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            sr_no VARCHAR(100),
+            part_no VARCHAR(100),
+            material_no VARCHAR(100),
+            description TEXT,
+            project_no VARCHAR(100),
+            part_cost DECIMAL(10,2) DEFAULT 0.00,
+            serial_number VARCHAR(100),
+            warranty_start_date DATE,
+            warranty_end_date DATE,
+            remarks TEXT,
+            warranty_type ENUM('sales', 'purchase') NOT NULL DEFAULT 'sales',
+            linked_po_id INT,
+            linked_invoice_id INT,
+            linked_invoice_type ENUM('sales', 'purchase'),
+            created_by INT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )
+        `);
+        console.log('✓ Warranty Management table created (without foreign keys)');
+      } catch (fallbackError) {
+        console.error('Error creating warranty_management table:', fallbackError.message);
+      }
+    }
+
     // Insert default admin user
     const hashedPassword = await bcrypt.hash('admin123', 10);
     await connection.execute(`
@@ -646,7 +911,9 @@ app.get('/api/initialize-database', async (req, res) => {
         'sales_tax_invoices',
         'sales_tax_invoice_items',
         'purchase_tax_invoices',
-        'purchase_tax_invoice_items'
+        'purchase_tax_invoice_items',
+        'warranty_management',
+        'customer_supplier_documents'
       ],
       adminUser: {
         username: 'admin',
