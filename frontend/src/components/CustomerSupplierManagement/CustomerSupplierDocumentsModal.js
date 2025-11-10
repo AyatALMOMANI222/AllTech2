@@ -299,7 +299,6 @@ const CustomerSupplierDocumentsModal = ({ record, onClose }) => {
                       <div className="document-card__actions">
                         <a
                          href={`https://${buildSafeUrl(document.storage_url)}`}
-
                           target="_blank"
                           rel="noopener noreferrer"
                           className="btn btn-sm btn-outline-info"
