@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import formatCurrency from '../../utils/formatCurrency';
 import './style.scss';
 
 // API base URL - use environment variable or detect production
@@ -349,8 +350,12 @@ const InventoryManagement = () => {
                           {item.balance}
                         </span>
                       </td>
-                      <td data-label="Unit Price">${item.supplier_unit_price}</td>
-                      <td data-label="Cost Price">${item.cost_price || 0}</td>
+                      <td data-label="Unit Price">
+                        {formatCurrency(item.supplier_unit_price)}
+                      </td>
+                      <td data-label="Cost Price">
+                        {formatCurrency(item.cost_price)}
+                      </td>
                       <td data-label="Actions">
                         <div className="action-buttons">
                           <button
@@ -466,11 +471,13 @@ const InventoryManagement = () => {
                 </div>
                 <div className="detail-item highlight">
                   <label>Supplier Unit Price</label>
-                  <span>${viewingItem.supplier_unit_price}</span>
+                  <span>{formatCurrency(viewingItem.supplier_unit_price)}</span>
                 </div>
                 <div className="detail-item highlight">
                   <label>Total Price</label>
-                  <span className="amount">${viewingItem.total_price}</span>
+                  <span className="amount">
+                    {formatCurrency(viewingItem.total_price)}
+                  </span>
                 </div>
                 <div className="detail-item highlight">
                   <label>Sold Quantity</label>
@@ -482,7 +489,9 @@ const InventoryManagement = () => {
                 </div>
                 <div className="detail-item highlight">
                   <label>Balance Amount</label>
-                  <span className="amount">${viewingItem.balance_amount}</span>
+                  <span className="amount">
+                    {formatCurrency(viewingItem.balance_amount)}
+                  </span>
                 </div>
                 <div className="detail-item">
                   <label>Manufacturer Part Number</label>
@@ -490,7 +499,9 @@ const InventoryManagement = () => {
                 </div>
                 <div className="detail-item highlight">
                   <label>Cost Price</label>
-                  <span className="amount">${viewingItem.cost_price || 0}</span>
+                  <span className="amount">
+                    {formatCurrency(viewingItem.cost_price)}
+                  </span>
                 </div>
               </div>
             </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { salesTaxInvoicesAPI, purchaseTaxInvoicesAPI } from '../../services/api';
+import formatCurrency from '../../utils/formatCurrency';
 import SalesTaxInvoice from '../SalesTaxInvoice';
 import PurchaseTaxInvoice from '../PurchaseTaxInvoice';
 import './style.scss';
@@ -450,25 +451,10 @@ const InvoicesManagement = () => {
                                   <td>{invoice.po_number || '-'}</td>
                                 </>
                               )}
+                              <td>{formatCurrency(invoice.subtotal)}</td>
+                              <td>{formatCurrency(invoice.vat_amount)}</td>
                               <td>
-                                AED {parseFloat(invoice.subtotal || 0).toLocaleString('en-US', {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2
-                                })}
-                              </td>
-                              <td>
-                                AED {parseFloat(invoice.vat_amount || 0).toLocaleString('en-US', {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2
-                                })}
-                              </td>
-                              <td>
-                                <strong>
-                                  AED {parseFloat(invoice.gross_total || 0).toLocaleString('en-US', {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2
-                                  })}
-                                </strong>
+                                <strong>{formatCurrency(invoice.gross_total)}</strong>
                               </td>
                               <td>
                                 {(() => {
@@ -481,10 +467,7 @@ const InvoicesManagement = () => {
                                 })()}
                                 <br />
                                 <small className="text-muted">
-                                  Paid: AED {parseFloat(invoice.amount_paid || 0).toLocaleString('en-US', {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2
-                                  })}
+                                  Paid: {formatCurrency(invoice.amount_paid)}
                                 </small>
                               </td>
                               <td>
@@ -652,10 +635,7 @@ const InvoicesManagement = () => {
                     <input
                       type="text"
                       className="form-control"
-                      value={`AED ${parseFloat(selectedInvoice.gross_total || 0).toLocaleString('en-US', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}`}
+                      value={formatCurrency(selectedInvoice.gross_total)}
                       disabled
                     />
                   </div>
@@ -664,10 +644,7 @@ const InvoicesManagement = () => {
                     <input
                       type="text"
                       className="form-control"
-                      value={`AED ${parseFloat(selectedInvoice.amount_paid || 0).toLocaleString('en-US', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}`}
+                      value={formatCurrency(selectedInvoice.amount_paid)}
                       disabled
                     />
                   </div>
@@ -694,12 +671,11 @@ const InvoicesManagement = () => {
                   </div>
                   {paymentAmount && (
                     <div className="alert alert-info">
-                      <strong>Remaining Balance:</strong> AED {(
-                        parseFloat(selectedInvoice.gross_total || 0) - parseFloat(paymentAmount || 0)
-                      ).toLocaleString('en-US', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}
+                      <strong>Remaining Balance:</strong>{" "}
+                      {formatCurrency(
+                        (parseFloat(selectedInvoice.gross_total) || 0) -
+                          (parseFloat(paymentAmount) || 0)
+                      )}
                     </div>
                   )}
                 </div>

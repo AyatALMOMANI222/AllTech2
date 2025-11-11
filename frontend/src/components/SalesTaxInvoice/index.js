@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { salesTaxInvoicesAPI, customersSuppliersAPI } from '../../services/api';
+import formatCurrency from '../../utils/formatCurrency';
 import './style.scss';
 
 const SalesTaxInvoice = ({ invoiceId = null }) => {
@@ -693,19 +694,19 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
                           </div>
                           <div className="calculation-row">
                             <label>SUB TOTAL (AED):</label>
-                            <span>{subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span>{formatCurrency(subtotal)}</span>
                           </div>
                           <div className="calculation-row">
                             <label>Amount of claim {formData.claim_percentage}%:</label>
-                            <span>AED {claimAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span>{formatCurrency(claimAmount)}</span>
                           </div>
                           <div className="calculation-row">
                             <label>VAT (5%):</label>
-                            <span>AED {vatAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span>{formatCurrency(vatAmount)}</span>
                           </div>
                           <div className="calculation-row total">
                             <label>Gross Payable Amount:</label>
-                            <span>AED {grossTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span>{formatCurrency(grossTotal)}</span>
                           </div>
                         </div>
                       </div>

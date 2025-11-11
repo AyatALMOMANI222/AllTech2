@@ -1225,6 +1225,31 @@ router.get('/customers-suppliers/list', async (req, res) => {
 });
 
 // POST /api/purchase-orders/:id/create-supplier-po - Create supplier PO from customer PO
+const formatDateForSQL = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().split('T')[0];
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+  }
+
+  return null;
+};
+
 router.post('/:id/create-supplier-po', async (req, res) => {
   try {
     const { id } = req.params;
@@ -1315,14 +1340,14 @@ router.post('/:id/create-supplier-po', async (req, res) => {
           supplierPOId,
           item.serial_no,
           item.project_no,
-          item.date_po,
+          formatDateForSQL(item.date_po),
           item.part_no,
           item.material_no,
           item.description,
           item.uom,
           item.quantity,
-          item.unit_price,
-          item.total_price,
+          0,
+          0,
           item.comments,
           item.lead_time,
           item.due_date,
@@ -1356,7 +1381,7 @@ router.post('/:id/create-supplier-po', async (req, res) => {
           supplierPOId, 
           serial_no || null, 
           project_no || null, 
-          date_po || null, 
+          formatDateForSQL(date_po), 
           part_no, 
           material_no,
           description || null, 
@@ -1366,7 +1391,7 @@ router.post('/:id/create-supplier-po', async (req, res) => {
           parseFloat(total_price) || (parseFloat(quantity) * parseFloat(unit_price)), 
           comments || null,
           lead_time || null,
-          due_date || null,
+          formatDateForSQL(due_date),
           penalty_percentage ? parseFloat(penalty_percentage) : null,
           penalty_percentage && quantity ? (parseFloat(quantity) * parseFloat(penalty_percentage) / 100) : null,
           invoice_no || null,

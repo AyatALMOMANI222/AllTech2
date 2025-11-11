@@ -497,7 +497,7 @@ router.get('/po/list', authenticateToken, async (req, res) => {
       SELECT po.id, po.po_number, cs.company_name as supplier_name
       FROM purchase_orders po
       LEFT JOIN customers_suppliers cs ON po.customer_supplier_id = cs.id
-      WHERE po.order_type = 'supplier' AND po.status IN ('approved', 'partially_delivered', 'delivered_completed')
+      WHERE po.order_type = 'supplier' AND po.status IN ('approved', 'partially_delivered')
     `;
     
     let params = [];
@@ -536,9 +536,10 @@ router.get('/po/:po_number', authenticateToken, async (req, res) => {
     
     // Get PO items
     const [items] = await req.db.execute(`
-      SELECT poi.*, i.description as inventory_description
+      SELECT 
+        poi.*,
+        poi.description AS inventory_description
       FROM purchase_order_items poi
-      LEFT JOIN inventory i ON poi.part_no = i.part_no
       WHERE poi.po_id = ?
       ORDER BY poi.id
     `, [pos[0].id]);
@@ -633,10 +634,15 @@ router.get('/:id/pdf', authenticateToken, async (req, res) => {
 // Helper function to generate HTML for PDF - Matching frontend design exactly
 function generateInvoiceHTML(invoice, items) {
   const formatCurrency = (amount) => {
-    return parseFloat(amount).toLocaleString('en-US', { 
+    const numericAmount = Number(
+      typeof amount === "string" ? amount.replace(/,/g, "") : amount
+    );
+    const safeAmount = Number.isFinite(numericAmount) ? numericAmount : 0;
+
+    return `AED ${safeAmount.toLocaleString("en-AE", {
       minimumFractionDigits: 2, 
-      maximumFractionDigits: 2 
-    });
+      maximumFractionDigits: 2,
+    })}`;
   };
 
   const amountOfClaim = invoice.subtotal * (invoice.claim_percentage / 100);
@@ -987,7 +993,7 @@ function generateInvoiceHTML(invoice, items) {
             </div>
             <div class="info-row">
               <span class="label">Inv. Date:</span>
-                <span class="value">${new Date(invoice.invoice_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                <span class="value">${new Date(invoice.invoice_date).toLocaleDateString('en-AE', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
             </div>
             <div class="info-row">
               <span class="label">Project no.:</span>
@@ -1021,7 +1027,7 @@ function generateInvoiceHTML(invoice, items) {
                 <td>${item.material_no || ''}</td>
                 <td>${item.description || ''}</td>
                 <td>${item.uom || ''}</td>
-                    <td>${parseFloat(item.quantity).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td>${Number(item.quantity || 0).toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 <td>${formatCurrency(item.supplier_unit_price)}</td>
                 <td>${formatCurrency(item.total_price)}</td>
               </tr>
@@ -1055,7 +1061,7 @@ function generateInvoiceHTML(invoice, items) {
         
         <!-- Footer -->
         <div class="footer">
-          <p>Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} | AllTech Business Management System</p>
+          <p>Generated on ${new Date().toLocaleDateString('en-AE', { year: 'numeric', month: 'long', day: 'numeric' })} | AllTech Business Management System</p>
         </div>
       </div>
     </body>

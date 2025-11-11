@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { warrantyAPI } from '../../services/api';
+import formatCurrency from '../../utils/formatCurrency';
 import './style.scss';
 
 const WarrantyManagement = () => {
@@ -367,7 +368,7 @@ const WarrantyManagement = () => {
                             </td>
                             <td data-label="Project No">{record.project_no || '-'}</td>
                             <td data-label="Part Cost">
-                              ${parseFloat(record.part_cost || 0).toFixed(2)}
+                              {formatCurrency(record.part_cost)}
                             </td>
                             <td data-label="Serial Number">{record.serial_number || '-'}</td>
                             <td data-label="Type">
@@ -653,7 +654,9 @@ const WarrantyManagement = () => {
                 <div className="row mb-3">
                   <div className="col-12 col-md-6">
                     <label className="form-label text-muted">Part Cost</label>
-                    <p className="form-control-plaintext">${parseFloat(viewingRecord.part_cost || 0).toFixed(2)}</p>
+                    <p className="form-control-plaintext">
+                      {formatCurrency(viewingRecord.part_cost)}
+                    </p>
                   </div>
                   <div className="col-12 col-md-6">
                     <label className="form-label text-muted">Serial Number</label>
@@ -813,7 +816,7 @@ const WarrantyManagement = () => {
                           <td>{item.material_no || '-'}</td>
                           <td>{item.description || '-'}</td>
                           <td>{item.project_no || '-'}</td>
-                          <td>${parseFloat(item.part_cost || 0).toFixed(2)}</td>
+                          <td>{formatCurrency(item.part_cost)}</td>
                           <td>{item.serial_number || '-'}</td>
                           <td>{formatDate(item.warranty_start_date)}</td>
                           <td>{formatDate(item.warranty_end_date)}</td>

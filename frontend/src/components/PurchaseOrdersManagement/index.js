@@ -5,6 +5,7 @@ import {
   purchaseTaxInvoicesAPI,
   purchaseOrderDocumentsAPI,
 } from "../../services/api";
+import formatCurrency from "../../utils/formatCurrency";
 import SalesTaxInvoice from "../SalesTaxInvoice";
 import PurchaseTaxInvoice from "../PurchaseTaxInvoice";
 
@@ -64,6 +65,9 @@ const documentFileInputRef = React.useRef(null);
     selectedOrder?.order &&
     allowedDocumentStatuses.includes(selectedOrder.order.status);
   const [searchTerm, setSearchTerm] = useState("");
+  const [supplierPOItems, setSupplierPOItems] = useState([]);
+  const [supplierPOItemsLoading, setSupplierPOItemsLoading] = useState(false);
+  const [supplierPOItemsError, setSupplierPOItemsError] = useState("");
 
   const [formData, setFormData] = useState({
     po_number: "",
@@ -564,10 +568,78 @@ const documentFileInputRef = React.useRef(null);
     setShowSupplierInvoiceViewModal(true);
   };
 
-  const handleCreateSupplierPO = (customerOrder) => {
+  const handleSupplierPOUnitPriceChange = (index, value) => {
+    setSupplierPOItems((prevItems) => {
+      const updatedItems = [...prevItems];
+      if (!updatedItems[index]) {
+        return prevItems;
+      }
+
+      const numericValue = parseFloat(value);
+      const unitPrice = Number.isNaN(numericValue) ? 0 : numericValue;
+      const quantity =
+        updatedItems[index].quantity !== undefined &&
+        updatedItems[index].quantity !== null
+          ? parseFloat(updatedItems[index].quantity)
+          : 0;
+
+      updatedItems[index] = {
+        ...updatedItems[index],
+        unit_price: unitPrice,
+        total_price: quantity * unitPrice,
+      };
+
+      return updatedItems;
+    });
+  };
+
+  const handleCreateSupplierPO = async (customerOrder) => {
     setSelectedCustomerPO(customerOrder);
     setSelectedSupplierId("");
+    setSupplierPOItems([]);
+    setSupplierPOItemsError("");
     setShowCreateSupplierPOModal(true);
+    setSupplierPOItemsLoading(true);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/purchase-orders/${customerOrder.id}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to load customer PO details");
+      }
+
+      const data = await response.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+
+      const preparedItems = items.map((item, index) => {
+        const quantity =
+          item.quantity !== undefined && item.quantity !== null
+            ? parseFloat(item.quantity)
+            : 0;
+        const unitPrice =
+          item.unit_price !== undefined && item.unit_price !== null
+            ? parseFloat(item.unit_price)
+            : 0;
+
+        return {
+          ...item,
+          serial_no: item.serial_no ?? index + 1,
+          quantity,
+          unit_price: unitPrice,
+          total_price: quantity * unitPrice,
+        };
+      });
+
+      setSupplierPOItems(preparedItems);
+    } catch (error) {
+      console.error("Error loading customer PO items:", error);
+      setSupplierPOItemsError(
+        "Unable to load items for this customer PO. Please try again."
+      );
+    } finally {
+      setSupplierPOItemsLoading(false);
+    }
   };
 
   const handleSubmitCreateSupplierPO = async () => {
@@ -581,6 +653,47 @@ const documentFileInputRef = React.useRef(null);
       return;
     }
 
+    if (supplierPOItemsLoading) {
+      alert("Items are still loading. Please wait and try again.");
+      return;
+    }
+
+    const itemsPayload =
+      supplierPOItems.length > 0
+        ? supplierPOItems.map((item, index) => {
+            const quantity =
+              item.quantity !== undefined && item.quantity !== null
+                ? parseFloat(item.quantity)
+                : 0;
+            const unitPrice =
+              item.unit_price !== undefined && item.unit_price !== null
+                ? parseFloat(item.unit_price)
+                : 0;
+            const totalPrice = quantity * unitPrice;
+
+            return {
+              serial_no: item.serial_no ?? index + 1,
+              project_no: item.project_no,
+              date_po: item.date_po,
+              part_no: item.part_no,
+              material_no: item.material_no,
+              description: item.description,
+              uom: item.uom,
+              quantity,
+              unit_price: unitPrice,
+              total_price: totalPrice,
+              comments: item.comments,
+              lead_time: item.lead_time,
+              due_date: item.due_date,
+              penalty_percentage: item.penalty_percentage,
+              invoice_no: item.invoice_no,
+              delivered_quantity: item.delivered_quantity,
+              delivered_unit_price: item.delivered_unit_price,
+              delivered_total_price: item.delivered_total_price,
+            };
+          })
+        : [];
+
     setLoading(true);
     try {
       const response = await fetch(
@@ -592,7 +705,7 @@ const documentFileInputRef = React.useRef(null);
           },
           body: JSON.stringify({
             supplier_id: selectedSupplierId,
-            items: [], // Empty array means copy items from customer PO
+            items: itemsPayload,
           }),
         }
       );
@@ -606,6 +719,8 @@ const documentFileInputRef = React.useRef(null);
         setShowCreateSupplierPOModal(false);
         setSelectedCustomerPO(null);
         setSelectedSupplierId("");
+        setSupplierPOItems([]);
+        setSupplierPOItemsError("");
         // Refresh purchase orders list
         fetchPurchaseOrders();
         // Don't update formData.po_number here - it will be generated automatically when needed
@@ -963,6 +1078,33 @@ const documentFileInputRef = React.useRef(null);
       (sum, item) => sum + (parseFloat(item.total_price) || 0),
       0
     );
+    const formattedTotalAmount = formatCurrency(totalAmount);
+    const formattedItemsHtml = selectedOrder.items
+      .map((item) => {
+        const unitPriceFormatted = formatCurrency(item.unit_price);
+        const totalPriceFormatted = formatCurrency(item.total_price);
+        const datePO = item.date_po
+          ? new Date(item.date_po).toLocaleDateString()
+          : "";
+
+        return `
+                <tr>
+                  <td>${item.serial_no || ""}</td>
+                  <td>${item.project_no || ""}</td>
+                  <td>${datePO}</td>
+                  <td>${item.part_no || ""}</td>
+                  <td>${item.material_no || ""}</td>
+                  <td>${item.description || ""}</td>
+                  <td>${item.uom || ""}</td>
+                  <td>${item.quantity || ""}</td>
+                  <td>${unitPriceFormatted}</td>
+                  <td>${totalPriceFormatted}</td>
+                  <td>${item.lead_time || ""}</td>
+                  <td>${item.comments || ""}</td>
+                </tr>
+              `;
+      })
+      .join("");
 
     // Create HTML content for PDF
     const htmlContent = `
@@ -1168,30 +1310,7 @@ const documentFileInputRef = React.useRef(null);
               </tr>
             </thead>
             <tbody>
-              ${selectedOrder.items
-                .map(
-                  (item) => `
-                <tr>
-                  <td>${item.serial_no || ""}</td>
-                  <td>${item.project_no || ""}</td>
-                  <td>${
-                    item.date_po
-                      ? new Date(item.date_po).toLocaleDateString()
-                      : ""
-                  }</td>
-                  <td>${item.part_no || ""}</td>
-                  <td>${item.material_no || ""}</td>
-                  <td>${item.description || ""}</td>
-                  <td>${item.uom || ""}</td>
-                  <td>${item.quantity || ""}</td>
-                  <td>$${parseFloat(item.unit_price || 0).toFixed(2)}</td>
-                  <td>$${parseFloat(item.total_price || 0).toFixed(2)}</td>
-                  <td>${item.lead_time || ""}</td>
-                  <td>${item.comments || ""}</td>
-                </tr>
-              `
-                )
-                .join("")}
+              ${formattedItemsHtml}
             </tbody>
           </table>
 
@@ -1203,7 +1322,7 @@ const documentFileInputRef = React.useRef(null);
               </div>
               <div class="total-row">
                 <span class="total-label">Total Amount:</span>
-                <span class="total-value">$${totalAmount.toFixed(2)}</span>
+                <span class="total-value">${formattedTotalAmount}</span>
               </div>
             </div>
           </div>
@@ -1338,6 +1457,29 @@ const documentFileInputRef = React.useRef(null);
       (sum, item) => sum + (parseFloat(item.total_price) || 0),
       0
     );
+    const formattedTotalAmount = formatCurrency(totalAmount);
+    const formattedItemsHtml = importedItems
+      .map((item) => {
+        const unitPriceFormatted = formatCurrency(item.unit_price);
+        const totalPriceFormatted = formatCurrency(item.total_price);
+
+        return `
+                <tr>
+                  <td>${item.serial_no || ""}</td>
+                  <td>${item.project_no || ""}</td>
+                  <td>${item.date_po || ""}</td>
+                  <td>${item.part_no || ""}</td>
+                  <td>${item.material_no || ""}</td>
+                  <td>${item.description || ""}</td>
+                  <td>${item.uom || ""}</td>
+                  <td>${item.quantity || ""}</td>
+                  <td>${unitPriceFormatted}</td>
+                  <td>${totalPriceFormatted}</td>
+                  <td>${item.comments || ""}</td>
+                </tr>
+              `;
+      })
+      .join("");
 
     // Create HTML content for PDF
     const htmlContent = `
@@ -1543,25 +1685,7 @@ const documentFileInputRef = React.useRef(null);
               </tr>
             </thead>
             <tbody>
-              ${importedItems
-                .map(
-                  (item) => `
-                <tr>
-                  <td>${item.serial_no || ""}</td>
-                  <td>${item.project_no || ""}</td>
-                  <td>${item.date_po || ""}</td>
-                  <td>${item.part_no || ""}</td>
-                  <td>${item.material_no || ""}</td>
-                  <td>${item.description || ""}</td>
-                  <td>${item.uom || ""}</td>
-                  <td>${item.quantity || ""}</td>
-                  <td>$${parseFloat(item.unit_price || 0).toFixed(2)}</td>
-                  <td>$${parseFloat(item.total_price || 0).toFixed(2)}</td>
-                  <td>${item.comments || ""}</td>
-                </tr>
-              `
-                )
-                .join("")}
+              ${formattedItemsHtml}
             </tbody>
           </table>
 
@@ -1573,7 +1697,7 @@ const documentFileInputRef = React.useRef(null);
               </div>
               <div class="total-row">
                 <span class="total-label">Total Amount:</span>
-                <span class="total-value">$${totalAmount.toFixed(2)}</span>
+                <span class="total-value">${formattedTotalAmount}</span>
               </div>
             </div>
           </div>
@@ -2283,8 +2407,8 @@ View Details                                </button>
                           <td>{item.description}</td>
                           <td>{item.uom}</td>
                           <td>{item.quantity}</td>
-                          <td>${parseFloat(item.unit_price || 0).toFixed(2)}</td>
-                          <td>${parseFloat(item.total_price || 0).toFixed(2)}</td>
+                          <td>{formatCurrency(item.unit_price)}</td>
+                          <td>{formatCurrency(item.total_price)}</td>
                           <td>{item.lead_time}</td>
                           <td>{item.comments}</td>
                         </tr>
@@ -2445,8 +2569,8 @@ View Details                                </button>
                           <td>{item.description}</td>
                           <td>{item.uom}</td>
                           <td>{item.quantity}</td>
-                          <td>${item.unit_price}</td>
-                          <td>${item.total_price}</td>
+                          <td>{formatCurrency(item.unit_price)}</td>
+                          <td>{formatCurrency(item.total_price)}</td>
                           <td>{item.lead_time}</td>
                           <td>{item.comments}</td>
                         </tr>
@@ -2633,7 +2757,7 @@ View Details                                </button>
                               </div>
                               <div className="document-card__actions">
                         <a
-                          href={`https://${buildSafeDocumentUrl(document.storage_url)}`}
+                          href={buildSafeDocumentUrl(document.storage_url)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="btn btn-sm btn-outline-info"
@@ -2968,6 +3092,9 @@ View Details                                </button>
                     setShowCreateSupplierPOModal(false);
                     setSelectedCustomerPO(null);
                     setSelectedSupplierId("");
+                    setSupplierPOItems([]);
+                    setSupplierPOItemsError("");
+                    setSupplierPOItemsLoading(false);
                   }}
                   disabled={loading}
                 ></button>
@@ -3007,6 +3134,71 @@ View Details                                </button>
                   This will create a new supplier PO linked to the customer PO above.
                   All items from the customer PO will be copied to the supplier PO.
                 </div>
+                {supplierPOItemsError && (
+                  <div className="alert alert-danger mt-3" role="alert">
+                    {supplierPOItemsError}
+                  </div>
+                )}
+                {supplierPOItemsLoading ? (
+                  <div className="d-flex justify-content-center py-4">
+                    <div className="spinner-border text-primary" role="status">
+                      <span className="visually-hidden">Loading...</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="table-responsive mt-3">
+                    <table className="table table-sm table-bordered">
+                      <thead>
+                        <tr>
+                          <th style={{ width: "10%" }}>#</th>
+                          <th style={{ width: "20%" }}>Part No.</th>
+                          <th style={{ width: "30%" }}>Description</th>
+                          <th style={{ width: "20%" }}>Quantity</th>
+                          <th style={{ width: "20%" }}>Supplier Unit Price</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {supplierPOItems.length === 0 ? (
+                          <tr>
+                            <td colSpan="5" className="text-center text-muted">
+                              No items available for this customer PO.
+                            </td>
+                          </tr>
+                        ) : (
+                          supplierPOItems.map((item, index) => (
+                            <tr key={item.id || index}>
+                              <td>{item.serial_no ?? index + 1}</td>
+                              <td>{item.part_no || "-"}</td>
+                              <td>{item.description || "-"}</td>
+                              <td>{item.quantity ?? 0}</td>
+                              <td>
+                                <input
+                                  type="number"
+                                  className="form-control"
+                                  min="0"
+                                  step="0.01"
+                                  value={
+                                    item.unit_price !== undefined &&
+                                    item.unit_price !== null
+                                      ? item.unit_price
+                                      : 0
+                                  }
+                                  onChange={(e) =>
+                                    handleSupplierPOUnitPriceChange(
+                                      index,
+                                      e.target.value
+                                    )
+                                  }
+                                  disabled={loading}
+                                />
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
               <div className="modal-footer">
                 <button
@@ -3016,6 +3208,9 @@ View Details                                </button>
                     setShowCreateSupplierPOModal(false);
                     setSelectedCustomerPO(null);
                     setSelectedSupplierId("");
+                    setSupplierPOItems([]);
+                    setSupplierPOItemsError("");
+                    setSupplierPOItemsLoading(false);
                   }}
                   disabled={loading}
                 >

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { purchaseTaxInvoicesAPI, customersSuppliersAPI, purchaseOrdersAPI } from '../../services/api';
+import formatCurrency from '../../utils/formatCurrency';
 import './style.scss';
 
 const PurchaseTaxInvoice = ({ invoiceId = null }) => {
@@ -649,7 +650,6 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
                                   className="form-control table-input"
                                   min="0"
                                   step="0.01"
-                                  disabled={!!invoiceId}
                                 />
                               </td>
                               <td>
@@ -660,7 +660,6 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
                                   className="form-control table-input"
                                   min="0"
                                   step="0.01"
-                                  disabled={!!invoiceId}
                                 />
                               </td>
                               <td>
@@ -729,19 +728,19 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
                         <div className="totals-box">
                           <div className="total-row">
                             <span className="label">SUB-TOTAL:</span>
-                            <span className="value">{subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="value">{formatCurrency(subtotal)}</span>
                           </div>
                           <div className="total-row">
                             <span className="label">Amount of Claim {formData.claim_percentage}%:</span>
-                            <span className="value">{amountOfClaim.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="value">{formatCurrency(amountOfClaim)}</span>
                           </div>
                           <div className="total-row">
                             <span className="label">VAT 5%:</span>
-                            <span className="value">{vatAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="value">{formatCurrency(vatAmount)}</span>
                           </div>
                           <div className="total-row total-final">
                             <span className="label">TOTAL:</span>
-                            <span className="value">{grossTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="value">{formatCurrency(grossTotal)}</span>
                           </div>
                         </div>
                       </div>
