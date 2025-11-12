@@ -497,7 +497,7 @@ router.get('/po/list', authenticateToken, async (req, res) => {
       SELECT po.id, po.po_number, cs.company_name as supplier_name
       FROM purchase_orders po
       LEFT JOIN customers_suppliers cs ON po.customer_supplier_id = cs.id
-      WHERE po.order_type = 'supplier' AND po.status IN ('approved', 'partially_delivered')
+      WHERE po.order_type = 'supplier' AND po.status IN ('approved', 'partially_delivered', 'delivered_completed')
     `;
     
     let params = [];

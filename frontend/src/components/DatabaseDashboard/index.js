@@ -321,133 +321,158 @@ const DatabaseDashboard = () => {
                           </td>
                         </tr>
                       ) : (
-                        dashboardData.map((item, index) => (
-                          <tr key={item.id || index} className="data-row">
-                            {/* ALLTECH DATABASE Data */}
-                            <td className="alltech-data">{item.project_no || '-'}</td>
-                            <td className="alltech-data">{item.date_po ? new Date(item.date_po).toLocaleDateString() : '-'}</td>
-                            <td className="alltech-data"><strong>{item.part_no || '-'}</strong></td>
-                            <td className="alltech-data"><strong>{item.material_no || '-'}</strong></td>
-                            <td className="alltech-data">{item.description || '-'}</td>
-                            <td className="alltech-data">{item.uom || '-'}</td>
-                            
-                            {/* SUPPLIER APPROVED PURCHASE ORDER Data */}
-                            {/* ⚠️ IMPORTANT: supplierDelivered is found based on order_type='supplier' and status (partially_delivered/delivered_completed) */}
-                            {/* Records are displayed regardless of penalty_percentage or penalty_amount values */}
-                            {(() => {
-                              const supplierApproved = item.purchase_orders?.approved_orders?.find(o => o.order_type === 'supplier');
-                              const supplierDelivered = item.purchase_orders?.delivered_orders?.find(o => o.order_type === 'supplier');
+                        dashboardData.map((item, index) => {
+                          // Get all supplier POs grouped by status
+                          // APPROVED ORDERS: Backend returns status IN ('approved', 'partially_delivered', 'delivered_completed')
+                          // NOTE: Delivered POs appear in BOTH approved and delivered sections - they are NOT removed from approved section
+                          const supplierApprovedOrders = item.purchase_orders?.approved_orders?.filter(o => 
+                            o.order_type === 'supplier'
+                          ) || [];
+                          
+                          // DELIVERED PURCHASE ORDERS: Backend returns only status IN ('partially_delivered', 'delivered_completed')
+                          // NOTE: These POs ALSO appear in the APPROVED section above
+                          const supplierDeliveredOrders = item.purchase_orders?.delivered_orders?.filter(o => 
+                            o.order_type === 'supplier'
+                          ) || [];
+                          
+                          // Get all customer POs grouped by status
+                          // APPROVED ORDERS: Backend returns status IN ('approved', 'partially_delivered', 'delivered_completed')
+                          // NOTE: Delivered POs appear in BOTH approved and delivered sections - they are NOT removed from approved section
+                          const customerApprovedOrders = item.purchase_orders?.approved_orders?.filter(o => 
+                            o.order_type === 'customer'
+                          ) || [];
+                          
+                          // DELIVERED PURCHASE ORDERS: Backend returns only status IN ('partially_delivered', 'delivered_completed')
+                          // NOTE: These POs ALSO appear in the APPROVED section above
+                          const customerDeliveredOrders = item.purchase_orders?.delivered_orders?.filter(o => 
+                            o.order_type === 'customer'
+                          ) || [];
+                          
+                          // For display, show the first PO of each type
+                          // If multiple POs exist, tooltips will show all PO numbers
+                          const supplierApproved = supplierApprovedOrders[0] || null;
+                          const supplierDelivered = supplierDeliveredOrders[0] || null;
+                          const customerApproved = customerApprovedOrders[0] || null;
+                          const customerDelivered = customerDeliveredOrders[0] || null;
+                          
+                          return (
+                            <tr key={item.id || index} className="data-row">
+                              {/* ALLTECH DATABASE Data */}
+                              <td className="alltech-data">{item.project_no || '-'}</td>
+                              <td className="alltech-data">{item.date_po ? new Date(item.date_po).toLocaleDateString() : '-'}</td>
+                              <td className="alltech-data"><strong>{item.part_no || '-'}</strong></td>
+                              <td className="alltech-data"><strong>{item.material_no || '-'}</strong></td>
+                              <td className="alltech-data">{item.description || '-'}</td>
+                              <td className="alltech-data">{item.uom || '-'}</td>
                               
-                              return (
-                                <>
-                                  <td className="purchase-data">
-                                    {supplierApproved?.quantity || supplierDelivered?.quantity || '-'}
-                                  </td>
-                                  <td className="purchase-data">
-                                    {supplierApproved?.unit_price || supplierDelivered?.unit_price || '-'}
-                                  </td>
-                                  <td className="purchase-data">
-                                    {supplierApproved?.total_price || supplierDelivered?.total_price || '-'}
-                                  </td>
-                                  <td className="purchase-data">
-                                    {supplierApproved?.lead_time || supplierDelivered?.lead_time || '-'}
-                                  </td>
-                                  <td className="purchase-data">
-                                    {supplierApproved?.due_date || supplierDelivered?.due_date || '-'}
-                                  </td>
-                                  
-                                  {/* SUPPLIER DELIVERED PURCHASE ORDER Data */}
-                                  <td className="purchase-data">
-                                    {supplierDelivered?.delivered_quantity || '-'}
-                                  </td>
-                                  <td className="purchase-data">
-                                    {supplierDelivered?.delivered_unit_price || '-'}
-                                  </td>
-                                  <td className="purchase-data">
-                                    {supplierDelivered?.delivered_total_price || '-'}
-                                  </td>
-                                  <td className="purchase-data">
-                                    {supplierDelivered?.penalty_percentage != null && supplierDelivered?.penalty_percentage !== '' && supplierDelivered?.penalty_percentage !== '0'
-                                      ? supplierDelivered.penalty_percentage 
-                                      : '0'}
-                                  </td>
-                                  <td className="purchase-data">
-                                    {supplierDelivered?.penalty_amount != null && supplierDelivered?.penalty_amount !== '' && supplierDelivered?.penalty_amount !== '0'
-                                      ? supplierDelivered.penalty_amount 
-                                      : '0'}
-                                  </td>
-                                  <td className="purchase-data">
-                                    {supplierDelivered?.invoice_no || '-'}
-                                  </td>
-                                  <td className="purchase-data">
-                                    {supplierDelivered?.balance_quantity_undelivered || '-'}
-                                  </td>
-                                  <td className="purchase-data">
-                                    {supplierApproved?.supplier_name || supplierDelivered?.supplier_name || '-'}
-                                  </td>
-                                </>
-                              );
-                            })()}
-                            
-                            {/* CUSTOMER APPROVED SALES ORDER Data */}
-                            {/* ⚠️ IMPORTANT: customerDelivered is found based on order_type='customer' and status (partially_delivered/delivered_completed) */}
-                            {/* Records are displayed regardless of penalty_percentage or penalty_amount values */}
-                            {(() => {
-                              const customerApproved = item.purchase_orders?.approved_orders?.find(o => o.order_type === 'customer');
-                              const customerDelivered = item.purchase_orders?.delivered_orders?.find(o => o.order_type === 'customer');
+                              {/* SUPPLIER APPROVED PURCHASE ORDER Data (status IN ('approved', 'partially_delivered', 'delivered_completed')) */}
+                              {/* NOTE: Delivered POs also appear here - they are NOT removed from approved section */}
+                              <td className="purchase-data" title={supplierApprovedOrders.length > 1 ? 
+                                `Multiple POs: ${supplierApprovedOrders.map(po => po.po_number).join(', ')}` : ''}>
+                                {supplierApproved?.quantity || '-'}
+                              </td>
+                              <td className="purchase-data">
+                                {supplierApproved?.unit_price || '-'}
+                              </td>
+                              <td className="purchase-data">
+                                {supplierApproved?.total_price || '-'}
+                              </td>
+                              <td className="purchase-data">
+                                {supplierApproved?.lead_time || '-'}
+                              </td>
+                              <td className="purchase-data">
+                                {supplierApproved?.due_date || '-'}
+                              </td>
                               
-                              return (
-                                <>
-                                  <td className="approved-sales-data">
-                                    {customerApproved?.quantity || customerDelivered?.quantity || '-'}
-                                  </td>
-                                  <td className="approved-sales-data">
-                                    {customerApproved?.unit_price || customerDelivered?.unit_price || '-'}
-                                  </td>
-                                  <td className="approved-sales-data">
-                                    {customerApproved?.total_price || customerDelivered?.total_price || '-'}
-                                  </td>
-                                  <td className="approved-sales-data">
-                                    {customerApproved?.lead_time || customerDelivered?.lead_time || '-'}
-                                  </td>
-                                  <td className="approved-sales-data">
-                                    {customerApproved?.due_date || customerDelivered?.due_date || '-'}
-                                  </td>
-                                  
-                                  {/* CUSTOMER DELIVERED SALES ORDER Data */}
-                                  <td className="delivered-sales-data">
-                                    {customerDelivered?.delivered_quantity || '-'}
-                                  </td>
-                                  <td className="delivered-sales-data">
-                                    {customerDelivered?.delivered_unit_price || '-'}
-                                  </td>
-                                  <td className="delivered-sales-data">
-                                    {customerDelivered?.delivered_total_price || '-'}
-                                  </td>
-                                  <td className="delivered-sales-data">
-                                    {customerDelivered?.penalty_percentage != null && customerDelivered?.penalty_percentage !== '' && customerDelivered?.penalty_percentage !== '0'
-                                      ? customerDelivered.penalty_percentage 
-                                      : '0'}
-                                  </td>
-                                  <td className="delivered-sales-data">
-                                    {customerDelivered?.penalty_amount != null && customerDelivered?.penalty_amount !== '' && customerDelivered?.penalty_amount !== '0'
-                                      ? customerDelivered.penalty_amount 
-                                      : '0'}
-                                  </td>
-                                  <td className="delivered-sales-data">
-                                    {customerDelivered?.invoice_no || '-'}
-                                  </td>
-                                  <td className="delivered-sales-data">
-                                    {customerDelivered?.balance_quantity_undelivered || '-'}
-                                  </td>
-                                  <td className="delivered-sales-data">
-                                    {customerApproved?.supplier_name || customerDelivered?.supplier_name || '-'}
-                                  </td>
-                                </>
-                              );
-                            })()}
-                          </tr>
-                        ))
+                              {/* SUPPLIER DELIVERED PURCHASE ORDER Data (status IN ('partially_delivered', 'delivered_completed')) */}
+                              {/* NOTE: These POs ALSO appear in the APPROVED section above */}
+                              <td className="purchase-data" title={supplierDeliveredOrders.length > 1 ? 
+                                `Multiple POs: ${supplierDeliveredOrders.map(po => po.po_number).join(', ')}` : ''}>
+                                {supplierDelivered?.delivered_quantity || '-'}
+                              </td>
+                              <td className="purchase-data">
+                                {supplierDelivered?.delivered_unit_price || '-'}
+                              </td>
+                              <td className="purchase-data">
+                                {supplierDelivered?.delivered_total_price || '-'}
+                              </td>
+                              <td className="purchase-data">
+                                {supplierDelivered?.penalty_percentage != null && supplierDelivered?.penalty_percentage !== '' && supplierDelivered?.penalty_percentage !== '0'
+                                  ? supplierDelivered.penalty_percentage 
+                                  : '0'}
+                              </td>
+                              <td className="purchase-data">
+                                {supplierDelivered?.penalty_amount != null && supplierDelivered?.penalty_amount !== '' && supplierDelivered?.penalty_amount !== '0'
+                                  ? supplierDelivered.penalty_amount 
+                                  : '0'}
+                              </td>
+                              <td className="purchase-data" title={supplierDeliveredOrders.length > 1 ? 
+                                `Multiple POs: ${supplierDeliveredOrders.map(po => po.invoice_no).filter(Boolean).join(', ')}` : ''}>
+                                {supplierDelivered?.invoice_no || '-'}
+                              </td>
+                              <td className="purchase-data">
+                                {supplierDelivered?.balance_quantity_undelivered || '-'}
+                              </td>
+                              <td className="purchase-data" title={supplierApprovedOrders.length > 1 || supplierDeliveredOrders.length > 1 ? 
+                                `Approved: ${supplierApprovedOrders.map(po => po.supplier_name || po.po_number).join(', ')}\nDelivered: ${supplierDeliveredOrders.map(po => po.supplier_name || po.po_number).join(', ')}` : ''}>
+                                {supplierApproved?.supplier_name || supplierDelivered?.supplier_name || '-'}
+                              </td>
+                              
+                              {/* CUSTOMER APPROVED SALES ORDER Data (status IN ('approved', 'partially_delivered', 'delivered_completed')) */}
+                              {/* NOTE: Delivered POs also appear here - they are NOT removed from approved section */}
+                              <td className="approved-sales-data" title={customerApprovedOrders.length > 1 ? 
+                                `Multiple POs: ${customerApprovedOrders.map(po => po.po_number).join(', ')}` : ''}>
+                                {customerApproved?.quantity || '-'}
+                              </td>
+                              <td className="approved-sales-data">
+                                {customerApproved?.unit_price || '-'}
+                              </td>
+                              <td className="approved-sales-data">
+                                {customerApproved?.total_price || '-'}
+                              </td>
+                              <td className="approved-sales-data">
+                                {customerApproved?.lead_time || '-'}
+                              </td>
+                              <td className="approved-sales-data">
+                                {customerApproved?.due_date || '-'}
+                              </td>
+                              
+                              {/* CUSTOMER DELIVERED SALES ORDER Data (status IN ('partially_delivered', 'delivered_completed')) */}
+                              {/* NOTE: These POs ALSO appear in the APPROVED section above */}
+                              <td className="delivered-sales-data" title={customerDeliveredOrders.length > 1 ? 
+                                `Multiple POs: ${customerDeliveredOrders.map(po => po.po_number).join(', ')}` : ''}>
+                                {customerDelivered?.delivered_quantity || '-'}
+                              </td>
+                              <td className="delivered-sales-data">
+                                {customerDelivered?.delivered_unit_price || '-'}
+                              </td>
+                              <td className="delivered-sales-data">
+                                {customerDelivered?.delivered_total_price || '-'}
+                              </td>
+                              <td className="delivered-sales-data">
+                                {customerDelivered?.penalty_percentage != null && customerDelivered?.penalty_percentage !== '' && customerDelivered?.penalty_percentage !== '0'
+                                  ? customerDelivered.penalty_percentage 
+                                  : '0'}
+                              </td>
+                              <td className="delivered-sales-data">
+                                {customerDelivered?.penalty_amount != null && customerDelivered?.penalty_amount !== '' && customerDelivered?.penalty_amount !== '0'
+                                  ? customerDelivered.penalty_amount 
+                                  : '0'}
+                              </td>
+                              <td className="delivered-sales-data" title={customerDeliveredOrders.length > 1 ? 
+                                `Multiple POs: ${customerDeliveredOrders.map(po => po.invoice_no).filter(Boolean).join(', ')}` : ''}>
+                                {customerDelivered?.invoice_no || '-'}
+                              </td>
+                              <td className="delivered-sales-data">
+                                {customerDelivered?.balance_quantity_undelivered || '-'}
+                              </td>
+                              <td className="delivered-sales-data" title={customerApprovedOrders.length > 1 || customerDeliveredOrders.length > 1 ? 
+                                `Approved: ${customerApprovedOrders.map(po => po.supplier_name || po.po_number).join(', ')}\nDelivered: ${customerDeliveredOrders.map(po => po.supplier_name || po.po_number).join(', ')}` : ''}>
+                                {customerApproved?.supplier_name || customerDelivered?.supplier_name || '-'}
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>

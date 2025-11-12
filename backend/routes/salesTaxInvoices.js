@@ -629,7 +629,7 @@ router.get('/customer/:customer_id/po-numbers', async (req, res) => {
       FROM purchase_orders po
       WHERE po.customer_supplier_id = ? 
         AND po.order_type = 'customer' 
-        AND po.status IN ('approved', 'partially_delivered')
+        AND po.status IN ('approved', 'partially_delivered', 'delivered_completed')
       ORDER BY po.created_at DESC
     `, [customer_id]);
     

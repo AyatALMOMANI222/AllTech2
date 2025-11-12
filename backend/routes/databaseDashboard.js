@@ -260,7 +260,8 @@ router.get('/', async (req, res) => {
         i.balance as inventory_balance,
         i.balance_amount as inventory_balance_amount,
         
-        -- Approved Orders (all types with status = 'approved', 'partially_delivered', or 'delivered_completed')
+        -- Approved Orders (status = 'approved', 'partially_delivered', or 'delivered_completed')
+        -- Shows all POs that were approved, including those that have been delivered
         -- NOTE: Delivered POs appear in BOTH approved and delivered sections
         GROUP_CONCAT(DISTINCT CASE 
           WHEN po_approved.status IN ('approved', 'partially_delivered', 'delivered_completed')
@@ -274,7 +275,9 @@ router.get('/', async (req, res) => {
             '|',
             COALESCE(po_approved.po_number, ''),
             '|',
-            COALESCE(po_approved.order_type, '')
+            COALESCE(po_approved.order_type, ''),
+            '|',
+            COALESCE(po_approved.status, '')
           )
           ELSE NULL 
         END SEPARATOR '||') as approved_orders_data,
@@ -283,7 +286,8 @@ router.get('/', async (req, res) => {
         -- ⚠️ Display Condition: Show ONLY when PO status is "partially_delivered" or "delivered_completed"
         -- ⚠️ IMPORTANT: Records are displayed REGARDLESS of penalty_percentage or penalty_amount values
         -- Records appear immediately when status changes to partially_delivered or delivered_completed
-        -- NOTE: These POs also appear in the APPROVED section above (showing original approved data)
+        -- NOTE: These POs ALSO appear in the APPROVED section above (showing original approved data)
+        -- A PO appears in BOTH sections when it becomes delivered - it is NOT removed from approved section
         -- Data Structure (pipe-separated):
         -- [0] quantity (ORDERED QUANTITY from APPROVED section)
         -- [1] unit_price (original unit price)
@@ -456,30 +460,33 @@ router.get('/', async (req, res) => {
     
     // Process the concatenated data into structured format
     const processedItems = items.map(item => {
-      // Parse approved orders (all types)
+      // Parse approved orders (status = 'approved', 'partially_delivered', or 'delivered_completed')
+      // NOTE: Delivered POs appear in BOTH approved and delivered sections
       const approvedOrders = item.approved_orders_data
-        ? item.approved_orders_data.split('||').map(data => {
-            const [quantity, unit_price, total_price, lead_time, due_date, supplier_name, po_number, order_type] = data.split('|');
+        ? item.approved_orders_data.split('||').filter(data => data && data.trim() !== '').map(data => {
+            const parts = data.split('|');
             return {
-              quantity: parseFloat(quantity) || 0,
-              unit_price: parseFloat(unit_price) || 0,
-              total_price: parseFloat(total_price) || 0,
-              lead_time: lead_time || '',
-              due_date: due_date || '',
-              supplier_name: supplier_name || '',
-              po_number: po_number || '',
-              order_type: order_type || ''
+              quantity: parseFloat(parts[0]) || 0,
+              unit_price: parseFloat(parts[1]) || 0,
+              total_price: parseFloat(parts[2]) || 0,
+              lead_time: parts[3] || '',
+              due_date: parts[4] || '',
+              supplier_name: parts[5] || '',
+              po_number: parts[6] || '',
+              order_type: parts[7] || '',
+              status: parts[8] || 'approved'
             };
           })
         : [];
       
-      // Parse delivered orders (all types)
+      // Parse delivered orders (status = 'partially_delivered' or 'delivered_completed')
       // ⚠️ IMPORTANT: Records are included regardless of penalty_percentage value (can be empty/null)
       // ⚠️ Records appear when PO status is 'partially_delivered' or 'delivered_completed'
       // ⚠️ This happens automatically when an invoice is created (Sales or Purchase Tax Invoice)
       // ⚠️ Records are displayed for BOTH supplier and customer orders
       // ⚠️ CRITICAL: penalty_percentage being empty/null does NOT prevent records from appearing
       // ⚠️ The only condition for display is PO status, NOT penalty_percentage or any other field
+      // ⚠️ NOTE: These POs ALSO appear in the APPROVED section above - they are NOT removed from approved section
       const deliveredOrders = item.delivered_orders_data
         ? item.delivered_orders_data.split('||').filter(data => data && data.trim() !== '').map(data => {
             const parts = data.split('|');
@@ -626,7 +633,9 @@ router.get('/export', async (req, res) => {
         i.sold_quantity,
         i.balance,
         i.balance_amount,
-        -- Approved Orders (includes approved and delivered POs - delivered POs appear in both sections)
+        -- Approved Orders (status = 'approved', 'partially_delivered', or 'delivered_completed')
+        -- Shows all POs that were approved, including those that have been delivered
+        -- NOTE: Delivered POs appear in BOTH approved and delivered sections
         GROUP_CONCAT(DISTINCT CASE 
           WHEN po_approved.status IN ('approved', 'partially_delivered', 'delivered_completed')
           THEN CONCAT(
@@ -639,14 +648,17 @@ router.get('/export', async (req, res) => {
             '|',
             COALESCE(po_approved.po_number, ''),
             '|',
-            COALESCE(po_approved.order_type, '')
+            COALESCE(po_approved.order_type, ''),
+            '|',
+            COALESCE(po_approved.status, '')
           )
           ELSE NULL 
         END SEPARATOR '||') as approved_orders_data,
-        -- Delivered Orders (only partially_delivered or delivered_completed - also appear in approved section)
+        -- Delivered Orders (only partially_delivered or delivered_completed)
         -- ⚠️ CRITICAL: Display condition is ONLY based on status, NOT on penalty_percentage or any other field
         -- Records are included if status === 'partially_delivered' OR status === 'delivered_completed'
         -- This works even if penalty_percentage, penalty_amount, or delivered_quantity are NULL/empty
+        -- NOTE: These POs ALSO appear in the APPROVED section above - they are NOT removed from approved section
         GROUP_CONCAT(DISTINCT CASE 
           WHEN po_delivered.status IN ('partially_delivered', 'delivered_completed')
           THEN CONCAT(
