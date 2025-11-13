@@ -215,6 +215,81 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/warranty/report - Get warranty report (items under warranty)
+// ⚠️ IMPORTANT: This route must come BEFORE /:id route to avoid route conflicts
+router.get('/report', async (req, res) => {
+  try {
+    const { as_of_date } = req.query;
+    
+    // If as_of_date is provided, use it; otherwise use current date
+    const checkDate = as_of_date || new Date().toISOString().split('T')[0];
+    
+    // Query to get all items that are under warranty as of the check date
+    // An item is under warranty if:
+    // 1. warranty_start_date is not null
+    // 2. warranty_end_date is not null
+    // 3. checkDate >= warranty_start_date AND checkDate <= warranty_end_date
+    const query = `
+      SELECT 
+        id,
+        sr_no,
+        part_no,
+        material_no,
+        description,
+        project_no,
+        part_cost,
+        serial_number,
+        warranty_start_date,
+        warranty_end_date,
+        remarks,
+        warranty_type,
+        linked_po_id,
+        linked_invoice_id,
+        linked_invoice_type,
+        created_at,
+        updated_at,
+        DATEDIFF(warranty_end_date, ?) as days_remaining
+      FROM warranty_management
+      WHERE warranty_start_date IS NOT NULL
+        AND warranty_end_date IS NOT NULL
+        AND ? >= warranty_start_date
+        AND ? <= warranty_end_date
+      ORDER BY warranty_end_date ASC, warranty_start_date ASC
+    `;
+    
+    const [records] = await req.db.execute(query, [checkDate, checkDate, checkDate]);
+    
+    // Get total count
+    const [countResult] = await req.db.execute(`
+      SELECT COUNT(*) as total
+      FROM warranty_management
+      WHERE warranty_start_date IS NOT NULL
+        AND warranty_end_date IS NOT NULL
+        AND ? >= warranty_start_date
+        AND ? <= warranty_end_date
+    `, [checkDate, checkDate]);
+    
+    const total = countResult[0].total;
+    
+    res.json({
+      success: true,
+      records,
+      total,
+      as_of_date: checkDate,
+      pagination: {
+        totalRecords: total
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching warranty report:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error fetching warranty report', 
+      error: error.message 
+    });
+  }
+});
+
 // GET /api/warranty/:id - Get single warranty record
 router.get('/:id', async (req, res) => {
   try {

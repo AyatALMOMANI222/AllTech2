@@ -242,42 +242,132 @@ router.get('/', async (req, res) => {
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
     
-    // Base query to get all inventory items with related purchase and sales data
+    // Base query to get all Purchase Order items with related inventory and invoice data
+    // ⚠️ IMPORTANT: Query starts from purchase_order_items to display ALL PO items
+    // ⚠️ DEDUPLICATION: Group by PROJECT NO, PART NO, MATERIAL NO, DESCRIPTION, UOM to avoid duplicate rows
+    // Inventory data is LEFT JOINed to show inventory info when available, but is NOT required
     let query = `
       SELECT 
-        i.id as inventory_id,
-        i.serial_no,
-        i.project_no,
-        i.date_po,
-        i.part_no,
-        i.material_no,
-        i.description,
-        i.uom,
-        i.quantity as inventory_quantity,
-        i.supplier_unit_price as inventory_unit_price,
-        i.total_price as inventory_total_price,
-        i.sold_quantity as inventory_sold_quantity,
-        i.balance as inventory_balance,
-        i.balance_amount as inventory_balance_amount,
+        -- Group by these fields to ensure unique items (no duplicates)
+        -- Use CASE to match GROUP BY clause exactly (required for ONLY_FULL_GROUP_BY)
+        -- This ensures items with different PROJECT NO values appear as separate rows
+        CASE WHEN poi.project_no IS NULL THEN CONCAT('__NULL_PROJECT__', poi.id) ELSE poi.project_no END as project_no,
+        CASE WHEN poi.part_no IS NULL THEN CONCAT('__NULL_PART__', poi.id) ELSE poi.part_no END as part_no,
+        CASE WHEN poi.material_no IS NULL THEN CONCAT('__NULL_MATERIAL__', poi.id) ELSE poi.material_no END as material_no,
+        CASE WHEN poi.description IS NULL THEN CONCAT('__NULL_DESC__', poi.id) ELSE poi.description END as description,
+        CASE WHEN poi.uom IS NULL THEN CONCAT('__NULL_UOM__', poi.id) ELSE poi.uom END as uom,
         
-        -- Approved Orders (status = 'approved', 'partially_delivered', or 'delivered_completed')
-        -- Shows all POs that were approved, including those that have been delivered
+        -- Aggregate other fields when multiple PO items match the same combination
+        MIN(poi.id) as po_item_id,
+        MIN(poi.serial_no) as serial_no,
+        MIN(poi.date_po) as date_po,
+        
+        -- Aggregate other fields when multiple PO items match the same combination
+        ANY_VALUE(poi.lead_time) as lead_time,
+        ANY_VALUE(poi.due_date) as due_date,
+        
+        -- Combine PO information (use GROUP_CONCAT for multiple POs)
+        -- When items are grouped, multiple POs may be combined, so we aggregate their information
+        GROUP_CONCAT(DISTINCT po.id ORDER BY po.id SEPARATOR ',') as po_ids,
+        GROUP_CONCAT(DISTINCT po.po_number ORDER BY po.po_number SEPARATOR ', ') as po_number,
+        -- order_type: When items are grouped, order_type may contain both 'supplier' and 'customer'
+        -- Use GROUP_CONCAT to combine all order_types, then frontend will handle displaying in appropriate columns
+        GROUP_CONCAT(DISTINCT po.order_type ORDER BY po.order_type SEPARATOR ', ') as order_type,
+        -- Status: if any PO is delivered, show delivered status
+        CASE 
+          WHEN SUM(CASE WHEN po.status IN ('partially_delivered', 'delivered_completed') THEN 1 ELSE 0 END) > 0
+          THEN MAX(CASE WHEN po.status IN ('partially_delivered', 'delivered_completed') THEN po.status ELSE NULL END)
+          ELSE MAX(CASE WHEN po.status = 'approved' THEN 'approved' ELSE NULL END)
+        END as po_status,
+        
+        -- Separate status for supplier and customer POs
+        -- Supplier status: if any supplier PO is delivered, show delivered status
+        CASE 
+          WHEN SUM(CASE WHEN po.order_type = 'supplier' AND po.status IN ('partially_delivered', 'delivered_completed') THEN 1 ELSE 0 END) > 0
+          THEN MAX(CASE WHEN po.order_type = 'supplier' AND po.status IN ('partially_delivered', 'delivered_completed') THEN po.status ELSE NULL END)
+          WHEN SUM(CASE WHEN po.order_type = 'supplier' AND po.status = 'approved' THEN 1 ELSE 0 END) > 0
+          THEN 'approved'
+          ELSE NULL
+        END as supplier_po_status,
+        
+        -- Customer status: if any customer PO is delivered, show delivered status
+        CASE 
+          WHEN SUM(CASE WHEN po.order_type = 'customer' AND po.status IN ('partially_delivered', 'delivered_completed') THEN 1 ELSE 0 END) > 0
+          THEN MAX(CASE WHEN po.order_type = 'customer' AND po.status IN ('partially_delivered', 'delivered_completed') THEN po.status ELSE NULL END)
+          WHEN SUM(CASE WHEN po.order_type = 'customer' AND po.status = 'approved' THEN 1 ELSE 0 END) > 0
+          THEN 'approved'
+          ELSE NULL
+        END as customer_po_status,
+        
+        -- Overall aggregated quantities (for backward compatibility and summary)
+        SUM(COALESCE(poi.quantity, 0)) as po_quantity,
+        AVG(COALESCE(poi.unit_price, 0)) as po_unit_price,
+        SUM(COALESCE(poi.total_price, 0)) as po_total_price,
+        
+        GROUP_CONCAT(DISTINCT cs.id ORDER BY cs.id SEPARATOR ',') as customer_supplier_ids,
+        GROUP_CONCAT(DISTINCT cs.company_name ORDER BY cs.company_name SEPARATOR ', ') as customer_supplier_name,
+        
+        -- Aggregate delivered quantities separately for supplier and customer POs
+        -- Supplier delivered quantities
+        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.delivered_quantity, 0) ELSE 0 END) as supplier_delivered_quantity,
+        AVG(CASE WHEN po.order_type = 'supplier' AND poi.delivered_unit_price IS NOT NULL AND poi.delivered_unit_price > 0 
+            THEN poi.delivered_unit_price ELSE NULL END) as supplier_delivered_unit_price,
+        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.delivered_total_price, 0) ELSE 0 END) as supplier_delivered_total_price,
+        MAX(CASE WHEN po.order_type = 'supplier' THEN poi.penalty_percentage ELSE NULL END) as supplier_penalty_percentage,
+        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.penalty_amount, 0) ELSE 0 END) as supplier_penalty_amount,
+        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'supplier' THEN poi.invoice_no ELSE NULL END 
+            ORDER BY poi.invoice_no SEPARATOR ', ') as supplier_invoice_no,
+        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.balance_quantity_undelivered, 0) ELSE 0 END) as supplier_balance_quantity_undelivered,
+        
+        -- Customer delivered quantities
+        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.delivered_quantity, 0) ELSE 0 END) as customer_delivered_quantity,
+        AVG(CASE WHEN po.order_type = 'customer' AND poi.delivered_unit_price IS NOT NULL AND poi.delivered_unit_price > 0 
+            THEN poi.delivered_unit_price ELSE NULL END) as customer_delivered_unit_price,
+        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.delivered_total_price, 0) ELSE 0 END) as customer_delivered_total_price,
+        MAX(CASE WHEN po.order_type = 'customer' THEN poi.penalty_percentage ELSE NULL END) as customer_penalty_percentage,
+        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.penalty_amount, 0) ELSE 0 END) as customer_penalty_amount,
+        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'customer' THEN poi.invoice_no ELSE NULL END 
+            ORDER BY poi.invoice_no SEPARATOR ', ') as customer_invoice_no,
+        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.balance_quantity_undelivered, 0) ELSE 0 END) as customer_balance_quantity_undelivered,
+        
+        -- Aggregate approved quantities separately for supplier and customer POs
+        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.quantity, 0) ELSE 0 END) as supplier_po_quantity,
+        AVG(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.unit_price, 0) ELSE NULL END) as supplier_po_unit_price,
+        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.total_price, 0) ELSE 0 END) as supplier_po_total_price,
+        
+        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.quantity, 0) ELSE 0 END) as customer_po_quantity,
+        AVG(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.unit_price, 0) ELSE NULL END) as customer_po_unit_price,
+        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.total_price, 0) ELSE 0 END) as customer_po_total_price,
+        
+        -- Inventory data (if exists) - LEFT JOIN so it's optional
+        -- Use MAX() aggregation since we're grouping and there might be multiple inventory matches
+        MAX(i.id) as inventory_id,
+        MAX(i.quantity) as inventory_quantity,
+        MAX(i.supplier_unit_price) as inventory_unit_price,
+        MAX(i.total_price) as inventory_total_price,
+        MAX(i.sold_quantity) as inventory_sold_quantity,
+        MAX(i.balance) as inventory_balance,
+        MAX(i.balance_amount) as inventory_balance_amount,
+        
+        -- Approved Orders data (for grouped PO items)
+        -- Shows PO data if status is 'approved', 'partially_delivered', or 'delivered_completed'
         -- NOTE: Delivered POs appear in BOTH approved and delivered sections
+        -- Use GROUP_CONCAT to combine multiple POs for the same item
         GROUP_CONCAT(DISTINCT CASE 
-          WHEN po_approved.status IN ('approved', 'partially_delivered', 'delivered_completed')
+          WHEN po.status IN ('approved', 'partially_delivered', 'delivered_completed')
           THEN CONCAT(
-            poi_approved.quantity, '|',
-            poi_approved.unit_price, '|',
-            (poi_approved.quantity * poi_approved.unit_price), '|',
-            COALESCE(poi_approved.lead_time, ''), '|',
-            COALESCE(poi_approved.due_date, ''), '|',
-            COALESCE(cs_approved.company_name, ''),
+            poi.quantity, '|',
+            poi.unit_price, '|',
+            (poi.quantity * poi.unit_price), '|',
+            COALESCE(poi.lead_time, ''), '|',
+            COALESCE(poi.due_date, ''), '|',
+            COALESCE(cs.company_name, ''),
             '|',
-            COALESCE(po_approved.po_number, ''),
+            COALESCE(po.po_number, ''),
             '|',
-            COALESCE(po_approved.order_type, ''),
+            COALESCE(po.order_type, ''),
             '|',
-            COALESCE(po_approved.status, '')
+            COALESCE(po.status, '')
           )
           ELSE NULL 
         END SEPARATOR '||') as approved_orders_data,
@@ -288,56 +378,34 @@ router.get('/', async (req, res) => {
         -- Records appear immediately when status changes to partially_delivered or delivered_completed
         -- NOTE: These POs ALSO appear in the APPROVED section above (showing original approved data)
         -- A PO appears in BOTH sections when it becomes delivered - it is NOT removed from approved section
-        -- Data Structure (pipe-separated):
-        -- [0] quantity (ORDERED QUANTITY from APPROVED section)
-        -- [1] unit_price (original unit price)
-        -- [2] total_price (ORDERED QUANTITY × unit_price)
-        -- [3] lead_time
-        -- [4] due_date
-        -- [5] delivered_quantity (sum from all invoices)
-        -- [6] delivered_unit_price (from any invoice)
-        -- [7] delivered_total_price (delivered_quantity × delivered_unit_price)
-        -- [8] penalty_percentage (can be empty/null - does NOT affect display)
-        -- [9] penalty_amount (can be empty/null - does NOT affect display)
-        -- [10] invoice_no (comma-separated invoice numbers)
-        -- [11] balance_quantity_undelivered (ORDERED QUANTITY - DELIVERED QUANTITY)
-        -- [12] company_name
-        -- [13] po_number
-        -- [14] order_type
-        -- [15] status
-        -- ⚠️ CRITICAL: Display condition is ONLY based on status, NOT on penalty_percentage or any other field
-        -- Records are included if status === 'partially_delivered' OR status === 'delivered_completed'
-        -- This works even if penalty_percentage, penalty_amount, or delivered_quantity are NULL/empty
-        -- ⚠️ IMPORTANT: Records appear immediately when status changes to partially_delivered or delivered_completed
-        -- ⚠️ Records are displayed REGARDLESS of penalty_percentage value (NULL, empty string, or any value)
-        -- ⚠️ The only condition is the PO status - penalty_percentage does NOT affect whether records appear
+        -- Use GROUP_CONCAT to combine multiple delivered POs for the same item
         GROUP_CONCAT(DISTINCT CASE 
-          WHEN po_delivered.status IN ('partially_delivered', 'delivered_completed')
+          WHEN po.status IN ('partially_delivered', 'delivered_completed')
           THEN CONCAT(
-            poi_delivered.quantity, '|',                    -- ORDERED QUANTITY (from APPROVED section)
-            poi_delivered.unit_price, '|',                  -- Original unit price
-            (poi_delivered.quantity * poi_delivered.unit_price), '|',  -- Original total
-            COALESCE(poi_delivered.lead_time, ''), '|',
-            COALESCE(poi_delivered.due_date, ''), '|',
-            COALESCE(poi_delivered.delivered_quantity, ''), '|',       -- DELIVERED QUANTITY (sum from invoices)
-            COALESCE(poi_delivered.delivered_unit_price, ''), '|',     -- DELIVERED UNIT PRICE (from invoices)
-            COALESCE(poi_delivered.delivered_total_price, ''), '|',    -- DELIVERED TOTAL PRICE (calculated)
-            COALESCE(NULLIF(poi_delivered.penalty_percentage, ''), '0'), '|',  -- PENALTY % (convert empty/null to '0' - does NOT affect display)
-            COALESCE(NULLIF(poi_delivered.penalty_amount, ''), '0'), '|',      -- PENALTY AMOUNT (convert empty/null to '0' - does NOT affect display)
-            COALESCE(poi_delivered.invoice_no, ''), '|',               -- Invoice numbers
-            COALESCE(poi_delivered.balance_quantity_undelivered, ''), '|',  -- BALANCE (ORDERED - DELIVERED)
-            COALESCE(cs_delivered.company_name, ''),
+            poi.quantity, '|',                    -- ORDERED QUANTITY (from APPROVED section)
+            poi.unit_price, '|',                  -- Original unit price
+            (poi.quantity * poi.unit_price), '|',  -- Original total
+            COALESCE(poi.lead_time, ''), '|',
+            COALESCE(poi.due_date, ''), '|',
+            COALESCE(poi.delivered_quantity, ''), '|',       -- DELIVERED QUANTITY (sum from invoices)
+            COALESCE(poi.delivered_unit_price, ''), '|',     -- DELIVERED UNIT PRICE (from invoices)
+            COALESCE(poi.delivered_total_price, ''), '|',    -- DELIVERED TOTAL PRICE (calculated)
+            COALESCE(NULLIF(poi.penalty_percentage, ''), '0'), '|',  -- PENALTY % (convert empty/null to '0' - does NOT affect display)
+            COALESCE(NULLIF(poi.penalty_amount, ''), '0'), '|',      -- PENALTY AMOUNT (convert empty/null to '0' - does NOT affect display)
+            COALESCE(poi.invoice_no, ''), '|',               -- Invoice numbers
+            COALESCE(poi.balance_quantity_undelivered, ''), '|',  -- BALANCE (ORDERED - DELIVERED)
+            COALESCE(cs.company_name, ''),
             '|',
-            COALESCE(po_delivered.po_number, ''),
+            COALESCE(po.po_number, ''),
             '|',
-            COALESCE(po_delivered.order_type, ''),
+            COALESCE(po.order_type, ''),
             '|',
-            COALESCE(po_delivered.status, '')
+            COALESCE(po.status, '')
           )
           ELSE NULL 
         END SEPARATOR '||') as delivered_orders_data,
         
-        -- Purchase Tax Invoice data
+        -- Purchase Tax Invoice data (matching by part_no, material_no)
         GROUP_CONCAT(DISTINCT CASE 
           WHEN pti.id IS NOT NULL
           THEN CONCAT(
@@ -350,7 +418,7 @@ router.get('/', async (req, res) => {
           ELSE NULL 
         END SEPARATOR '||') as purchase_invoice_data,
         
-        -- Sales Tax Invoice data
+        -- Sales Tax Invoice data (matching by part_no, material_no)
         GROUP_CONCAT(DISTINCT CASE 
           WHEN sti.id IS NOT NULL
           THEN CONCAT(
@@ -363,30 +431,27 @@ router.get('/', async (req, res) => {
           ELSE NULL 
         END SEPARATOR '||') as sales_invoice_data
         
-      FROM inventory i
+      FROM purchase_order_items poi
       
-      -- Join with Purchase Orders for approved status - Match by part_no, material_no
-      LEFT JOIN purchase_order_items poi_approved 
-        ON i.part_no = poi_approved.part_no 
-        AND (i.material_no = poi_approved.material_no OR (i.material_no IS NULL AND poi_approved.material_no IS NULL))
-      LEFT JOIN purchase_orders po_approved 
-        ON poi_approved.po_id = po_approved.id
-      LEFT JOIN customers_suppliers cs_approved 
-        ON po_approved.customer_supplier_id = cs_approved.id
+      -- Join with Purchase Order
+      INNER JOIN purchase_orders po 
+        ON poi.po_id = po.id
       
-      -- Join with Purchase Orders for delivered status - Match by part_no, material_no
-      LEFT JOIN purchase_order_items poi_delivered 
-        ON i.part_no = poi_delivered.part_no 
-        AND (i.material_no = poi_delivered.material_no OR (i.material_no IS NULL AND poi_delivered.material_no IS NULL))
-      LEFT JOIN purchase_orders po_delivered 
-        ON poi_delivered.po_id = po_delivered.id
-      LEFT JOIN customers_suppliers cs_delivered 
-        ON po_delivered.customer_supplier_id = cs_delivered.id
+      -- Join with Customer/Supplier
+      LEFT JOIN customers_suppliers cs 
+        ON po.customer_supplier_id = cs.id
+      
+      -- Join with Inventory (optional - to show inventory data if it exists)
+      -- Match by part_no, material_no, project_no, description, and supplier_unit_price
+      LEFT JOIN inventory i
+        ON poi.part_no = i.part_no 
+        AND (poi.material_no = i.material_no OR (poi.material_no IS NULL AND i.material_no IS NULL))
+        AND (poi.project_no = i.project_no OR (poi.project_no IS NULL AND i.project_no IS NULL))
       
       -- Join with Purchase Tax Invoices - Match by part_no, material_no
       LEFT JOIN purchase_tax_invoice_items ptii
-        ON i.part_no = ptii.part_no 
-        AND (i.material_no = ptii.material_no OR (i.material_no IS NULL AND ptii.material_no IS NULL))
+        ON poi.part_no = ptii.part_no 
+        AND (poi.material_no = ptii.material_no OR (poi.material_no IS NULL AND ptii.material_no IS NULL))
       LEFT JOIN purchase_tax_invoices pti
         ON ptii.invoice_id = pti.id
       LEFT JOIN customers_suppliers cs_pti_supplier
@@ -394,8 +459,8 @@ router.get('/', async (req, res) => {
       
       -- Join with Sales Tax Invoices - Match by part_no, material_no
       LEFT JOIN sales_tax_invoice_items stii
-        ON i.part_no = stii.part_no 
-        AND (i.material_no = stii.material_no OR (i.material_no IS NULL AND stii.material_no IS NULL))
+        ON poi.part_no = stii.part_no 
+        AND (poi.material_no = stii.material_no OR (poi.material_no IS NULL AND stii.material_no IS NULL))
       LEFT JOIN sales_tax_invoices sti
         ON stii.invoice_id = sti.id
       LEFT JOIN customers_suppliers cs_sti_customer
@@ -406,91 +471,121 @@ router.get('/', async (req, res) => {
     
     let params = [];
     
-    // Add date filter if provided
+    // Filter by PO status: show only approved, partially_delivered, or delivered_completed
+    // This ensures we only show relevant PO items in the dashboard
+    query += ` AND po.status IN ('approved', 'partially_delivered', 'delivered_completed')`;
+    
+    // Add date filter if provided (filter by PO creation date or PO item date_po)
     if (as_of_date) {
-      query += ` AND DATE(i.created_at) <= ?`;
-      params.push(as_of_date);
+      query += ` AND (DATE(po.created_at) <= ? OR DATE(poi.date_po) <= ?)`;
+      params.push(as_of_date, as_of_date);
     }
     
-    // Add search filter
+    // Add search filter (search in PO item fields)
     if (search) {
       query += ` AND (
-        i.serial_no LIKE ? OR 
-        i.project_no LIKE ? OR 
-        i.part_no LIKE ? OR 
-        i.material_no LIKE ? OR 
-        i.description LIKE ?
+        poi.serial_no LIKE ? OR 
+        poi.project_no LIKE ? OR 
+        poi.part_no LIKE ? OR 
+        poi.material_no LIKE ? OR 
+        poi.description LIKE ? OR
+        po.po_number LIKE ?
       )`;
       const searchParam = `%${search}%`;
-      params.push(searchParam, searchParam, searchParam, searchParam, searchParam);
+      params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
     }
     
-    query += ` GROUP BY i.id ORDER BY i.serial_no ASC, i.created_at DESC LIMIT ${limitNum} OFFSET ${offset}`;
+    // Group by PROJECT NO, PART NO, MATERIAL NO, DESCRIPTION, UOM to ensure unique items (no duplicates)
+    // Items with the same values for ALL these fields will be combined into a single row
+    // Items with different PROJECT NO values will appear as separate rows
+    // Handle NULL values properly in GROUP BY - use COALESCE but ensure NULLs are distinct
+    // Use CONCAT with a unique marker to distinguish NULL from empty string and ensure proper grouping
+    query += ` 
+      GROUP BY 
+        CASE WHEN poi.project_no IS NULL THEN CONCAT('__NULL_PROJECT__', poi.id) ELSE poi.project_no END,
+        CASE WHEN poi.part_no IS NULL THEN CONCAT('__NULL_PART__', poi.id) ELSE poi.part_no END,
+        CASE WHEN poi.material_no IS NULL THEN CONCAT('__NULL_MATERIAL__', poi.id) ELSE poi.material_no END,
+        CASE WHEN poi.description IS NULL THEN CONCAT('__NULL_DESC__', poi.id) ELSE poi.description END,
+        CASE WHEN poi.uom IS NULL THEN CONCAT('__NULL_UOM__', poi.id) ELSE poi.uom END
+      ORDER BY MIN(po.created_at) DESC, MIN(poi.serial_no) ASC 
+      LIMIT ${limitNum} OFFSET ${offset}`;
     
     const [items] = await req.db.execute(query, params);
     
-    // Get total count for pagination
+    // Get total count for pagination (count distinct combinations of project_no, part_no, material_no, description, uom)
+    // Use the same CASE logic as the main query to ensure consistent counting
     let countQuery = `
-      SELECT COUNT(DISTINCT i.id) as total
-      FROM inventory i
-      WHERE 1=1
+      SELECT COUNT(DISTINCT CONCAT(
+        CASE WHEN poi.project_no IS NULL THEN CONCAT('__NULL_PROJECT__', poi.id) ELSE poi.project_no END, '|',
+        CASE WHEN poi.part_no IS NULL THEN CONCAT('__NULL_PART__', poi.id) ELSE poi.part_no END, '|',
+        CASE WHEN poi.material_no IS NULL THEN CONCAT('__NULL_MATERIAL__', poi.id) ELSE poi.material_no END, '|',
+        CASE WHEN poi.description IS NULL THEN CONCAT('__NULL_DESC__', poi.id) ELSE poi.description END, '|',
+        CASE WHEN poi.uom IS NULL THEN CONCAT('__NULL_UOM__', poi.id) ELSE poi.uom END
+      )) as total
+      FROM purchase_order_items poi
+      INNER JOIN purchase_orders po 
+        ON poi.po_id = po.id
+      WHERE po.status IN ('approved', 'partially_delivered', 'delivered_completed')
     `;
     
     const countParams = [];
     
     if (as_of_date) {
-      countQuery += ` AND DATE(i.created_at) <= ?`;
-      countParams.push(as_of_date);
+      countQuery += ` AND (DATE(po.created_at) <= ? OR DATE(poi.date_po) <= ?)`;
+      countParams.push(as_of_date, as_of_date);
     }
     
     if (search) {
       countQuery += ` AND (
-        i.serial_no LIKE ? OR 
-        i.project_no LIKE ? OR 
-        i.part_no LIKE ? OR 
-        i.material_no LIKE ? OR 
-        i.description LIKE ?
+        poi.serial_no LIKE ? OR 
+        poi.project_no LIKE ? OR 
+        poi.part_no LIKE ? OR 
+        poi.material_no LIKE ? OR 
+        poi.description LIKE ? OR
+        po.po_number LIKE ?
       )`;
       const searchParam = `%${search}%`;
-      countParams.push(searchParam, searchParam, searchParam, searchParam, searchParam);
+      countParams.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
     }
     
     const [countResult] = await req.db.execute(countQuery, countParams);
     const totalItems = countResult[0].total;
     
-    // Process the concatenated data into structured format
+    // Process the data into structured format
+    // Each item represents a unique combination of PROJECT NO, PART NO, MATERIAL NO, DESCRIPTION, UOM
+    // Multiple PO items with the same values for these fields are combined into a single row
     const processedItems = items.map(item => {
-      // Parse approved orders (status = 'approved', 'partially_delivered', or 'delivered_completed')
+      // Parse approved orders data (may contain multiple POs separated by '||')
       // NOTE: Delivered POs appear in BOTH approved and delivered sections
-      const approvedOrders = item.approved_orders_data
-        ? item.approved_orders_data.split('||').filter(data => data && data.trim() !== '').map(data => {
-            const parts = data.split('|');
-            return {
-              quantity: parseFloat(parts[0]) || 0,
-              unit_price: parseFloat(parts[1]) || 0,
-              total_price: parseFloat(parts[2]) || 0,
-              lead_time: parts[3] || '',
-              due_date: parts[4] || '',
-              supplier_name: parts[5] || '',
-              po_number: parts[6] || '',
-              order_type: parts[7] || '',
-              status: parts[8] || 'approved'
-            };
-          })
-        : [];
+      const approvedOrders = [];
+      if (item.approved_orders_data) {
+        const orders = item.approved_orders_data.split('||').filter(data => data && data.trim() !== '');
+        orders.forEach(orderData => {
+          const parts = orderData.split('|');
+          approvedOrders.push({
+            quantity: parseFloat(parts[0]) || 0,
+            unit_price: parseFloat(parts[1]) || 0,
+            total_price: parseFloat(parts[2]) || 0,
+            lead_time: parts[3] || '',
+            due_date: parts[4] || '',
+            supplier_name: parts[5] || '',
+            po_number: parts[6] || '',
+            order_type: parts[7] || '',
+            status: parts[8] || 'approved'
+          });
+        });
+      }
       
-      // Parse delivered orders (status = 'partially_delivered' or 'delivered_completed')
+      // Parse delivered orders data (may contain multiple POs separated by '||')
       // ⚠️ IMPORTANT: Records are included regardless of penalty_percentage value (can be empty/null)
       // ⚠️ Records appear when PO status is 'partially_delivered' or 'delivered_completed'
-      // ⚠️ This happens automatically when an invoice is created (Sales or Purchase Tax Invoice)
-      // ⚠️ Records are displayed for BOTH supplier and customer orders
-      // ⚠️ CRITICAL: penalty_percentage being empty/null does NOT prevent records from appearing
-      // ⚠️ The only condition for display is PO status, NOT penalty_percentage or any other field
       // ⚠️ NOTE: These POs ALSO appear in the APPROVED section above - they are NOT removed from approved section
-      const deliveredOrders = item.delivered_orders_data
-        ? item.delivered_orders_data.split('||').filter(data => data && data.trim() !== '').map(data => {
-            const parts = data.split('|');
-            return {
+      const deliveredOrders = [];
+      if (item.delivered_orders_data) {
+        const orders = item.delivered_orders_data.split('||').filter(data => data && data.trim() !== '');
+        orders.forEach(orderData => {
+          const parts = orderData.split('|');
+          deliveredOrders.push({
               quantity: parseFloat(parts[0]) || 0,
               unit_price: parseFloat(parts[1]) || 0,
               total_price: parseFloat(parts[2]) || 0,
@@ -507,54 +602,99 @@ router.get('/', async (req, res) => {
               po_number: parts[13] || '',
               order_type: parts[14] || '',
               status: parts[15] || ''
-            };
-          })
-        : [];
+          });
+        });
+      }
       
       // Parse purchase invoices
       const purchaseInvoices = item.purchase_invoice_data
-        ? item.purchase_invoice_data.split('||').map(data => {
-            const [quantity, unit_price, total_price, invoice_no, supplier_name] = data.split('|');
+        ? item.purchase_invoice_data.split('||').filter(data => data && data.trim() !== '').map(data => {
+            const parts = data.split('|');
             return {
-              quantity: parseFloat(quantity) || 0,
-              unit_price: parseFloat(unit_price) || 0,
-              total_price: parseFloat(total_price) || 0,
-              invoice_no: invoice_no || '',
-              supplier_name: supplier_name || ''
+              quantity: parseFloat(parts[0]) || 0,
+              unit_price: parseFloat(parts[1]) || 0,
+              total_price: parseFloat(parts[2]) || 0,
+              invoice_no: parts[3] || '',
+              supplier_name: parts[4] || ''
             };
           })
         : [];
       
       // Parse sales invoices
       const salesInvoices = item.sales_invoice_data
-        ? item.sales_invoice_data.split('||').map(data => {
-            const [quantity, unit_price, total_price, invoice_no, customer_name] = data.split('|');
+        ? item.sales_invoice_data.split('||').filter(data => data && data.trim() !== '').map(data => {
+            const parts = data.split('|');
             return {
-              quantity: parseFloat(quantity) || 0,
-              unit_price: parseFloat(unit_price) || 0,
-              total_price: parseFloat(total_price) || 0,
-              invoice_no: invoice_no || '',
-              customer_name: customer_name || ''
+              quantity: parseFloat(parts[0]) || 0,
+              unit_price: parseFloat(parts[1]) || 0,
+              total_price: parseFloat(parts[2]) || 0,
+              invoice_no: parts[3] || '',
+              customer_name: parts[4] || ''
             };
           })
         : [];
       
       return {
-        // Inventory base data
-        id: item.inventory_id,
+        // Purchase Order Item base data (primary data source)
+        id: item.po_item_id,
+        po_id: item.po_id,
         serial_no: item.serial_no,
-        project_no: item.project_no,
+        // Clean up project_no - remove NULL markers if present
+        project_no: item.project_no && typeof item.project_no === 'string' && item.project_no.startsWith('__NULL_PROJECT__') ? null : item.project_no,
         date_po: item.date_po,
-        part_no: item.part_no,
-        material_no: item.material_no,
-        description: item.description,
-        uom: item.uom,
-        inventory_quantity: parseFloat(item.inventory_quantity) || 0,
-        inventory_unit_price: parseFloat(item.inventory_unit_price) || 0,
-        inventory_total_price: parseFloat(item.inventory_total_price) || 0,
-        inventory_sold_quantity: parseFloat(item.inventory_sold_quantity) || 0,
-        inventory_balance: parseFloat(item.inventory_balance) || 0,
-        inventory_balance_amount: parseFloat(item.inventory_balance_amount) || 0,
+        // Clean up other fields - remove NULL markers if present
+        part_no: item.part_no && typeof item.part_no === 'string' && item.part_no.startsWith('__NULL_PART__') ? null : item.part_no,
+        material_no: item.material_no && typeof item.material_no === 'string' && item.material_no.startsWith('__NULL_MATERIAL__') ? null : item.material_no,
+        description: item.description && typeof item.description === 'string' && item.description.startsWith('__NULL_DESC__') ? null : item.description,
+        uom: item.uom && typeof item.uom === 'string' && item.uom.startsWith('__NULL_UOM__') ? null : item.uom,
+        po_quantity: parseFloat(item.po_quantity) || 0,
+        po_unit_price: parseFloat(item.po_unit_price) || 0,
+        po_total_price: parseFloat(item.po_total_price) || 0,
+        lead_time: item.lead_time || '',
+        due_date: item.due_date || '',
+        po_number: item.po_number || '',
+        po_status: item.po_status || '',
+        supplier_po_status: item.supplier_po_status || null,
+        customer_po_status: item.customer_po_status || null,
+        order_type: item.order_type || '',
+        customer_supplier_name: item.customer_supplier_name || '',
+        
+        // Delivered data (separated by order_type)
+        // Supplier delivered data
+        supplier_delivered_quantity: item.supplier_delivered_quantity ? parseFloat(item.supplier_delivered_quantity) : 0,
+        supplier_delivered_unit_price: item.supplier_delivered_unit_price ? parseFloat(item.supplier_delivered_unit_price) : 0,
+        supplier_delivered_total_price: item.supplier_delivered_total_price ? parseFloat(item.supplier_delivered_total_price) : 0,
+        supplier_penalty_percentage: item.supplier_penalty_percentage || null,
+        supplier_penalty_amount: item.supplier_penalty_amount ? parseFloat(item.supplier_penalty_amount) : 0,
+        supplier_invoice_no: item.supplier_invoice_no || '',
+        supplier_balance_quantity_undelivered: item.supplier_balance_quantity_undelivered ? parseFloat(item.supplier_balance_quantity_undelivered) : 0,
+        
+        // Customer delivered data
+        customer_delivered_quantity: item.customer_delivered_quantity ? parseFloat(item.customer_delivered_quantity) : 0,
+        customer_delivered_unit_price: item.customer_delivered_unit_price ? parseFloat(item.customer_delivered_unit_price) : 0,
+        customer_delivered_total_price: item.customer_delivered_total_price ? parseFloat(item.customer_delivered_total_price) : 0,
+        customer_penalty_percentage: item.customer_penalty_percentage || null,
+        customer_penalty_amount: item.customer_penalty_amount ? parseFloat(item.customer_penalty_amount) : 0,
+        customer_invoice_no: item.customer_invoice_no || '',
+        customer_balance_quantity_undelivered: item.customer_balance_quantity_undelivered ? parseFloat(item.customer_balance_quantity_undelivered) : 0,
+        
+        // Approved quantities (separated by order_type)
+        supplier_po_quantity: item.supplier_po_quantity ? parseFloat(item.supplier_po_quantity) : 0,
+        supplier_po_unit_price: item.supplier_po_unit_price ? parseFloat(item.supplier_po_unit_price) : 0,
+        supplier_po_total_price: item.supplier_po_total_price ? parseFloat(item.supplier_po_total_price) : 0,
+        
+        customer_po_quantity: item.customer_po_quantity ? parseFloat(item.customer_po_quantity) : 0,
+        customer_po_unit_price: item.customer_po_unit_price ? parseFloat(item.customer_po_unit_price) : 0,
+        customer_po_total_price: item.customer_po_total_price ? parseFloat(item.customer_po_total_price) : 0,
+        
+        // Inventory data (if exists - optional)
+        inventory_id: item.inventory_id || null,
+        inventory_quantity: item.inventory_quantity ? parseFloat(item.inventory_quantity) : 0,
+        inventory_unit_price: item.inventory_unit_price ? parseFloat(item.inventory_unit_price) : 0,
+        inventory_total_price: item.inventory_total_price ? parseFloat(item.inventory_total_price) : 0,
+        inventory_sold_quantity: item.inventory_sold_quantity ? parseFloat(item.inventory_sold_quantity) : 0,
+        inventory_balance: item.inventory_balance ? parseFloat(item.inventory_balance) : 0,
+        inventory_balance_amount: item.inventory_balance_amount ? parseFloat(item.inventory_balance_amount) : 0,
         
         // Purchase Orders data (grouped by status)
         purchase_orders: {
@@ -570,12 +710,19 @@ router.get('/', async (req, res) => {
       };
     });
     
-    // Calculate summary statistics
+    // Calculate summary statistics (based on PO items)
+    let poTotalQuantity = 0;
+    let poTotalValue = 0;
     let inventoryTotalQuantity = 0;
     let inventoryTotalValue = 0;
     let inventoryTotalBalance = 0;
     
     processedItems.forEach(item => {
+      // PO item statistics
+      poTotalQuantity += parseFloat(item.po_quantity || 0);
+      poTotalValue += parseFloat(item.po_total_price || 0);
+      
+      // Inventory statistics (if inventory exists for this PO item)
       inventoryTotalQuantity += parseFloat(item.inventory_quantity || 0);
       inventoryTotalValue += parseFloat(item.inventory_total_price || 0);
       inventoryTotalBalance += parseFloat(item.inventory_balance || 0);
@@ -593,9 +740,11 @@ router.get('/', async (req, res) => {
       summary: {
         total_items: totalItems,
         showing_items: processedItems.length,
-        total_quantity: inventoryTotalQuantity,
-        total_value: inventoryTotalValue,
-        total_balance: inventoryTotalBalance
+        po_total_quantity: poTotalQuantity,
+        po_total_value: poTotalValue,
+        inventory_total_quantity: inventoryTotalQuantity,
+        inventory_total_value: inventoryTotalValue,
+        inventory_total_balance: inventoryTotalBalance
       }
     });
     
@@ -617,137 +766,114 @@ router.get('/export', async (req, res) => {
     
     const { as_of_date, search } = req.query;
     
-    // Use the same comprehensive query as the GET endpoint
+    // Use the same query structure as the GET endpoint (starting from purchase_order_items)
+    // Group by PROJECT NO, PART NO, MATERIAL NO, DESCRIPTION, UOM to avoid duplicates
     let query = `
       SELECT 
-        i.serial_no,
-        i.project_no,
-        DATE_FORMAT(i.date_po, '%Y-%m-%d') as date_po,
-        i.part_no,
-        i.material_no,
-        i.description,
-        i.uom,
-        i.quantity,
-        i.supplier_unit_price,
-        i.total_price,
-        i.sold_quantity,
-        i.balance,
-        i.balance_amount,
-        -- Approved Orders (status = 'approved', 'partially_delivered', or 'delivered_completed')
-        -- Shows all POs that were approved, including those that have been delivered
-        -- NOTE: Delivered POs appear in BOTH approved and delivered sections
-        GROUP_CONCAT(DISTINCT CASE 
-          WHEN po_approved.status IN ('approved', 'partially_delivered', 'delivered_completed')
-          THEN CONCAT(
-            poi_approved.quantity, '|',
-            poi_approved.unit_price, '|',
-            (poi_approved.quantity * poi_approved.unit_price), '|',
-            COALESCE(poi_approved.lead_time, ''), '|',
-            COALESCE(poi_approved.due_date, ''), '|',
-            COALESCE(cs_approved.company_name, ''),
-            '|',
-            COALESCE(po_approved.po_number, ''),
-            '|',
-            COALESCE(po_approved.order_type, ''),
-            '|',
-            COALESCE(po_approved.status, '')
-          )
-          ELSE NULL 
-        END SEPARATOR '||') as approved_orders_data,
-        -- Delivered Orders (only partially_delivered or delivered_completed)
-        -- ⚠️ CRITICAL: Display condition is ONLY based on status, NOT on penalty_percentage or any other field
-        -- Records are included if status === 'partially_delivered' OR status === 'delivered_completed'
-        -- This works even if penalty_percentage, penalty_amount, or delivered_quantity are NULL/empty
-        -- NOTE: These POs ALSO appear in the APPROVED section above - they are NOT removed from approved section
-        GROUP_CONCAT(DISTINCT CASE 
-          WHEN po_delivered.status IN ('partially_delivered', 'delivered_completed')
-          THEN CONCAT(
-            poi_delivered.quantity, '|',
-            poi_delivered.unit_price, '|',
-            (poi_delivered.quantity * poi_delivered.unit_price), '|',
-            COALESCE(poi_delivered.lead_time, ''), '|',
-            COALESCE(poi_delivered.due_date, ''), '|',
-            COALESCE(poi_delivered.delivered_quantity, ''), '|',
-            COALESCE(poi_delivered.delivered_unit_price, ''), '|',
-            COALESCE(poi_delivered.delivered_total_price, ''), '|',
-            COALESCE(NULLIF(poi_delivered.penalty_percentage, ''), '0'), '|',
-            COALESCE(NULLIF(poi_delivered.penalty_amount, ''), '0'), '|',
-            COALESCE(poi_delivered.invoice_no, ''), '|',
-            COALESCE(poi_delivered.balance_quantity_undelivered, ''), '|',
-            COALESCE(cs_delivered.company_name, ''),
-            '|',
-            COALESCE(po_delivered.po_number, ''),
-            '|',
-            COALESCE(po_delivered.order_type, '')
-          )
-          ELSE NULL 
-        END SEPARATOR '||') as delivered_orders_data
-      FROM inventory i
-      LEFT JOIN purchase_order_items poi_approved 
-        ON i.part_no = poi_approved.part_no 
-        AND (i.material_no = poi_approved.material_no OR (i.material_no IS NULL AND poi_approved.material_no IS NULL))
-      LEFT JOIN purchase_orders po_approved 
-        ON poi_approved.po_id = po_approved.id
-      LEFT JOIN customers_suppliers cs_approved 
-        ON po_approved.customer_supplier_id = cs_approved.id
-      LEFT JOIN purchase_order_items poi_delivered 
-        ON i.part_no = poi_delivered.part_no 
-        AND (i.material_no = poi_delivered.material_no OR (i.material_no IS NULL AND poi_delivered.material_no IS NULL))
-      LEFT JOIN purchase_orders po_delivered
-        ON poi_delivered.po_id = po_delivered.id
-      LEFT JOIN customers_suppliers cs_delivered 
-        ON po_delivered.customer_supplier_id = cs_delivered.id
-      WHERE 1=1
+        -- Group by these fields to ensure unique items (no duplicates)
+        -- Use CASE to match GROUP BY clause exactly (required for ONLY_FULL_GROUP_BY)
+        -- This ensures items with different PROJECT NO values appear as separate rows
+        CASE WHEN poi.project_no IS NULL THEN CONCAT('__NULL_PROJECT__', poi.id) ELSE poi.project_no END as project_no,
+        CASE WHEN poi.part_no IS NULL THEN CONCAT('__NULL_PART__', poi.id) ELSE poi.part_no END as part_no,
+        CASE WHEN poi.material_no IS NULL THEN CONCAT('__NULL_MATERIAL__', poi.id) ELSE poi.material_no END as material_no,
+        CASE WHEN poi.description IS NULL THEN CONCAT('__NULL_DESC__', poi.id) ELSE poi.description END as description,
+        CASE WHEN poi.uom IS NULL THEN CONCAT('__NULL_UOM__', poi.id) ELSE poi.uom END as uom,
+        
+        -- Aggregate other fields when multiple PO items match the same combination
+        MIN(poi.serial_no) as serial_no,
+        MIN(DATE_FORMAT(poi.date_po, '%Y-%m-%d')) as date_po,
+        
+        -- Aggregate approved quantities separately for supplier and customer POs
+        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.quantity, 0) ELSE 0 END) as supplier_po_quantity,
+        AVG(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.unit_price, 0) ELSE NULL END) as supplier_po_unit_price,
+        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.total_price, 0) ELSE 0 END) as supplier_po_total_price,
+        ANY_VALUE(CASE WHEN po.order_type = 'supplier' THEN poi.lead_time ELSE NULL END) as supplier_lead_time,
+        ANY_VALUE(CASE WHEN po.order_type = 'supplier' THEN poi.due_date ELSE NULL END) as supplier_due_date,
+        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'supplier' THEN po.po_number ELSE NULL END 
+            ORDER BY po.po_number SEPARATOR ', ') as supplier_po_number,
+        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'supplier' THEN cs.company_name ELSE NULL END 
+            ORDER BY cs.company_name SEPARATOR ', ') as supplier_name,
+        
+        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.quantity, 0) ELSE 0 END) as customer_po_quantity,
+        AVG(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.unit_price, 0) ELSE NULL END) as customer_po_unit_price,
+        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.total_price, 0) ELSE 0 END) as customer_po_total_price,
+        ANY_VALUE(CASE WHEN po.order_type = 'customer' THEN poi.lead_time ELSE NULL END) as customer_lead_time,
+        ANY_VALUE(CASE WHEN po.order_type = 'customer' THEN poi.due_date ELSE NULL END) as customer_due_date,
+        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'customer' THEN po.po_number ELSE NULL END 
+            ORDER BY po.po_number SEPARATOR ', ') as customer_po_number,
+        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'customer' THEN cs.company_name ELSE NULL END 
+            ORDER BY cs.company_name SEPARATOR ', ') as customer_name,
+        
+        -- Aggregate delivered quantities separately for supplier and customer POs
+        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.delivered_quantity, 0) ELSE 0 END) as supplier_delivered_quantity,
+        AVG(CASE WHEN po.order_type = 'supplier' AND poi.delivered_unit_price IS NOT NULL AND poi.delivered_unit_price > 0 
+            THEN poi.delivered_unit_price ELSE NULL END) as supplier_delivered_unit_price,
+        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.delivered_total_price, 0) ELSE 0 END) as supplier_delivered_total_price,
+        MAX(CASE WHEN po.order_type = 'supplier' THEN poi.penalty_percentage ELSE NULL END) as supplier_penalty_percentage,
+        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.penalty_amount, 0) ELSE 0 END) as supplier_penalty_amount,
+        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'supplier' THEN poi.invoice_no ELSE NULL END 
+            ORDER BY poi.invoice_no SEPARATOR ', ') as supplier_invoice_no,
+        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.balance_quantity_undelivered, 0) ELSE 0 END) as supplier_balance_quantity_undelivered,
+        
+        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.delivered_quantity, 0) ELSE 0 END) as customer_delivered_quantity,
+        AVG(CASE WHEN po.order_type = 'customer' AND poi.delivered_unit_price IS NOT NULL AND poi.delivered_unit_price > 0 
+            THEN poi.delivered_unit_price ELSE NULL END) as customer_delivered_unit_price,
+        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.delivered_total_price, 0) ELSE 0 END) as customer_delivered_total_price,
+        MAX(CASE WHEN po.order_type = 'customer' THEN poi.penalty_percentage ELSE NULL END) as customer_penalty_percentage,
+        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.penalty_amount, 0) ELSE 0 END) as customer_penalty_amount,
+        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'customer' THEN poi.invoice_no ELSE NULL END 
+            ORDER BY poi.invoice_no SEPARATOR ', ') as customer_invoice_no,
+        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.balance_quantity_undelivered, 0) ELSE 0 END) as customer_balance_quantity_undelivered,
+        
+        -- Status: if any PO is delivered, show delivered status
+        CASE 
+          WHEN SUM(CASE WHEN po.status IN ('partially_delivered', 'delivered_completed') THEN 1 ELSE 0 END) > 0
+          THEN MAX(CASE WHEN po.status IN ('partially_delivered', 'delivered_completed') THEN po.status ELSE NULL END)
+          ELSE MAX(CASE WHEN po.status = 'approved' THEN 'approved' ELSE NULL END)
+        END as po_status
+      FROM purchase_order_items poi
+      INNER JOIN purchase_orders po 
+        ON poi.po_id = po.id
+      LEFT JOIN customers_suppliers cs 
+        ON po.customer_supplier_id = cs.id
+      WHERE po.status IN ('approved', 'partially_delivered', 'delivered_completed')
     `;
     
     let params = [];
     
     if (as_of_date) {
-      query += ` AND DATE(i.created_at) <= ?`;
-      params.push(as_of_date);
+      query += ` AND (DATE(po.created_at) <= ? OR DATE(poi.date_po) <= ?)`;
+      params.push(as_of_date, as_of_date);
     }
     
     if (search) {
       query += ` AND (
-        i.serial_no LIKE ? OR 
-        i.project_no LIKE ? OR 
-        i.part_no LIKE ? OR 
-        i.material_no LIKE ? OR 
-        i.description LIKE ?
+        poi.serial_no LIKE ? OR 
+        poi.project_no LIKE ? OR 
+        poi.part_no LIKE ? OR 
+        poi.material_no LIKE ? OR 
+        poi.description LIKE ? OR
+        po.po_number LIKE ?
       )`;
       const searchParam = `%${search}%`;
-      params.push(searchParam, searchParam, searchParam, searchParam, searchParam);
+      params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
     }
     
-    query += ` GROUP BY i.id ORDER BY i.serial_no ASC`;
+    // Group by PROJECT NO, PART NO, MATERIAL NO, DESCRIPTION, UOM to ensure unique items (no duplicates)
+    // Use the same CASE logic as the main query
+    query += ` 
+      GROUP BY 
+        CASE WHEN poi.project_no IS NULL THEN CONCAT('__NULL_PROJECT__', poi.id) ELSE poi.project_no END,
+        CASE WHEN poi.part_no IS NULL THEN CONCAT('__NULL_PART__', poi.id) ELSE poi.part_no END,
+        CASE WHEN poi.material_no IS NULL THEN CONCAT('__NULL_MATERIAL__', poi.id) ELSE poi.material_no END,
+        CASE WHEN poi.description IS NULL THEN CONCAT('__NULL_DESC__', poi.id) ELSE poi.description END,
+        CASE WHEN poi.uom IS NULL THEN CONCAT('__NULL_UOM__', poi.id) ELSE poi.uom END
+      ORDER BY MIN(po.created_at) DESC, MIN(poi.serial_no) ASC`;
     
     const [items] = await req.db.execute(query, params);
     
-    // Helper to parse grouped orders data
-    const parseOrdersData = (data) => {
-      if (!data) return [];
-      return data.split('||').map(order => {
-        const parts = order.split('|');
-        return {
-          quantity: parts[0] || '',
-          unit_price: parts[1] || '',
-          total_price: parts[2] || '',
-          lead_time: parts[3] || '',
-          due_date: parts[4] || '',
-          customer_supplier_name: parts[5] || '',
-          order_type: parts[7] || '',
-          delivered_quantity: parts[8] || '',
-          delivered_unit_price: parts[9] || '',
-          delivered_total_price: parts[10] || '',
-          penalty_percentage: parts[11] || '',
-          penalty_amount: parts[12] || '',
-          invoice_no: parts[13] || '',
-          balance_quantity_undelivered: parts[14] || ''
-        };
-      });
-    };
-    
-    // Generate CSV with all 31 columns from dashboard
+    // Generate CSV with all columns from dashboard
+    // Items are grouped by PROJECT NO, PART NO, MATERIAL NO, DESCRIPTION, UOM (no duplicates)
     const headers = [
       'Serial No', 'Project No', 'Date PO', 'Part No', 'Material No',
       'Description', 'UOM',
@@ -765,22 +891,65 @@ router.get('/export', async (req, res) => {
     let csv = headers.join(',') + '\n';
     
     items.forEach(item => {
-      const approvedOrders = parseOrdersData(item.approved_orders_data);
-      const deliveredOrders = parseOrdersData(item.delivered_orders_data);
+      // Items are already grouped and aggregated by supplier/customer
+      // Use the aggregated values directly
+      const supplierApproved = {
+        quantity: item.supplier_po_quantity || 0,
+        unit_price: item.supplier_po_unit_price || 0,
+        total_price: item.supplier_po_total_price || 0,
+        lead_time: item.supplier_lead_time || '',
+        due_date: item.supplier_due_date || '',
+        supplier_name: item.supplier_name || '',
+        po_number: item.supplier_po_number || ''
+      };
       
-      const supplierApproved = approvedOrders.find(o => o.order_type === 'supplier');
-      const customerApproved = approvedOrders.find(o => o.order_type === 'customer');
-      const supplierDelivered = deliveredOrders.find(o => o.order_type === 'supplier');
-      const customerDelivered = deliveredOrders.find(o => o.order_type === 'customer');
+      const supplierDelivered = {
+        delivered_quantity: item.supplier_delivered_quantity || 0,
+        delivered_unit_price: item.supplier_delivered_unit_price || 0,
+        delivered_total_price: item.supplier_delivered_total_price || 0,
+        penalty_percentage: item.supplier_penalty_percentage || '0',
+        penalty_amount: item.supplier_penalty_amount || 0,
+        invoice_no: item.supplier_invoice_no || '',
+        balance_quantity_undelivered: item.supplier_balance_quantity_undelivered || 0,
+        supplier_name: item.supplier_name || ''
+      };
+      
+      const customerApproved = {
+        quantity: item.customer_po_quantity || 0,
+        unit_price: item.customer_po_unit_price || 0,
+        total_price: item.customer_po_total_price || 0,
+        lead_time: item.customer_lead_time || '',
+        due_date: item.customer_due_date || '',
+        customer_name: item.customer_name || '',
+        po_number: item.customer_po_number || ''
+      };
+      
+      const customerDelivered = {
+        delivered_quantity: item.customer_delivered_quantity || 0,
+        delivered_unit_price: item.customer_delivered_unit_price || 0,
+        delivered_total_price: item.customer_delivered_total_price || 0,
+        penalty_percentage: item.customer_penalty_percentage || '0',
+        penalty_amount: item.customer_penalty_amount || 0,
+        invoice_no: item.customer_invoice_no || '',
+        balance_quantity_undelivered: item.customer_balance_quantity_undelivered || 0,
+        customer_name: item.customer_name || ''
+      };
+      
+      // Clean up NULL markers before exporting
+      const cleanProjectNo = item.project_no && typeof item.project_no === 'string' && item.project_no.startsWith('__NULL_PROJECT__') ? '' : (item.project_no || '');
+      const cleanPartNo = item.part_no && typeof item.part_no === 'string' && item.part_no.startsWith('__NULL_PART__') ? '' : (item.part_no || '');
+      const cleanMaterialNo = item.material_no && typeof item.material_no === 'string' && item.material_no.startsWith('__NULL_MATERIAL__') ? '' : (item.material_no || '');
+      const cleanDescription = item.description && typeof item.description === 'string' && item.description.startsWith('__NULL_DESC__') ? '' : (item.description || '');
+      const cleanUom = item.uom && typeof item.uom === 'string' && item.uom.startsWith('__NULL_UOM__') ? '' : (item.uom || '');
       
       const row = [
         item.serial_no || '',
-        item.project_no || '',
+        cleanProjectNo,
         item.date_po || '',
-        item.part_no || '',
-        item.material_no || '',
-        `"${(item.description || '').replace(/"/g, '""')}"`,
-        item.uom || '',
+        cleanPartNo,
+        cleanMaterialNo,
+        `"${cleanDescription.replace(/"/g, '""')}"`,
+        cleanUom,
         supplierApproved?.quantity || '',
         supplierApproved?.unit_price || '',
         supplierApproved?.total_price || '',
@@ -793,7 +962,7 @@ router.get('/export', async (req, res) => {
         supplierDelivered?.penalty_amount || '',
         supplierDelivered?.invoice_no || '',
         supplierDelivered?.balance_quantity_undelivered || '',
-        supplierDelivered?.customer_supplier_name || '',
+        supplierDelivered?.supplier_name || supplierApproved?.supplier_name || '',
         customerApproved?.quantity || '',
         customerApproved?.unit_price || '',
         customerApproved?.total_price || '',
@@ -806,7 +975,7 @@ router.get('/export', async (req, res) => {
         customerDelivered?.penalty_amount || '',
         customerDelivered?.invoice_no || '',
         customerDelivered?.balance_quantity_undelivered || '',
-        customerDelivered?.customer_supplier_name || ''
+        customerDelivered?.customer_name || customerApproved?.customer_name || ''
       ];
       csv += row.join(',') + '\n';
     });

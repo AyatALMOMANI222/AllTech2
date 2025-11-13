@@ -16,6 +16,7 @@ import SalesTaxInvoice from './components/SalesTaxInvoice';
 import PurchaseTaxInvoice from './components/PurchaseTaxInvoice';
 import InvoicesManagement from './components/InvoicesManagement';
 import WarrantyManagement from './components/WarrantyManagement';
+import WarrantyReport from './components/WarrantyReport';
 import './styles/index.scss';
 
 function App() {
@@ -121,6 +122,14 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <WarrantyManagement />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/warranty-report" element={
+              <ProtectedRoute>
+                <Layout>
+                  <WarrantyReport />
                 </Layout>
               </ProtectedRoute>
             } />

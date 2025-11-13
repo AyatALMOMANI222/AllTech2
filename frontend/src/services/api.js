@@ -163,6 +163,7 @@ export const warrantyAPI = {
       },
     });
   },
+  getReport: (params = {}) => api.get('/warranty/report', { params }),
 };
 
 export const purchaseOrderDocumentsAPI = {
