@@ -248,16 +248,20 @@ router.get('/', async (req, res) => {
     // Inventory data is LEFT JOINed to show inventory info when available, but is NOT required
     let query = `
       SELECT 
-        -- Group by these fields to ensure unique items (no duplicates)
+        -- Include po.id in SELECT to match GROUP BY (each row represents one PO + item combination)
+        po.id as po_id,
+        
+        -- Group by these fields to ensure unique items per PO (no duplicates)
         -- Use CASE to match GROUP BY clause exactly (required for ONLY_FULL_GROUP_BY)
         -- This ensures items with different PROJECT NO values appear as separate rows
+        -- Each Customer Order (different po.id) appears as separate rows even if items are the same
         CASE WHEN poi.project_no IS NULL THEN CONCAT('__NULL_PROJECT__', poi.id) ELSE poi.project_no END as project_no,
         CASE WHEN poi.part_no IS NULL THEN CONCAT('__NULL_PART__', poi.id) ELSE poi.part_no END as part_no,
         CASE WHEN poi.material_no IS NULL THEN CONCAT('__NULL_MATERIAL__', poi.id) ELSE poi.material_no END as material_no,
         CASE WHEN poi.description IS NULL THEN CONCAT('__NULL_DESC__', poi.id) ELSE poi.description END as description,
         CASE WHEN poi.uom IS NULL THEN CONCAT('__NULL_UOM__', poi.id) ELSE poi.uom END as uom,
         
-        -- Aggregate other fields when multiple PO items match the same combination
+        -- Aggregate other fields when multiple PO items match the same combination within the same PO
         MIN(poi.id) as po_item_id,
         MIN(poi.serial_no) as serial_no,
         MIN(poi.date_po) as date_po,
@@ -282,10 +286,23 @@ router.get('/', async (req, res) => {
         
         -- Separate status for supplier and customer POs
         -- Supplier status: if any supplier PO is delivered, show delivered status
+        -- Include linked supplier status for customer orders
+        -- For customer orders without linked suppliers, return NULL
+        -- Check at group level: if MAX(linked_supplier_po.id) IS NULL, then no linked supplier exists
         CASE 
-          WHEN SUM(CASE WHEN po.order_type = 'supplier' AND po.status IN ('partially_delivered', 'delivered_completed') THEN 1 ELSE 0 END) > 0
-          THEN MAX(CASE WHEN po.order_type = 'supplier' AND po.status IN ('partially_delivered', 'delivered_completed') THEN po.status ELSE NULL END)
-          WHEN SUM(CASE WHEN po.order_type = 'supplier' AND po.status = 'approved' THEN 1 ELSE 0 END) > 0
+          WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
+          WHEN SUM(CASE 
+            WHEN (po.order_type = 'supplier' AND po.status IN ('partially_delivered', 'delivered_completed'))
+              OR (po.order_type = 'customer' AND linked_supplier_po.id IS NOT NULL AND linked_supplier_po.status IN ('partially_delivered', 'delivered_completed'))
+            THEN 1 ELSE 0 END) > 0
+          THEN MAX(CASE 
+            WHEN po.order_type = 'supplier' AND po.status IN ('partially_delivered', 'delivered_completed') THEN po.status
+            WHEN po.order_type = 'customer' AND linked_supplier_po.id IS NOT NULL AND linked_supplier_po.status IN ('partially_delivered', 'delivered_completed') THEN linked_supplier_po.status
+            ELSE NULL END)
+          WHEN SUM(CASE 
+            WHEN (po.order_type = 'supplier' AND po.status = 'approved')
+              OR (po.order_type = 'customer' AND linked_supplier_po.id IS NOT NULL AND linked_supplier_po.status = 'approved')
+            THEN 1 ELSE 0 END) > 0
           THEN 'approved'
           ELSE NULL
         END as supplier_po_status,
@@ -307,17 +324,94 @@ router.get('/', async (req, res) => {
         GROUP_CONCAT(DISTINCT cs.id ORDER BY cs.id SEPARATOR ',') as customer_supplier_ids,
         GROUP_CONCAT(DISTINCT cs.company_name ORDER BY cs.company_name SEPARATOR ', ') as customer_supplier_name,
         
+        -- Supplier name: Use linked supplier name for customer orders, or standalone supplier name
+        -- For customer orders without linked suppliers, return NULL (empty)
+        -- Check at group level: if MAX(linked_supplier_po.id) IS NULL, then no linked supplier exists
+        CASE 
+          WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
+          ELSE GROUP_CONCAT(DISTINCT CASE 
+            WHEN po.order_type = 'customer' AND linked_supplier_cs.id IS NOT NULL THEN linked_supplier_cs.company_name
+            WHEN po.order_type = 'supplier' THEN cs.company_name
+            ELSE NULL 
+          END ORDER BY CASE 
+            WHEN po.order_type = 'customer' AND linked_supplier_cs.id IS NOT NULL THEN linked_supplier_cs.company_name
+            WHEN po.order_type = 'supplier' THEN cs.company_name
+            ELSE NULL 
+          END SEPARATOR ', ')
+        END as supplier_name,
+        
         -- Aggregate delivered quantities separately for supplier and customer POs
-        -- Supplier delivered quantities
-        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.delivered_quantity, 0) ELSE 0 END) as supplier_delivered_quantity,
-        AVG(CASE WHEN po.order_type = 'supplier' AND poi.delivered_unit_price IS NOT NULL AND poi.delivered_unit_price > 0 
-            THEN poi.delivered_unit_price ELSE NULL END) as supplier_delivered_unit_price,
-        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.delivered_total_price, 0) ELSE 0 END) as supplier_delivered_total_price,
-        MAX(CASE WHEN po.order_type = 'supplier' THEN poi.penalty_percentage ELSE NULL END) as supplier_penalty_percentage,
-        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.penalty_amount, 0) ELSE 0 END) as supplier_penalty_amount,
-        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'supplier' THEN poi.invoice_no ELSE NULL END 
-            ORDER BY poi.invoice_no SEPARATOR ', ') as supplier_invoice_no,
-        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.balance_quantity_undelivered, 0) ELSE 0 END) as supplier_balance_quantity_undelivered,
+        -- Supplier delivered quantities: Use linked supplier data for customer orders, or standalone supplier data
+        -- For customer orders without linked suppliers, return NULL (empty)
+        -- Check at group level: if MAX(linked_supplier_po.id) IS NULL, then no linked supplier exists
+        CASE 
+          WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
+          ELSE NULLIF(SUM(CASE 
+            WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL THEN COALESCE(linked_poi.delivered_quantity, 0)
+            WHEN po.order_type = 'supplier' THEN COALESCE(poi.delivered_quantity, 0)
+            ELSE NULL
+          END), 0)
+        END as supplier_delivered_quantity,
+        CASE 
+          WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
+          ELSE AVG(CASE 
+            WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL AND linked_poi.delivered_unit_price IS NOT NULL AND linked_poi.delivered_unit_price > 0 
+              THEN linked_poi.delivered_unit_price
+            WHEN po.order_type = 'supplier' AND poi.delivered_unit_price IS NOT NULL AND poi.delivered_unit_price > 0 
+              THEN poi.delivered_unit_price
+            ELSE NULL 
+          END)
+        END as supplier_delivered_unit_price,
+        CASE 
+          WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
+          ELSE NULLIF(SUM(CASE 
+            WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL THEN COALESCE(linked_poi.delivered_total_price, 0)
+            WHEN po.order_type = 'supplier' THEN COALESCE(poi.delivered_total_price, 0)
+            ELSE NULL
+          END), 0)
+        END as supplier_delivered_total_price,
+        CASE 
+          WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
+          ELSE MAX(CASE 
+            WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL THEN linked_poi.penalty_percentage
+            WHEN po.order_type = 'supplier' THEN poi.penalty_percentage
+            ELSE NULL 
+          END)
+        END as supplier_penalty_percentage,
+        CASE 
+          WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
+          ELSE NULLIF(SUM(CASE 
+            WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL THEN COALESCE(linked_poi.penalty_amount, 0)
+            WHEN po.order_type = 'supplier' THEN COALESCE(poi.penalty_amount, 0)
+            ELSE NULL
+          END), 0)
+        END as supplier_penalty_amount,
+        -- Supplier invoice numbers: ONLY from Purchase Tax Invoices (supplier invoices)
+        -- For customer orders: use linked supplier order invoice numbers
+        -- For supplier orders: use supplier order invoice numbers
+        -- NEVER include customer invoice numbers (Sales Tax Invoices) in supplier_invoice_no
+        CASE 
+          WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
+          ELSE GROUP_CONCAT(DISTINCT CASE 
+            -- For customer orders: only use invoice numbers from linked supplier orders
+            WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL AND linked_supplier_po.id IS NOT NULL THEN linked_poi.invoice_no
+            -- For supplier orders: only use invoice numbers from supplier orders (Purchase Tax Invoices)
+            WHEN po.order_type = 'supplier' THEN poi.invoice_no
+            ELSE NULL 
+          END ORDER BY CASE 
+            WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL AND linked_supplier_po.id IS NOT NULL THEN linked_poi.invoice_no
+            WHEN po.order_type = 'supplier' THEN poi.invoice_no
+            ELSE NULL 
+          END SEPARATOR ', ')
+        END as supplier_invoice_no,
+        CASE 
+          WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
+          ELSE NULLIF(SUM(CASE 
+            WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL THEN COALESCE(linked_poi.balance_quantity_undelivered, 0)
+            WHEN po.order_type = 'supplier' THEN COALESCE(poi.balance_quantity_undelivered, 0)
+            ELSE NULL
+          END), 0)
+        END as supplier_balance_quantity_undelivered,
         
         -- Customer delivered quantities
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.delivered_quantity, 0) ELSE 0 END) as customer_delivered_quantity,
@@ -331,9 +425,33 @@ router.get('/', async (req, res) => {
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.balance_quantity_undelivered, 0) ELSE 0 END) as customer_balance_quantity_undelivered,
         
         -- Aggregate approved quantities separately for supplier and customer POs
-        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.quantity, 0) ELSE 0 END) as supplier_po_quantity,
-        AVG(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.unit_price, 0) ELSE NULL END) as supplier_po_unit_price,
-        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.total_price, 0) ELSE 0 END) as supplier_po_total_price,
+        -- Supplier approved quantities: Use linked supplier data for customer orders, or standalone supplier data
+        -- For customer orders without linked suppliers, return NULL (empty)
+        -- Check at group level: if MAX(linked_supplier_po.id) IS NULL, then no linked supplier exists
+        CASE 
+          WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
+          ELSE NULLIF(SUM(CASE 
+            WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL THEN COALESCE(linked_poi.quantity, 0)
+            WHEN po.order_type = 'supplier' THEN COALESCE(poi.quantity, 0)
+            ELSE NULL
+          END), 0)
+        END as supplier_po_quantity,
+        CASE 
+          WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
+          ELSE AVG(CASE 
+            WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL THEN COALESCE(linked_poi.unit_price, 0)
+            WHEN po.order_type = 'supplier' THEN COALESCE(poi.unit_price, 0)
+            ELSE NULL 
+          END)
+        END as supplier_po_unit_price,
+        CASE 
+          WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
+          ELSE NULLIF(SUM(CASE 
+            WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL THEN COALESCE(linked_poi.total_price, 0)
+            WHEN po.order_type = 'supplier' THEN COALESCE(poi.total_price, 0)
+            ELSE NULL
+          END), 0)
+        END as supplier_po_total_price,
         
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.quantity, 0) ELSE 0 END) as customer_po_quantity,
         AVG(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.unit_price, 0) ELSE NULL END) as customer_po_unit_price,
@@ -352,6 +470,7 @@ router.get('/', async (req, res) => {
         -- Approved Orders data (for grouped PO items)
         -- Shows PO data if status is 'approved', 'partially_delivered', or 'delivered_completed'
         -- NOTE: Delivered POs appear in BOTH approved and delivered sections
+        -- Include customer orders and their linked supplier orders
         -- Use GROUP_CONCAT to combine multiple POs for the same item
         GROUP_CONCAT(DISTINCT CASE 
           WHEN po.status IN ('approved', 'partially_delivered', 'delivered_completed')
@@ -371,6 +490,28 @@ router.get('/', async (req, res) => {
           )
           ELSE NULL 
         END SEPARATOR '||') as approved_orders_data,
+        
+        -- Linked Supplier Approved Orders data (for customer orders with linked suppliers)
+        GROUP_CONCAT(DISTINCT CASE 
+          WHEN po.order_type = 'customer' 
+            AND linked_supplier_po.id IS NOT NULL 
+            AND linked_supplier_po.status IN ('approved', 'partially_delivered', 'delivered_completed')
+          THEN CONCAT(
+            linked_poi.quantity, '|',
+            linked_poi.unit_price, '|',
+            (linked_poi.quantity * linked_poi.unit_price), '|',
+            COALESCE(linked_poi.lead_time, ''), '|',
+            COALESCE(linked_poi.due_date, ''), '|',
+            COALESCE(linked_supplier_cs.company_name, ''),
+            '|',
+            COALESCE(linked_supplier_po.po_number, ''),
+            '|',
+            'supplier',
+            '|',
+            COALESCE(linked_supplier_po.status, '')
+          )
+          ELSE NULL 
+        END SEPARATOR '||') as linked_supplier_approved_orders_data,
         
         -- 📦 DELIVERED PURCHASED ORDER Section
         -- ⚠️ Display Condition: Show ONLY when PO status is "partially_delivered" or "delivered_completed"
@@ -404,6 +545,35 @@ router.get('/', async (req, res) => {
           )
           ELSE NULL 
         END SEPARATOR '||') as delivered_orders_data,
+        
+        -- Linked Supplier Delivered Orders data (for customer orders with linked suppliers)
+        GROUP_CONCAT(DISTINCT CASE 
+          WHEN po.order_type = 'customer' 
+            AND linked_supplier_po.id IS NOT NULL 
+            AND linked_supplier_po.status IN ('partially_delivered', 'delivered_completed')
+          THEN CONCAT(
+            linked_poi.quantity, '|',                    -- ORDERED QUANTITY (from APPROVED section)
+            linked_poi.unit_price, '|',                  -- Original unit price
+            (linked_poi.quantity * linked_poi.unit_price), '|',  -- Original total
+            COALESCE(linked_poi.lead_time, ''), '|',
+            COALESCE(linked_poi.due_date, ''), '|',
+            COALESCE(linked_poi.delivered_quantity, ''), '|',       -- DELIVERED QUANTITY (sum from invoices)
+            COALESCE(linked_poi.delivered_unit_price, ''), '|',     -- DELIVERED UNIT PRICE (from invoices)
+            COALESCE(linked_poi.delivered_total_price, ''), '|',    -- DELIVERED TOTAL PRICE (calculated)
+            COALESCE(NULLIF(linked_poi.penalty_percentage, ''), '0'), '|',  -- PENALTY %
+            COALESCE(NULLIF(linked_poi.penalty_amount, ''), '0'), '|',      -- PENALTY AMOUNT
+            COALESCE(linked_poi.invoice_no, ''), '|',               -- Invoice numbers
+            COALESCE(linked_poi.balance_quantity_undelivered, ''), '|',  -- BALANCE (ORDERED - DELIVERED)
+            COALESCE(linked_supplier_cs.company_name, ''),
+            '|',
+            COALESCE(linked_supplier_po.po_number, ''),
+            '|',
+            'supplier',
+            '|',
+            COALESCE(linked_supplier_po.status, '')
+          )
+          ELSE NULL 
+        END SEPARATOR '||') as linked_supplier_delivered_orders_data,
         
         -- Purchase Tax Invoice data (matching by part_no, material_no)
         GROUP_CONCAT(DISTINCT CASE 
@@ -441,6 +611,22 @@ router.get('/', async (req, res) => {
       LEFT JOIN customers_suppliers cs 
         ON po.customer_supplier_id = cs.id
       
+      -- Join with Linked Supplier Order Items (for customer orders with linked suppliers)
+      -- Match items by part_no, material_no, project_no, description, uom
+      LEFT JOIN purchase_order_items linked_poi
+        ON po.order_type = 'customer'
+        AND linked_poi.part_no = poi.part_no
+        AND (linked_poi.material_no = poi.material_no OR (linked_poi.material_no IS NULL AND poi.material_no IS NULL))
+        AND (linked_poi.project_no = poi.project_no OR (linked_poi.project_no IS NULL AND poi.project_no IS NULL))
+        AND (linked_poi.description = poi.description OR (linked_poi.description IS NULL AND poi.description IS NULL))
+        AND (linked_poi.uom = poi.uom OR (linked_poi.uom IS NULL AND poi.uom IS NULL))
+      LEFT JOIN purchase_orders linked_supplier_po
+        ON linked_poi.po_id = linked_supplier_po.id
+        AND linked_supplier_po.order_type = 'supplier'
+        AND linked_supplier_po.linked_customer_po_id = po.id
+      LEFT JOIN customers_suppliers linked_supplier_cs
+        ON linked_supplier_po.customer_supplier_id = linked_supplier_cs.id
+      
       -- Join with Inventory (optional - to show inventory data if it exists)
       -- Match by part_no, material_no, project_no, description, and supplier_unit_price
       LEFT JOIN inventory i
@@ -467,6 +653,8 @@ router.get('/', async (req, res) => {
         ON sti.customer_id = cs_sti_customer.id
       
       WHERE 1=1
+        -- Exclude supplier orders that are linked to customer orders (they will be shown with customer orders)
+        AND (po.order_type = 'customer' OR (po.order_type = 'supplier' AND po.linked_customer_po_id IS NULL))
     `;
     
     let params = [];
@@ -495,13 +683,14 @@ router.get('/', async (req, res) => {
       params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
     }
     
-    // Group by PROJECT NO, PART NO, MATERIAL NO, DESCRIPTION, UOM to ensure unique items (no duplicates)
-    // Items with the same values for ALL these fields will be combined into a single row
-    // Items with different PROJECT NO values will appear as separate rows
+    // Group by Customer Order ID + item fields to ensure each Customer Order appears as separate row
+    // For customer orders: Group by po.id (Customer Order ID) + item fields
+    // For standalone supplier orders: Group by po.id (Supplier Order ID) + item fields
+    // This ensures that the same item in different Customer Orders appears as separate rows
     // Handle NULL values properly in GROUP BY - use COALESCE but ensure NULLs are distinct
-    // Use CONCAT with a unique marker to distinguish NULL from empty string and ensure proper grouping
     query += ` 
       GROUP BY 
+        po.id,
         CASE WHEN poi.project_no IS NULL THEN CONCAT('__NULL_PROJECT__', poi.id) ELSE poi.project_no END,
         CASE WHEN poi.part_no IS NULL THEN CONCAT('__NULL_PART__', poi.id) ELSE poi.part_no END,
         CASE WHEN poi.material_no IS NULL THEN CONCAT('__NULL_MATERIAL__', poi.id) ELSE poi.material_no END,
@@ -512,10 +701,11 @@ router.get('/', async (req, res) => {
     
     const [items] = await req.db.execute(query, params);
     
-    // Get total count for pagination (count distinct combinations of project_no, part_no, material_no, description, uom)
+    // Get total count for pagination (count distinct combinations of po.id + item fields)
     // Use the same CASE logic as the main query to ensure consistent counting
     let countQuery = `
       SELECT COUNT(DISTINCT CONCAT(
+        po.id, '|',
         CASE WHEN poi.project_no IS NULL THEN CONCAT('__NULL_PROJECT__', poi.id) ELSE poi.project_no END, '|',
         CASE WHEN poi.part_no IS NULL THEN CONCAT('__NULL_PART__', poi.id) ELSE poi.part_no END, '|',
         CASE WHEN poi.material_no IS NULL THEN CONCAT('__NULL_MATERIAL__', poi.id) ELSE poi.material_no END, '|',
@@ -526,6 +716,8 @@ router.get('/', async (req, res) => {
       INNER JOIN purchase_orders po 
         ON poi.po_id = po.id
       WHERE po.status IN ('approved', 'partially_delivered', 'delivered_completed')
+        -- Exclude supplier orders that are linked to customer orders
+        AND (po.order_type = 'customer' OR (po.order_type = 'supplier' AND po.linked_customer_po_id IS NULL))
     `;
     
     const countParams = [];
@@ -576,6 +768,25 @@ router.get('/', async (req, res) => {
         });
       }
       
+      // Parse linked supplier approved orders data and merge with approved orders
+      if (item.linked_supplier_approved_orders_data) {
+        const linkedOrders = item.linked_supplier_approved_orders_data.split('||').filter(data => data && data.trim() !== '');
+        linkedOrders.forEach(orderData => {
+          const parts = orderData.split('|');
+          approvedOrders.push({
+            quantity: parseFloat(parts[0]) || 0,
+            unit_price: parseFloat(parts[1]) || 0,
+            total_price: parseFloat(parts[2]) || 0,
+            lead_time: parts[3] || '',
+            due_date: parts[4] || '',
+            supplier_name: parts[5] || '',
+            po_number: parts[6] || '',
+            order_type: parts[7] || 'supplier',
+            status: parts[8] || 'approved'
+          });
+        });
+      }
+      
       // Parse delivered orders data (may contain multiple POs separated by '||')
       // ⚠️ IMPORTANT: Records are included regardless of penalty_percentage value (can be empty/null)
       // ⚠️ Records appear when PO status is 'partially_delivered' or 'delivered_completed'
@@ -601,6 +812,32 @@ router.get('/', async (req, res) => {
               supplier_name: parts[12] || '',
               po_number: parts[13] || '',
               order_type: parts[14] || '',
+              status: parts[15] || ''
+          });
+        });
+      }
+      
+      // Parse linked supplier delivered orders data and merge with delivered orders
+      if (item.linked_supplier_delivered_orders_data) {
+        const linkedOrders = item.linked_supplier_delivered_orders_data.split('||').filter(data => data && data.trim() !== '');
+        linkedOrders.forEach(orderData => {
+          const parts = orderData.split('|');
+          deliveredOrders.push({
+              quantity: parseFloat(parts[0]) || 0,
+              unit_price: parseFloat(parts[1]) || 0,
+              total_price: parseFloat(parts[2]) || 0,
+              lead_time: parts[3] || '',
+              due_date: parts[4] || '',
+              delivered_quantity: parts[5] ? parseFloat(parts[5]) : 0,
+              delivered_unit_price: parts[6] ? parseFloat(parts[6]) : 0,
+              delivered_total_price: parts[7] ? parseFloat(parts[7]) : 0,
+              penalty_percentage: parts[8] !== undefined ? (parts[8] || '0') : '0',
+              penalty_amount: parts[9] !== undefined ? (parts[9] || '0') : '0',
+              invoice_no: parts[10] || '',
+              balance_quantity_undelivered: parts[11] || '',
+              supplier_name: parts[12] || '',
+              po_number: parts[13] || '',
+              order_type: parts[14] || 'supplier',
               status: parts[15] || ''
           });
         });
@@ -658,6 +895,7 @@ router.get('/', async (req, res) => {
         customer_po_status: item.customer_po_status || null,
         order_type: item.order_type || '',
         customer_supplier_name: item.customer_supplier_name || '',
+        supplier_name: item.supplier_name || '',
         
         // Delivered data (separated by order_type)
         // Supplier delivered data

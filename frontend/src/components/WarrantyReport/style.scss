@@ -824,30 +824,51 @@
 
   // Print styles
   @media print {
+    // Prevent blank first page
+    @page {
+      margin: 0.5cm;
+    }
+
     .no-print {
       display: none !important;
     }
 
     .warranty-report {
-      padding: 0;
-      background: white;
+      padding: 0 !important;
+      margin: 0 !important;
+      min-height: auto !important;
+      background: white !important;
+      page-break-before: avoid;
     }
 
     .card {
       box-shadow: none;
       border: 1px solid #dee2e6;
       border-radius: 0;
+      margin: 0 !important;
+      page-break-before: avoid;
     }
 
     .card-header {
       background: #667eea !important;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
+      page-break-after: avoid;
+      padding: 1rem 1.5rem !important;
+    }
+
+    .card-body {
+      padding: 1rem !important;
+    }
+
+    .report-table-container {
+      page-break-inside: auto;
     }
 
     .table {
       font-size: 0.75rem;
       border-collapse: collapse;
+      page-break-inside: auto;
 
       th, td {
         padding: 0.5rem;
@@ -858,6 +879,22 @@
         background: #f8f9fa !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
+        display: table-header-group;
+      }
+
+      tbody {
+        display: table-row-group;
+      }
+
+      tr {
+        page-break-inside: avoid;
+        page-break-after: auto;
+      }
+
+      // Hide Actions column (8th column) when printing
+      th:nth-child(8),
+      td:nth-child(8) {
+        display: none !important;
       }
     }
 

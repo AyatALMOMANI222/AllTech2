@@ -328,8 +328,9 @@ const DatabaseDashboard = () => {
                           
                           // Check if item has supplier or customer orders based on aggregated values
                           // Use aggregated values directly from backend (supplier_po_quantity, customer_po_quantity, etc.)
-                          const hasSupplierApproved = item.supplier_po_quantity && parseFloat(item.supplier_po_quantity) > 0;
-                          const hasSupplierDelivered = item.supplier_delivered_quantity && parseFloat(item.supplier_delivered_quantity) > 0;
+                          // For customer orders without linked suppliers, supplier_po_quantity will be NULL, so hasSupplierApproved will be false
+                          const hasSupplierApproved = item.supplier_po_quantity != null && item.supplier_po_quantity !== '' && parseFloat(item.supplier_po_quantity) > 0;
+                          const hasSupplierDelivered = item.supplier_delivered_quantity != null && item.supplier_delivered_quantity !== '' && parseFloat(item.supplier_delivered_quantity) > 0;
                           const hasCustomerApproved = item.customer_po_quantity && parseFloat(item.customer_po_quantity) > 0;
                           const hasCustomerDelivered = item.customer_delivered_quantity && parseFloat(item.customer_delivered_quantity) > 0;
                           
@@ -345,7 +346,8 @@ const DatabaseDashboard = () => {
                           
                           // Check PO status separately for supplier and customer
                           // Use separate status fields from backend, or fall back to general status
-                          const supplierStatus = item.supplier_po_status || item.po_status;
+                          // For customer orders without linked suppliers, supplier_po_status will be NULL
+                          const supplierStatus = item.supplier_po_status != null ? item.supplier_po_status : (item.po_status && item.order_type === 'supplier' ? item.po_status : null);
                           const customerStatus = item.customer_po_status || item.po_status;
                           
                           const supplierIsApproved = supplierStatus && ['approved', 'partially_delivered', 'delivered_completed'].includes(supplierStatus);
@@ -371,7 +373,7 @@ const DatabaseDashboard = () => {
                             po_total_price: supplierApprovedTotalPrice,
                             lead_time: supplierApprovedOrders[0]?.lead_time || item.lead_time || '',
                             due_date: supplierApprovedOrders[0]?.due_date || item.due_date || '',
-                            customer_supplier_name: supplierApprovedOrders[0]?.supplier_name || item.customer_supplier_name || '',
+                            customer_supplier_name: supplierApprovedOrders[0]?.supplier_name || item.supplier_name || item.customer_supplier_name || '',
                             po_number: supplierApprovedOrders.length > 0 
                               ? supplierApprovedOrders.map(o => o.po_number).filter(Boolean).join(', ')
                               : (item.po_number || ''),
@@ -402,7 +404,7 @@ const DatabaseDashboard = () => {
                             penalty_amount: item.supplier_penalty_amount || 0,
                             invoice_no: item.supplier_invoice_no || '',
                             balance_quantity_undelivered: supplierBalanceQuantityUndelivered,
-                            customer_supplier_name: supplierDeliveredOrders[0]?.supplier_name || item.customer_supplier_name || '',
+                            customer_supplier_name: supplierDeliveredOrders[0]?.supplier_name || item.supplier_name || item.customer_supplier_name || '',
                             po_number: supplierDeliveredOrders.length > 0
                               ? supplierDeliveredOrders.map(o => o.po_number).filter(Boolean).join(', ')
                               : (item.po_number || ''),
