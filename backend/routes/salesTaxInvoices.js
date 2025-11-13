@@ -619,17 +619,19 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET /api/sales-tax-invoices/customer/:customer_id/po-numbers - Get approved PO numbers for customer
+// Only show Purchase Orders with status "Partially Delivered" or "Approved"
+// Do not include Purchase Orders with status "Delivered Completed"
 router.get('/customer/:customer_id/po-numbers', async (req, res) => {
   try {
     const { customer_id } = req.params;
     
-    // Get approved and delivered purchase orders for the customer
+    // Get approved and partially delivered purchase orders for the customer
     const [pos] = await req.db.execute(`
       SELECT po.id, po.po_number, po.created_at
       FROM purchase_orders po
       WHERE po.customer_supplier_id = ? 
         AND po.order_type = 'customer' 
-        AND po.status IN ('approved', 'partially_delivered', 'delivered_completed')
+        AND po.status IN ('approved', 'partially_delivered')
       ORDER BY po.created_at DESC
     `, [customer_id]);
     

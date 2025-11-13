@@ -489,6 +489,8 @@ router.get('/suppliers/list', authenticateToken, async (req, res) => {
 });
 
 // GET /api/purchase-tax-invoices/po/list - Get PO numbers for dropdown filtered by supplier
+// Only show Purchase Orders with status "Partially Delivered" or "Approved"
+// Do not include Purchase Orders with status "Delivered Completed"
 router.get('/po/list', authenticateToken, async (req, res) => {
   try {
     const { supplier_id } = req.query;
@@ -497,7 +499,7 @@ router.get('/po/list', authenticateToken, async (req, res) => {
       SELECT po.id, po.po_number, cs.company_name as supplier_name
       FROM purchase_orders po
       LEFT JOIN customers_suppliers cs ON po.customer_supplier_id = cs.id
-      WHERE po.order_type = 'supplier' AND po.status IN ('approved', 'partially_delivered', 'delivered_completed')
+      WHERE po.order_type = 'supplier' AND po.status IN ('approved', 'partially_delivered')
     `;
     
     let params = [];
