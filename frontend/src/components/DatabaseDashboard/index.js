@@ -380,15 +380,28 @@ const DatabaseDashboard = () => {
                           } : null;
                           
                           // Build supplier delivered data object - show if has supplier delivered data AND status is delivered
+                          // Calculate delivered quantity from delivered_orders_data (actual database values) instead of aggregated sum
+                          const supplierDeliveredQuantity = supplierDeliveredOrders.length > 0
+                            ? supplierDeliveredOrders.reduce((sum, order) => sum + (parseFloat(order.delivered_quantity) || 0), 0)
+                            : (item.supplier_delivered_quantity || 0);
+                          const supplierDeliveredUnitPrice = supplierDeliveredOrders.length > 0
+                            ? (supplierDeliveredOrders[0]?.delivered_unit_price || item.supplier_delivered_unit_price || 0)
+                            : (item.supplier_delivered_unit_price || 0);
+                          const supplierDeliveredTotalPrice = supplierDeliveredOrders.length > 0
+                            ? supplierDeliveredOrders.reduce((sum, order) => sum + (parseFloat(order.delivered_total_price) || 0), 0)
+                            : (item.supplier_delivered_total_price || 0);
+                          // Calculate balance quantity undelivered: ORDERED QUANTITY - DELIVERED QUANTITY
+                          const supplierBalanceQuantityUndelivered = supplierApprovedQuantity - supplierDeliveredQuantity;
+                          
                           const supplierDelivered = (hasSupplierDelivered && supplierIsDelivered) ? {
                             ...item,
-                            delivered_quantity: item.supplier_delivered_quantity || 0,
-                            delivered_unit_price: item.supplier_delivered_unit_price || 0,
-                            delivered_total_price: item.supplier_delivered_total_price || 0,
+                            delivered_quantity: supplierDeliveredQuantity,
+                            delivered_unit_price: supplierDeliveredUnitPrice,
+                            delivered_total_price: supplierDeliveredTotalPrice,
                             penalty_percentage: item.supplier_penalty_percentage || null,
                             penalty_amount: item.supplier_penalty_amount || 0,
                             invoice_no: item.supplier_invoice_no || '',
-                            balance_quantity_undelivered: item.supplier_balance_quantity_undelivered || 0,
+                            balance_quantity_undelivered: supplierBalanceQuantityUndelivered,
                             customer_supplier_name: supplierDeliveredOrders[0]?.supplier_name || item.customer_supplier_name || '',
                             po_number: supplierDeliveredOrders.length > 0
                               ? supplierDeliveredOrders.map(o => o.po_number).filter(Boolean).join(', ')
@@ -423,15 +436,28 @@ const DatabaseDashboard = () => {
                           } : null;
                           
                           // Build customer delivered data object - show if has customer delivered data AND status is delivered
+                          // Calculate delivered quantity from delivered_orders_data (actual database values) instead of aggregated sum
+                          const customerDeliveredQuantity = customerDeliveredOrders.length > 0
+                            ? customerDeliveredOrders.reduce((sum, order) => sum + (parseFloat(order.delivered_quantity) || 0), 0)
+                            : (item.customer_delivered_quantity || 0);
+                          const customerDeliveredUnitPrice = customerDeliveredOrders.length > 0
+                            ? (customerDeliveredOrders[0]?.delivered_unit_price || item.customer_delivered_unit_price || 0)
+                            : (item.customer_delivered_unit_price || 0);
+                          const customerDeliveredTotalPrice = customerDeliveredOrders.length > 0
+                            ? customerDeliveredOrders.reduce((sum, order) => sum + (parseFloat(order.delivered_total_price) || 0), 0)
+                            : (item.customer_delivered_total_price || 0);
+                          // Calculate balance quantity undelivered: ORDERED QUANTITY - DELIVERED QUANTITY
+                          const customerBalanceQuantityUndelivered = customerApprovedQuantity - customerDeliveredQuantity;
+                          
                           const customerDelivered = (hasCustomerDelivered && customerIsDelivered) ? {
                             ...item,
-                            delivered_quantity: item.customer_delivered_quantity || 0,
-                            delivered_unit_price: item.customer_delivered_unit_price || 0,
-                            delivered_total_price: item.customer_delivered_total_price || 0,
+                            delivered_quantity: customerDeliveredQuantity,
+                            delivered_unit_price: customerDeliveredUnitPrice,
+                            delivered_total_price: customerDeliveredTotalPrice,
                             penalty_percentage: item.customer_penalty_percentage || null,
                             penalty_amount: item.customer_penalty_amount || 0,
                             invoice_no: item.customer_invoice_no || '',
-                            balance_quantity_undelivered: item.customer_balance_quantity_undelivered || 0,
+                            balance_quantity_undelivered: customerBalanceQuantityUndelivered,
                             customer_supplier_name: customerDeliveredOrders[0]?.supplier_name || item.customer_supplier_name || '',
                             po_number: customerDeliveredOrders.length > 0
                               ? customerDeliveredOrders.map(o => o.po_number).filter(Boolean).join(', ')
