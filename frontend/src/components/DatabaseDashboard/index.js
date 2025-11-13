@@ -355,11 +355,20 @@ const DatabaseDashboard = () => {
                           const customerIsDelivered = customerStatus && ['partially_delivered', 'delivered_completed'].includes(customerStatus);
                           
                           // Build supplier approved data object - show if has supplier approved data AND status is approved/delivered
+                          // Calculate quantity from approved_orders_data (actual database values) instead of aggregated sum
+                          const supplierApprovedQuantity = supplierApprovedOrders.length > 0
+                            ? supplierApprovedOrders.reduce((sum, order) => sum + (parseFloat(order.quantity) || 0), 0)
+                            : (item.supplier_po_quantity || 0);
+                          const supplierApprovedUnitPrice = supplierApprovedOrders.length > 0
+                            ? (supplierApprovedOrders[0]?.unit_price || item.supplier_po_unit_price || 0)
+                            : (item.supplier_po_unit_price || 0);
+                          const supplierApprovedTotalPrice = supplierApprovedQuantity * supplierApprovedUnitPrice;
+                          
                           const supplierApproved = (hasSupplierApproved && supplierIsApproved) ? {
                             ...item,
-                            po_quantity: item.supplier_po_quantity || 0,
-                            po_unit_price: item.supplier_po_unit_price || 0,
-                            po_total_price: item.supplier_po_total_price || 0,
+                            po_quantity: supplierApprovedQuantity,
+                            po_unit_price: supplierApprovedUnitPrice,
+                            po_total_price: supplierApprovedTotalPrice,
                             lead_time: supplierApprovedOrders[0]?.lead_time || item.lead_time || '',
                             due_date: supplierApprovedOrders[0]?.due_date || item.due_date || '',
                             customer_supplier_name: supplierApprovedOrders[0]?.supplier_name || item.customer_supplier_name || '',
@@ -389,11 +398,20 @@ const DatabaseDashboard = () => {
                           } : null;
                           
                           // Build customer approved data object - show if has customer approved data AND status is approved/delivered
+                          // Calculate quantity from approved_orders_data (actual database values) instead of aggregated sum
+                          const customerApprovedQuantity = customerApprovedOrders.length > 0
+                            ? customerApprovedOrders.reduce((sum, order) => sum + (parseFloat(order.quantity) || 0), 0)
+                            : (item.customer_po_quantity || 0);
+                          const customerApprovedUnitPrice = customerApprovedOrders.length > 0
+                            ? (customerApprovedOrders[0]?.unit_price || item.customer_po_unit_price || 0)
+                            : (item.customer_po_unit_price || 0);
+                          const customerApprovedTotalPrice = customerApprovedQuantity * customerApprovedUnitPrice;
+                          
                           const customerApproved = (hasCustomerApproved && customerIsApproved) ? {
                             ...item,
-                            po_quantity: item.customer_po_quantity || 0,
-                            po_unit_price: item.customer_po_unit_price || 0,
-                            po_total_price: item.customer_po_total_price || 0,
+                            po_quantity: customerApprovedQuantity,
+                            po_unit_price: customerApprovedUnitPrice,
+                            po_total_price: customerApprovedTotalPrice,
                             lead_time: customerApprovedOrders[0]?.lead_time || item.lead_time || '',
                             due_date: customerApprovedOrders[0]?.due_date || item.due_date || '',
                             customer_supplier_name: customerApprovedOrders[0]?.supplier_name || item.customer_supplier_name || '',
