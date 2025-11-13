@@ -983,19 +983,93 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/purchase-orders/:id - Delete purchase order
+// ⚠️ CASCADE DELETE: Automatically deletes all related invoices (Sales and Purchase Tax Invoices)
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Get the PO number before deleting (needed to find related invoices)
+    const [poRows] = await req.db.execute(
+      'SELECT po_number FROM purchase_orders WHERE id = ?',
+      [id]
+    );
+    
+    if (poRows.length === 0) {
+      return res.status(404).json({ message: 'Purchase order not found' });
+    }
+    
+    const poNumber = poRows[0].po_number;
+    
+    // CASCADE DELETE: Delete all related invoices automatically
+    
+    // 1. Delete Purchase Tax Invoices related to this PO
+    // Get all purchase tax invoices that reference this PO number
+    const [purchaseInvoices] = await req.db.execute(
+      'SELECT id FROM purchase_tax_invoices WHERE po_number = ?',
+      [poNumber]
+    );
+    
+    // Delete purchase tax invoice items first (child records)
+    for (const invoice of purchaseInvoices) {
+      await req.db.execute(
+        'DELETE FROM purchase_tax_invoice_items WHERE invoice_id = ?',
+        [invoice.id]
+      );
+    }
+    
+    // Delete purchase tax invoices
+    if (purchaseInvoices.length > 0) {
+      await req.db.execute(
+        'DELETE FROM purchase_tax_invoices WHERE po_number = ?',
+        [poNumber]
+      );
+      console.log(`✓ Deleted ${purchaseInvoices.length} purchase tax invoice(s) related to PO ${poNumber}`);
+    }
+    
+    // 2. Delete Sales Tax Invoices related to this PO
+    // Get all sales tax invoices that reference this PO number as customer_po_number
+    const [salesInvoices] = await req.db.execute(
+      'SELECT id FROM sales_tax_invoices WHERE customer_po_number = ?',
+      [poNumber]
+    );
+    
+    // Delete sales tax invoice items first (child records)
+    for (const invoice of salesInvoices) {
+      await req.db.execute(
+        'DELETE FROM sales_tax_invoice_items WHERE invoice_id = ?',
+        [invoice.id]
+      );
+    }
+    
+    // Delete sales tax invoices
+    if (salesInvoices.length > 0) {
+      await req.db.execute(
+        'DELETE FROM sales_tax_invoices WHERE customer_po_number = ?',
+        [poNumber]
+      );
+      console.log(`✓ Deleted ${salesInvoices.length} sales tax invoice(s) related to PO ${poNumber}`);
+    }
+    
+    // 3. Delete purchase order items (child records)
+    await req.db.execute('DELETE FROM purchase_order_items WHERE po_id = ?', [id]);
+    
+    // 4. Finally, delete the purchase order itself
     const [result] = await req.db.execute('DELETE FROM purchase_orders WHERE id = ?', [id]);
     
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Purchase order not found' });
     }
     
-    res.json({ message: 'Purchase order deleted successfully' });
+    res.json({ 
+      message: 'Purchase order deleted successfully',
+      deletedInvoices: {
+        purchaseTaxInvoices: purchaseInvoices.length,
+        salesTaxInvoices: salesInvoices.length
+      }
+    });
   } catch (error) {
     console.error('Error deleting purchase order:', error);
-    res.status(500).json({ message: 'Error deleting purchase order' });
+    res.status(500).json({ message: 'Error deleting purchase order', error: error.message });
   }
 });
 
