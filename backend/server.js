@@ -52,7 +52,8 @@ const dbConfig = process.env.DATABASE_URL
       ...parseDatabaseUrl(process.env.DATABASE_URL),
       waitForConnections: true,
       connectionLimit: 10,
-      queueLimit: 0
+      queueLimit: 0,
+      multipleStatements: true
     }
   : {
       host: process.env.DB_HOST || '127.0.0.1',
@@ -62,7 +63,8 @@ const dbConfig = process.env.DATABASE_URL
       database: process.env.DB_DATABASE || process.env.DB_NAME || 'alltech_business',
       waitForConnections: true,
       connectionLimit: 10,
-      queueLimit: 0
+      queueLimit: 0,
+      multipleStatements: true
     };
 
 const pool = mysql.createPool(dbConfig);
@@ -360,6 +362,49 @@ async function fixPurchaseInvoiceTriggers() {
     const connection = await pool.getConnection();
     
     console.log('Checking and fixing purchase tax invoice triggers...');
+    
+    // First, ensure the stored procedure exists
+    try {
+      await connection.query(`
+        DROP PROCEDURE IF EXISTS update_purchase_order_status_fn
+      `);
+      
+      await connection.query(`
+        CREATE PROCEDURE update_purchase_order_status_fn(IN po_id_param INT)
+        BEGIN
+          DECLARE total_ordered DECIMAL(10,2) DEFAULT 0;
+          DECLARE total_delivered DECIMAL(10,2) DEFAULT 0;
+          DECLARE new_status VARCHAR(50);
+          
+          -- Calculate total ordered quantity
+          SELECT COALESCE(SUM(quantity), 0) INTO total_ordered
+          FROM purchase_order_items
+          WHERE po_id = po_id_param;
+          
+          -- Calculate total delivered quantity
+          SELECT COALESCE(SUM(delivered_quantity), 0) INTO total_delivered
+          FROM purchase_order_items
+          WHERE po_id = po_id_param;
+          
+          -- Determine new status
+          IF total_delivered = 0 THEN
+            SET new_status = 'approved';
+          ELSEIF total_delivered >= total_ordered THEN
+            SET new_status = 'delivered_completed';
+          ELSE
+            SET new_status = 'partially_delivered';
+          END IF;
+          
+          -- Update PO status
+          UPDATE purchase_orders
+          SET status = new_status
+          WHERE id = po_id_param;
+        END
+      `);
+      console.log('✓ Stored procedure update_purchase_order_status_fn created successfully');
+    } catch (error) {
+      console.log('Note: Error creating stored procedure:', error.message);
+    }
     
     // Drop existing triggers
     try {
