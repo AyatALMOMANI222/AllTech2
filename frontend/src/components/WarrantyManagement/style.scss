@@ -596,6 +596,134 @@ $danger: #ef4444;
     padding: 1.5rem;
     border-top: 1px solid $border-color;
     background: $bg-main;
+
+    // Import Warranty Button - Enhanced Design
+    .btn-import-warranty {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: $white;
+      font-size: 1rem;
+      font-weight: 700;
+      padding: 0.875rem 2rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      border: none;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      min-width: 160px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        transition: left 0.5s ease;
+      }
+
+      &:hover:not(:disabled) {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+        transform: translateY(-2px);
+        
+        &::before {
+          left: 100%;
+        }
+      }
+
+      &:active:not(:disabled) {
+        transform: translateY(0);
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+      }
+
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      i {
+        font-size: 1.1rem;
+        margin-right: 0.5rem;
+      }
+
+      .spinner-border-sm {
+        width: 1rem;
+        height: 1rem;
+        border-width: 0.15rem;
+      }
+    }
+
+    // Save Imported Data Button - Enhanced Design
+    .btn-save-imported {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: $white;
+      font-size: 1rem;
+      font-weight: 700;
+      padding: 0.875rem 2rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+      border: none;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      min-width: 200px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        transition: left 0.5s ease;
+      }
+
+      &:hover:not(:disabled) {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+        transform: translateY(-2px);
+        
+        &::before {
+          left: 100%;
+        }
+      }
+
+      &:active:not(:disabled) {
+        transform: translateY(0);
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+      }
+
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      i {
+        font-size: 1.1rem;
+        margin-right: 0.5rem;
+      }
+
+      .spinner-border-sm {
+        width: 1rem;
+        height: 1rem;
+        border-width: 0.15rem;
+      }
+    }
   }
 
   // Loading Spinner

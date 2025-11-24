@@ -760,14 +760,17 @@ const WarrantyManagement = () => {
                   <button type="button" className="btn btn-secondary" onClick={() => setShowImportModal(false)} disabled={loading}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary" disabled={loading || !importFile}>
+                  <button type="submit" className="btn btn-primary btn-import-warranty" disabled={loading || !importFile}>
                     {loading ? (
                       <>
                         <span className="spinner-border spinner-border-sm me-2"></span>
                         Importing...
                       </>
                     ) : (
-                      'Import'
+                      <>
+                        <i className="fas fa-file-import me-2"></i>
+                        Import
+                      </>
                     )}
                   </button>
                 </div>
@@ -837,7 +840,7 @@ const WarrantyManagement = () => {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-primary"
+                  className="btn btn-primary btn-save-imported"
                   onClick={handleSaveImportedData}
                   disabled={loading}
                 >
@@ -847,7 +850,10 @@ const WarrantyManagement = () => {
                       Saving...
                     </>
                   ) : (
-                    `Save ${importedItems.length} Records`
+                    <>
+                      <i className="fas fa-save me-2"></i>
+                      Save {importedItems.length} Records
+                    </>
                   )}
                 </button>
               </div>
