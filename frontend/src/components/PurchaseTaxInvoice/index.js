@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { purchaseTaxInvoicesAPI, customersSuppliersAPI, purchaseOrdersAPI } from '../../services/api';
 import formatCurrency from '../../utils/formatCurrency';
-import formatNumber from '../../utils/formatNumber';
 import './style.scss';
 
 const PurchaseTaxInvoice = ({ invoiceId = null }) => {
@@ -254,7 +253,11 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
     setSuccess('');
 
     try {
-      const response = await purchaseTaxInvoicesAPI.create(formData);
+      const payload = {
+        ...formData,
+        status: 'draft' // إضافة القيمة صراحة
+      };
+      const response = await purchaseTaxInvoicesAPI.create(payload);
       setSuccess(`Purchase Tax Invoice created successfully! Invoice Number: ${response.data.invoice_number}`);
       // Reset form
       setFormData({
@@ -665,11 +668,10 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
                               </td>
                               <td>
                                 <input
-                                  type="text"
-                                  value={formatNumber(item.total_price)}
+                                  type="number"
+                                  value={(parseFloat(item.total_price) || 0).toFixed(2)}
                                   className="form-control table-input"
                                   disabled
-                                  readOnly
                                 />
                               </td>
                               {!invoiceId && (
@@ -772,3 +774,5 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
 };
 
 export default PurchaseTaxInvoice;
+
+
