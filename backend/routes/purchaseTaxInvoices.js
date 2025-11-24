@@ -196,18 +196,35 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
     // Create invoice
     console.log('Creating invoice with data:', { invoice_number, invoice_date, supplier_id, po_number, project_number });
     const createdBy = req.user?.id || null;
-    // Ensure status is exactly 'draft' (trim any whitespace)
-    const invoiceStatus = String('draft').trim();
-    console.log('Invoice status:', invoiceStatus, 'Type:', typeof invoiceStatus);
+    // Ensure status is exactly 'draft' - must match ENUM values exactly
+    const invoiceStatus = 'draft';
+    console.log('Invoice status value:', JSON.stringify(invoiceStatus), 'Length:', invoiceStatus.length);
+    
+    // Prepare values array with explicit types
+    const insertValues = [
+      invoice_number,
+      invoice_date,
+      supplier_id,
+      po_number || null,
+      project_number || null,
+      parseFloat(claim_percentage) || 100,
+      parseFloat(subtotal) || 0,
+      parseFloat(vatAmount) || 0,
+      parseFloat(grossTotal) || 0,
+      parseFloat(amount_paid) || 0,
+      createdBy,
+      invoiceStatus
+    ];
+    
+    console.log('Insert values count:', insertValues.length);
+    console.log('Status value in array:', JSON.stringify(insertValues[11]));
+    
     const [result] = await connection.execute(`
       INSERT INTO purchase_tax_invoices (
         invoice_number, invoice_date, supplier_id, po_number, project_number,
         claim_percentage, subtotal, vat_amount, gross_total, amount_paid, created_by, status
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      invoice_number, invoice_date, supplier_id, po_number, project_number,
-      claim_percentage, subtotal, vatAmount, grossTotal, amount_paid, createdBy, invoiceStatus
-    ]);
+    `, insertValues);
     
     const invoiceId = result.insertId;
     console.log('Invoice created with ID:', invoiceId);
