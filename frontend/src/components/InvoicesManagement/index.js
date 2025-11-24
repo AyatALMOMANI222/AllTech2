@@ -99,18 +99,43 @@ const InvoicesManagement = () => {
         // Use backend PDF API for purchase invoices
         const response = await purchaseTaxInvoicesAPI.generatePDF(selectedInvoice.id);
         
-        // Create blob and download
-        const blob = new Blob([response.data], { type: 'application/pdf' });
+        // Validate response
+        if (!response || !response.data) {
+          throw new Error('Invalid response from server');
+        }
+        
+        // Check if response.data is already a Blob
+        let blob;
+        if (response.data instanceof Blob) {
+          blob = response.data;
+        } else if (response.data instanceof ArrayBuffer) {
+          blob = new Blob([response.data], { type: 'application/pdf' });
+        } else {
+          // Create blob from response data (handles Uint8Array, string, etc.)
+          blob = new Blob([response.data], { type: 'application/pdf' });
+        }
+        
+        // Validate blob
+        if (!blob || blob.size === 0) {
+          throw new Error('Empty PDF file received');
+        }
+        
+        // Create download link
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
         link.download = `Purchase_Tax_Invoice_${selectedInvoice.invoice_number || selectedInvoice.id}.pdf`;
+        link.style.display = 'none';
         document.body.appendChild(link);
         link.click();
+        
+        // Cleanup
         setTimeout(() => {
-          document.body.removeChild(link);
+          if (document.body.contains(link)) {
+            document.body.removeChild(link);
+          }
           window.URL.revokeObjectURL(url);
-        }, 0);
+        }, 100);
       } else {
         // For sales invoices, use client-side PDF generation via print
         // (Backend PDF endpoint not implemented yet)

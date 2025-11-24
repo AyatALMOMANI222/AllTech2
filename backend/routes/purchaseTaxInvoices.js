@@ -4,6 +4,7 @@ const { authenticateToken } = require('../middleware/auth');
 const { calculateAndUpdateDeliveredData } = require('./databaseDashboard');
 const multer = require('multer');
 const path = require('path');
+const puppeteer = require('puppeteer');
 const {
   uploadFile: uploadToBunny,
   downloadFile,
@@ -713,19 +714,54 @@ router.get('/:id/pdf', authenticateToken, async (req, res) => {
       }
     });
     
+    // Close browser before sending response
+    await browser.close();
+    browser = null;
+    
+    // Validate PDF buffer
+    if (!pdf || pdf.length === 0) {
+      throw new Error('Generated PDF is empty');
+    }
+    
+    // Ensure PDF is a proper Buffer
+    const pdfBuffer = Buffer.isBuffer(pdf) ? pdf : Buffer.from(pdf);
+    
+    // Validate buffer size
+    if (pdfBuffer.length === 0) {
+      throw new Error('PDF buffer is empty');
+    }
+    
+    // Verify PDF magic number (first 4 bytes should be %PDF)
+    const pdfHeader = pdfBuffer.slice(0, 4).toString('ascii');
+    if (pdfHeader !== '%PDF') {
+      throw new Error('Generated file is not a valid PDF');
+    }
+    
     // Set response headers
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Purchase_Tax_Invoice_${invoice.invoice_number}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
     
-    // Send PDF
-    res.send(pdf);
+    // Send PDF buffer
+    res.send(pdfBuffer);
     
   } catch (error) {
     console.error('Error generating PDF:', error);
-    res.status(500).json({ message: 'Error generating PDF' });
-  } finally {
+    console.error('Error stack:', error.stack);
+    // Make sure browser is closed even on error
     if (browser) {
-      await browser.close();
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.error('Error closing browser:', closeError);
+      }
+    }
+    // Return error response
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        message: 'Error generating PDF',
+        error: error.message 
+      });
     }
   }
 });
