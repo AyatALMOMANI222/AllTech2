@@ -38,23 +38,48 @@ const upload = multer({
   }
 });
 
+// Helper function to format date as YYYY-MM-DD using local date components (avoids timezone conversion)
+function formatDateAsString(year, month, day) {
+  const yyyy = String(year);
+  const mm = String(month + 1).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 // Helper function to convert Excel date serial number to MySQL DATE format
 function convertExcelDate(excelSerial) {
   if (!excelSerial || isNaN(excelSerial) || excelSerial <= 0) {
     return null;
   }
   
-  // Excel's epoch starts from 1900-01-01, but there's a leap year bug
-  const excelEpoch = new Date(1899, 11, 30);
-  const adjustedSerial = excelSerial > 59 ? excelSerial - 1 : excelSerial;
-  const jsDate = new Date(excelEpoch.getTime() + (adjustedSerial - 1) * 24 * 60 * 60 * 1000);
+  // Excel's epoch starts from 1900-01-01 (serial number 1)
+  // Excel incorrectly treats 1900 as a leap year, so we need to adjust for serial > 59
+  // Use December 30, 1899 as the base epoch
+  const excelEpoch = new Date(1899, 11, 30); // December 30, 1899
+  let adjustedSerial = excelSerial;
+  if (excelSerial > 59) {
+    adjustedSerial = excelSerial - 1; // Adjust for Excel's leap year bug
+  }
+  // Add days: serial 1 = Jan 1, 1900
+  // Dec 30, 1899 + 2 days = Jan 1, 1900, so we add (adjustedSerial + 1) days
+  const jsDate = new Date(excelEpoch.getTime() + (adjustedSerial + 1) * 24 * 60 * 60 * 1000);
   
-  return jsDate.toISOString().split('T')[0];
+  // Use local date components to avoid timezone conversion issues
+  return formatDateAsString(jsDate.getFullYear(), jsDate.getMonth(), jsDate.getDate());
 }
 
 // Helper function to parse date from various formats
 function parseDate(dateValue) {
   if (!dateValue) return null;
+  
+  // If it's already a Date object (xlsx might return this)
+  if (dateValue instanceof Date) {
+    if (!isNaN(dateValue.getTime())) {
+      // Use local date components to preserve the exact date without timezone shift
+      return formatDateAsString(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate());
+    }
+    return null;
+  }
   
   // If it's already a date string in YYYY-MM-DD format
   if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
@@ -66,34 +91,95 @@ function parseDate(dateValue) {
     return convertExcelDate(dateValue);
   }
   
-  // Try to parse as date string (DD/MM/YYYY or MM/DD/YYYY)
+  // Try to parse as date string (MM/DD/YYYY or DD/MM/YYYY)
   if (typeof dateValue === 'string') {
-    // Try DD/MM/YYYY format
-    const ddmmyyyy = dateValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (ddmmyyyy) {
-      const day = parseInt(ddmmyyyy[1]);
-      const month = parseInt(ddmmyyyy[2]) - 1;
-      const year = parseInt(ddmmyyyy[3]);
-      const date = new Date(year, month, day);
-      if (!isNaN(date.getTime())) {
-        return date.toISOString().split('T')[0];
+    // Try MM/DD/YYYY format (US Excel standard format)
+    const mmddyyyy = dateValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (mmddyyyy) {
+      const first = parseInt(mmddyyyy[1]);
+      const second = parseInt(mmddyyyy[2]);
+      const year = parseInt(mmddyyyy[3]);
+      
+      let month, day;
+      // Determine format: if first > 12, it must be DD/MM/YYYY (day)
+      // If second > 12, it must be MM/DD/YYYY (day)
+      // If both <= 12, assume MM/DD/YYYY (US format, standard in Excel)
+      if (first > 12 && second <= 12) {
+        // Definitely DD/MM/YYYY (first is day, second is month)
+        day = first;
+        month = second - 1;
+      } else if (second > 12 && first <= 12) {
+        // Definitely MM/DD/YYYY (first is month, second is day)
+        month = first - 1;
+        day = second;
+      } else {
+        // Ambiguous (both <= 12) - assume MM/DD/YYYY (US format, standard in Excel)
+        month = first - 1;
+        day = second;
       }
+      
+      // Use formatDateAsString to avoid timezone conversion
+      return formatDateAsString(year, month, day);
     }
     
-    // Try YYYY-MM-DD format
+    // Try YYYY-MM-DD format (already handled above, but keep for clarity)
     const yyyymmdd = dateValue.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
     if (yyyymmdd) {
       return dateValue;
     }
     
-    // Try to parse as standard date
+    // Try to parse as standard date string (handles various formats)
+    // Note: For strings like "2024-01-15", new Date() interprets as UTC, so we handle YYYY-MM-DD above
+    // For other formats, parse and use local date components
     const parsed = new Date(dateValue);
     if (!isNaN(parsed.getTime())) {
-      return parsed.toISOString().split('T')[0];
+      // Use local date components to preserve the exact date without timezone shift
+      return formatDateAsString(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
     }
   }
   
   return null;
+}
+
+// Helper function to find column value by normalized name (case-insensitive, handles spaces/underscores)
+function findColumnValue(row, columnName) {
+  if (!row) return '';
+  
+  // Normalize the target column name: lowercase, replace underscores/spaces with single space, trim
+  const normalizedTarget = columnName.toLowerCase().replace(/[_\s]+/g, ' ').trim();
+  
+  // First, try direct property access (most common cases)
+  if (row[columnName] !== undefined) {
+    return row[columnName];
+  }
+  
+  // Try common variations
+  const variations = [
+    columnName,
+    columnName.toLowerCase(),
+    columnName.toUpperCase(),
+    columnName.replace(/_/g, ' '),
+    columnName.replace(/\s+/g, '_'),
+    columnName.replace(/\s+/g, ' ').trim()
+  ];
+  
+  for (const variation of variations) {
+    if (row[variation] !== undefined) {
+      return row[variation];
+    }
+  }
+  
+  // Search through all keys in the row with normalized comparison
+  for (const key in row) {
+    if (row.hasOwnProperty(key)) {
+      const normalizedKey = key.toLowerCase().replace(/[_\s]+/g, ' ').trim();
+      if (normalizedKey === normalizedTarget) {
+        return row[key];
+      }
+    }
+  }
+  
+  return '';
 }
 
 // Validation middleware
@@ -516,7 +602,9 @@ router.post('/import', upload.single('file'), async (req, res) => {
     const workbook = xlsx.readFile(filePath);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    const data = xlsx.utils.sheet_to_json(worksheet);
+    // Use raw: true to get raw values (Excel serial numbers for dates)
+    // This gives us full control over date conversion without timezone issues
+    const data = xlsx.utils.sheet_to_json(worksheet, { raw: true, defval: null });
     
     if (data.length === 0) {
       return res.status(400).json({ message: 'Excel file is empty' });
@@ -534,7 +622,8 @@ router.post('/import', upload.single('file'), async (req, res) => {
         const part_no = row['Part No'] || row['Part No.'] || row['PART NO'] || row['PART NO.'] || row.part_no || '';
         const material_no = row['Material No'] || row['Material No.'] || row['MATERIAL NO'] || row['MATERIAL NO.'] || row.material_no || '';
         const description = row.Description || row.description || row.DESCRIPTION || '';
-        const project_no = row['Project No'] || row['Project No.'] || row['PROJECT NO'] || row['PROJECT NO.'] || row.project_no || '';
+        // Use helper function to find project_no column with flexible matching (handles "PROJECT NO", "Project No", etc.)
+        const project_no = findColumnValue(row, 'Project No') || '';
         const part_cost = row['Part Cost'] || row['Part cost'] || row['PART COST'] || row.part_cost || 0;
         const serial_number = row['Serial Number'] || row['Serial number'] || row['SERIAL NUMBER'] || row.serial_number || '';
         const warranty_start_date = row['Warranty Start Date'] || row['Warranty start date'] || row['WARRANTY START DATE'] || row.warranty_start_date || '';
