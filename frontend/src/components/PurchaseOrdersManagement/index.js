@@ -2622,8 +2622,12 @@ View Details                                </button>
                   )}
 
                   <div className="documents-upload-card">
-                    <h4>Upload Documents</h4>
+                    <h4>
+                      <i className="fas fa-cloud-upload-alt"></i>
+                      Upload Documents
+                    </h4>
                     <p className="documents-upload-card__hint">
+                      <i className="fas fa-info-circle"></i>
                       Upload supporting PDF documents for this purchase order.
                       Only approved or delivered POs can accept documents.
                     </p>
@@ -2643,6 +2647,7 @@ View Details                                </button>
                       {documentFiles.length > 0 && (
                         <div className="selected-files-list">
                           <strong>
+                            <i className="fas fa-file-pdf"></i>
                             Selected ({documentFiles.length}):
                           </strong>
                           <ul>
@@ -2700,6 +2705,7 @@ View Details                                </button>
                     <div className="documents-table-card__header">
                       <div>
                         <h4>
+                          <i className="fas fa-folder-open"></i>
                           Stored Documents{" "}
                           {poDocuments.length > 0 ? (
                             <span>({poDocuments.length})</span>
@@ -2777,6 +2783,7 @@ View Details                                </button>
                                   </span>
                                 </div>
                                 <p className="document-card__meta">
+                                  <i className="far fa-clock"></i>
                                   Uploaded{" "}
                                   {document.created_at
                                     ? new Date(

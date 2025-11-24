@@ -199,11 +199,11 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
     const [result] = await connection.execute(`
       INSERT INTO purchase_tax_invoices (
         invoice_number, invoice_date, supplier_id, po_number, project_number,
-        claim_percentage, subtotal, vat_amount, gross_total, amount_paid, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        claim_percentage, subtotal, vat_amount, gross_total, amount_paid, created_by, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       invoice_number, invoice_date, supplier_id, po_number, project_number,
-      claim_percentage, subtotal, vatAmount, grossTotal, amount_paid, createdBy
+      claim_percentage, subtotal, vatAmount, grossTotal, amount_paid, createdBy, 'draft'
     ]);
     
     const invoiceId = result.insertId;

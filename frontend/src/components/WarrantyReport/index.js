@@ -313,6 +313,26 @@ const WarrantyReport = () => {
             </div>
           )}
 
+          {/* Print Summary - Only visible when printing */}
+          {!loading && reportData && filteredRecords.length > 0 && (
+            <div className="print-summary">
+              <div className="summary-item">
+                <strong>Total Items:</strong> {reportData.total || 0}
+              </div>
+              <div className="summary-item">
+                <strong>Expiring Soon:</strong> {filteredRecords.filter(r => r.days_remaining <= 30 && r.days_remaining >= 0).length}
+              </div>
+              <div className="summary-item">
+                <strong>Expired:</strong> {filteredRecords.filter(r => r.days_remaining < 0).length}
+              </div>
+              <div className="summary-item">
+                <strong>Report Date:</strong> {reportData.as_of_date 
+                  ? formatDate(reportData.as_of_date)
+                  : formatDate(new Date().toISOString().split('T')[0])}
+              </div>
+            </div>
+          )}
+
           {/* Report Table */}
           {!loading && reportData && filteredRecords.length > 0 && (
             <div className="report-table-container">

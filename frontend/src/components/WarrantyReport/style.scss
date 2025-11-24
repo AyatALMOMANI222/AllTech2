@@ -526,6 +526,11 @@
     margin-top: 1.5rem;
   }
 
+  // Print summary - hidden on screen, visible when printing
+  .print-summary {
+    display: none;
+  }
+
   // Modal Styles
   .modal-overlay {
     position: fixed;
@@ -822,85 +827,392 @@
     }
   }
 
-  // Print styles
+  // Print styles - Professional Layout
   @media print {
-    // Prevent blank first page
+    // Page setup - Reduced margins for more space
     @page {
-      margin: 0.5cm;
+      size: A4;
+      margin: 0.75cm 1cm;
     }
 
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+
+    // Hide non-printable elements
     .no-print {
       display: none !important;
     }
 
+    // Main container
     .warranty-report {
       padding: 0 !important;
       margin: 0 !important;
       min-height: auto !important;
       background: white !important;
       page-break-before: avoid;
+      width: 100% !important;
+      height: auto !important;
+      overflow: visible !important;
     }
 
+    // Card styling - Allow page breaks inside
     .card {
-      box-shadow: none;
-      border: 1px solid #dee2e6;
-      border-radius: 0;
+      box-shadow: none !important;
+      border: 2px solid #333 !important;
+      border-radius: 0 !important;
       margin: 0 !important;
       page-break-before: avoid;
+      page-break-inside: auto !important; // Changed from avoid to auto
+      background: white !important;
+      height: auto !important;
+      overflow: visible !important;
     }
 
-    .card-header {
-      background: #667eea !important;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
+    // Header styling
+    .warranty-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color: white !important;
       page-break-after: avoid;
-      padding: 1rem 1.5rem !important;
+      page-break-inside: avoid;
+      padding: 1.25rem 1.5rem !important;
+      border-bottom: 3px solid #333 !important;
+
+      .warranty-title {
+        font-size: 1.75rem !important;
+        margin: 0 !important;
+        color: white !important;
+        font-weight: 700 !important;
+      }
+
+      .warranty-subtitle {
+        font-size: 0.9rem !important;
+        margin: 0.5rem 0 0 0 !important;
+        color: rgba(255, 255, 255, 0.95) !important;
+      }
+
+      .date-badge {
+        background: rgba(255, 255, 255, 0.25) !important;
+        border: 1px solid rgba(255, 255, 255, 0.4) !important;
+        color: white !important;
+        padding: 0.5rem 1rem !important;
+        font-size: 0.85rem !important;
+      }
+
+      .time-info {
+        color: rgba(255, 255, 255, 0.9) !important;
+        font-size: 0.8rem !important;
+      }
     }
 
-    .card-body {
-      padding: 1rem !important;
+    // Body styling - Allow page breaks
+    .card-body,
+    .warranty-body {
+      padding: 1rem 1.25rem !important;
+      background: white !important;
+      page-break-inside: auto !important;
+      height: auto !important;
+      overflow: visible !important;
     }
 
+    // Table container - Allow spanning multiple pages
     .report-table-container {
-      page-break-inside: auto;
+      page-break-inside: auto !important;
+      margin-top: 0.75rem !important;
+      margin-bottom: 0 !important;
+      width: 100% !important;
+      overflow: visible !important;
+      height: auto !important;
+      display: block !important;
     }
 
-    .table {
-      font-size: 0.75rem;
-      border-collapse: collapse;
-      page-break-inside: auto;
+    .warranty-table-wrapper {
+      border: 2px solid #333 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      page-break-inside: auto !important;
+      width: 100% !important;
+      overflow: visible !important;
+      height: auto !important;
+      display: block !important;
+    }
 
-      th, td {
-        padding: 0.5rem;
-        border: 1px solid #dee2e6;
+    // Table styling - Allow spanning multiple pages
+    .warranty-table {
+      font-size: 0.7rem !important;
+      border-collapse: collapse !important;
+      width: 100% !important;
+      table-layout: fixed !important;
+      page-break-inside: auto !important;
+      margin: 0 !important;
+      display: table !important;
+      height: auto !important;
+      overflow: visible !important;
+
+      // Column widths for better fit
+      th:nth-child(1),
+      td:nth-child(1) {
+        width: 12% !important;
       }
 
-      thead {
-        background: #f8f9fa !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-        display: table-header-group;
+      th:nth-child(2),
+      td:nth-child(2) {
+        width: 12% !important;
       }
 
-      tbody {
-        display: table-row-group;
+      th:nth-child(3),
+      td:nth-child(3) {
+        width: 10% !important;
       }
 
-      tr {
-        page-break-inside: avoid;
-        page-break-after: auto;
+      th:nth-child(4),
+      td:nth-child(4) {
+        width: 12% !important;
       }
 
-      // Hide Actions column (8th column) when printing
+      th:nth-child(5),
+      td:nth-child(5) {
+        width: 12% !important;
+      }
+
+      th:nth-child(6),
+      td:nth-child(6) {
+        width: 10% !important;
+      }
+
+      th:nth-child(7),
+      td:nth-child(7) {
+        width: 12% !important;
+      }
+
+      // Hide Actions column when printing
       th:nth-child(8),
       td:nth-child(8) {
         display: none !important;
       }
+
+      thead.table-header {
+        background: #667eea !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        display: table-header-group !important;
+        page-break-after: avoid !important;
+        page-break-inside: avoid !important;
+        position: relative !important;
+
+        th {
+          background: #667eea !important;
+          color: white !important;
+          font-weight: 700 !important;
+          font-size: 0.7rem !important;
+          padding: 0.6rem 0.4rem !important;
+          border: 1px solid rgba(255, 255, 255, 0.3) !important;
+          text-align: left !important;
+          vertical-align: middle !important;
+          white-space: nowrap !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.5px !important;
+          page-break-inside: avoid !important;
+
+          &.text-center {
+            text-align: center !important;
+          }
+        }
+      }
+
+      tbody {
+        display: table-row-group !important;
+        page-break-inside: auto !important;
+
+        tr.warranty-row {
+          page-break-inside: auto !important; // Changed from avoid to auto
+          page-break-after: auto !important;
+          page-break-before: auto !important;
+          background: white !important;
+          border-bottom: 1px solid #dee2e6 !important;
+          height: auto !important;
+
+          &:nth-child(even) {
+            background: #f8f9fa !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          &:last-child {
+            border-bottom: 2px solid #333 !important;
+          }
+
+          td {
+            padding: 0.5rem 0.4rem !important;
+            border: 1px solid #dee2e6 !important;
+            font-size: 0.7rem !important;
+            color: #333 !important;
+            vertical-align: middle !important;
+            word-wrap: break-word !important;
+            overflow-wrap: break-word !important;
+            line-height: 1.3 !important;
+            page-break-inside: auto !important;
+            height: auto !important;
+            min-height: 1.5rem !important;
+
+            &.fw-bold {
+              font-weight: 600 !important;
+            }
+
+            &.text-primary {
+              color: #667eea !important;
+              font-weight: 600 !important;
+            }
+
+            &.text-center {
+              text-align: center !important;
+            }
+          }
+        }
+      }
     }
 
+    // Badge styling for print
+    .badge {
+      padding: 0.25rem 0.5rem !important;
+      font-size: 0.65rem !important;
+      font-weight: 600 !important;
+      border-radius: 4px !important;
+      display: inline-block !important;
+
+      &.bg-success {
+        background: #28a745 !important;
+        color: white !important;
+      }
+
+      &.bg-info {
+        background: #17a2b8 !important;
+        color: white !important;
+      }
+
+      &.bg-warning {
+        background: #ffc107 !important;
+        color: #212529 !important;
+      }
+
+      &.bg-danger {
+        background: #dc3545 !important;
+        color: white !important;
+      }
+    }
+
+    // Hide filters and summary
     .filters-section,
     .summary-section {
       display: none !important;
+    }
+
+    // Footer info (if needed)
+    .card.bg-light {
+      display: none !important;
+    }
+
+    // Ensure no page breaks in critical areas
+    .warranty-header,
+    .warranty-table thead {
+      page-break-after: avoid;
+      page-break-inside: avoid;
+    }
+
+    // Print summary at top - visible only when printing
+    .print-summary {
+      display: block !important;
+      margin-bottom: 0.75rem !important;
+      padding: 0.75rem 1rem !important;
+      background: #f8f9fa !important;
+      border: 2px solid #333 !important;
+      font-size: 0.75rem !important;
+      page-break-after: avoid !important;
+      page-break-inside: avoid !important;
+
+      .summary-item {
+        display: inline-block !important;
+        margin-right: 1.5rem !important;
+        font-weight: 600 !important;
+        color: #333 !important;
+      }
+    }
+
+    // Ensure table wrapper doesn't prevent page breaks
+    .warranty-table-wrapper {
+      display: block !important;
+      height: auto !important;
+      max-height: none !important;
+    }
+
+    // Ensure proper spacing
+    .report-table-container {
+      margin-top: 0.75rem !important;
+      margin-bottom: 0 !important;
+      page-break-before: auto !important;
+    }
+
+    // Remove all shadows and effects
+    * {
+      box-shadow: none !important;
+      text-shadow: none !important;
+    }
+
+    // Ensure all content is visible and printable
+    body {
+      overflow: visible !important;
+      height: auto !important;
+    }
+
+    html {
+      overflow: visible !important;
+      height: auto !important;
+    }
+
+    // Prevent any element from being cut off
+    .warranty-report,
+    .warranty-report * {
+      max-width: 100% !important;
+      overflow: visible !important;
+    }
+
+    // Ensure table doesn't get cut off
+    table {
+      page-break-inside: auto !important;
+      border-spacing: 0 !important;
+    }
+
+    // Allow rows to break if table is very long
+    tr {
+      page-break-inside: auto !important;
+      page-break-after: auto !important;
+    }
+
+    // Ensure cells can break if content is long
+    td, th {
+      page-break-inside: auto !important;
+      overflow: visible !important;
+    }
+
+    // Ensure visibility
+    .text-primary {
+      color: #667eea !important;
+    }
+
+    .text-success {
+      color: #28a745 !important;
+    }
+
+    .text-warning {
+      color: #f59e0b !important;
+    }
+
+    .text-danger {
+      color: #dc3545 !important;
     }
   }
 }
