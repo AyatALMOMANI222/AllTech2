@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import "./style.scss";
 import { inventoryReportsAPI } from "../../services/api";
+import formatNumber from "../../utils/formatNumber";
 
 const InventoryReport = () => {
   const [reportDate, setReportDate] = useState(
@@ -202,13 +203,7 @@ const InventoryReport = () => {
                       <div className="summary-card">
                         <div className="summary-label">Total Balance</div>
                         <div className="summary-value">
-                          {reportData.summary.total_balance.toLocaleString(
-                            "en-US",
-                            {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            }
-                          )}
+                          {formatNumber(reportData.summary.total_balance)}
                         </div>
                       </div>
                       <div className="summary-card">
@@ -216,14 +211,7 @@ const InventoryReport = () => {
                           Total Balance Amount
                         </div>
                         <div className="summary-value">
-                          AED{" "}
-                          {reportData.summary.total_balance_amount.toLocaleString(
-                            "en-US",
-                            {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            }
-                          )}
+                          AED {formatNumber(reportData.summary.total_balance_amount)}
                         </div>
                       </div>
                     </div>
@@ -266,29 +254,13 @@ const InventoryReport = () => {
                                 <td>{item.serial_no || "-"}</td>
                                 <td>{item.description || "-"}</td>
                                 <td className="text-right">
-                                  {parseFloat(
-                                    item.quantity || 0
-                                  ).toLocaleString("en-US", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
+                                  {formatNumber(item.quantity)}
                                 </td>
                                 <td className="text-right">
-                                  {parseFloat(item.balance || 0).toLocaleString(
-                                    "en-US",
-                                    {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    }
-                                  )}
+                                  {formatNumber(item.balance)}
                                 </td>
                                 <td className="text-right">
-                                  {parseFloat(
-                                    item.balance_amount || 0
-                                  ).toLocaleString("en-US", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
+                                  {formatNumber(item.balance_amount)}
                                 </td>
                                 <td>
                                   <button
@@ -403,64 +375,37 @@ const InventoryReport = () => {
                   <div className="detail-item">
                     <span className="detail-label">Quantity:</span>
                     <span className="detail-value">
-                      {parseFloat(selectedItem.quantity || 0).toLocaleString(
-                        "en-US",
-                        { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-                      )}
+                      {formatNumber(selectedItem.quantity)}
                     </span>
                   </div>
                   <div className="detail-item">
                     <span className="detail-label">Unit Price:</span>
                     <span className="detail-value">
-                      AED{" "}
-                      {parseFloat(
-                        selectedItem.supplier_unit_price || 0
-                      ).toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      AED {formatNumber(selectedItem.supplier_unit_price)}
                     </span>
                   </div>
                   <div className="detail-item">
                     <span className="detail-label">Total Price:</span>
                     <span className="detail-value">
-                      AED{" "}
-                      {parseFloat(selectedItem.total_price || 0).toLocaleString(
-                        "en-US",
-                        { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-                      )}
+                      AED {formatNumber(selectedItem.total_price)}
                     </span>
                   </div>
                   <div className="detail-item">
                     <span className="detail-label">Sold Quantity:</span>
                     <span className="detail-value">
-                      {parseFloat(
-                        selectedItem.sold_quantity || 0
-                      ).toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {formatNumber(selectedItem.sold_quantity)}
                     </span>
                   </div>
                   <div className="detail-item">
                     <span className="detail-label">Balance:</span>
                     <span className="detail-value">
-                      {parseFloat(selectedItem.balance || 0).toLocaleString(
-                        "en-US",
-                        { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-                      )}
+                      {formatNumber(selectedItem.balance)}
                     </span>
                   </div>
                   <div className="detail-item">
                     <span className="detail-label">Balance Amount:</span>
                     <span className="detail-value">
-                      AED{" "}
-                      {parseFloat(
-                        selectedItem.balance_amount || 0
-                      ).toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      AED {formatNumber(selectedItem.balance_amount)}
                     </span>
                   </div>
                 </div>

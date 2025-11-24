@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { salesTaxInvoicesAPI, customersSuppliersAPI } from '../../services/api';
 import formatCurrency from '../../utils/formatCurrency';
+import formatNumber from '../../utils/formatNumber';
 import './style.scss';
 
 const SalesTaxInvoice = ({ invoiceId = null }) => {
@@ -300,19 +301,17 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
     return result;
   };
 
-  // Convert amount to words format (e.g., "AED one thousand two hundred thirty-four and 56/100 Only")
+  // Convert amount to words format (e.g., "AED Three hundred thirty six thousand and 00/100 Only")
   const convertAmountToWords = (amount) => {
     const wholePart = Math.floor(amount);
     const decimalPart = Math.floor((amount % 1) * 100);
     
     const wholePartWords = numberToWords(wholePart);
+    // Capitalize first letter
+    const capitalizedWords = wholePartWords.charAt(0).toUpperCase() + wholePartWords.slice(1);
     const decimalPartStr = decimalPart.toString().padStart(2, '0');
     
-    if (decimalPart > 0) {
-      return `AED ${wholePartWords} and ${decimalPartStr}/100 Only`;
-    } else {
-      return `AED ${wholePartWords} Only`;
-    }
+    return `AED ${capitalizedWords} and ${decimalPartStr}/100 Only`;
   };
 
   const handleSubmit = async (e) => {
@@ -351,27 +350,27 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
         <div className="row">
           <div className="col-12">
             <div className="card">
-              <div className="card-header">
+              {/* <div className="card-header">
                 <h2>Sales Tax Invoice (Customer Invoice)</h2>
-              </div>
+              </div> */}
               <div className="card-body">
                 {error && <div className="alert alert-danger">{error}</div>}
                 {success && <div className="alert alert-success">{success}</div>}
 
                  <form onSubmit={handleSubmit}>
-                   {/* Company Logo */}
-                   <div className="company-logo-section">
-                     <div className="logo-container">
-                       <div className="logo-frame">
-                         <div className="logo-graphic">
-                           <div className="logo-section grey-left"></div>
-                           <div className="logo-section orange-center"></div>
-                           <div className="logo-section grey-right"></div>
-                         </div>
+                   {/* Header with Logo and Title */}
+                   <div className="invoice-top-header">
+                     <div className="logo-section-left">
+                       <div className="logo-container">
+                         <img 
+                           src={require("./logo.jpeg")}
+                           alt="ALL TeCH DEFENCE Logo" 
+                           className="alltech-logo-image"
+                         />
                        </div>
-                       <div className="logo-text">
-                         <div className="logo-title">ALL TeCH DEFENCE</div>
-                       </div>
+                     </div>
+                     <div className="invoice-title-center">
+                       <h1 className="tax-invoice-title">TAX INVOICE</h1>
                      </div>
                    </div>
 
@@ -563,15 +562,21 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
 
                   {/* Line Items Table */}
                   <div className="line-items-section">
-                    <h4>Line Items</h4>
+                    <div className="line-items-header">
+                      <h4>Line Items</h4>
+                      {formData.items.length > 0 && (
+                        <p className="partial-delivery-note">
+                          Partial delivery of ({formData.items.length}) Line items
+                        </p>
+                      )}
+                    </div>
                     <div className="table-responsive">
                       <table className="table table-bordered invoice-items-table">
                         <thead>
                           <tr>
                             <th>QTY</th>
-                            <th>Part No.</th>
-                            <th>Material No.</th>
-                            <th>Project No.</th>
+                            <th>Part no.</th>
+                            <th>Material no.</th>
                             <th>Description</th>
                             <th>Unit Price (AED)</th>
                             <th>Total Amount (AED)</th>
@@ -613,15 +618,6 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
                               <td>
                                 <input
                                   type="text"
-                                  value={item.project_no || ''}
-                                  onChange={(e) => handleItemChange(index, 'project_no', e.target.value)}
-                                  className="form-control"
-                                  readOnly={!!invoiceId}
-                                />
-                              </td>
-                              <td>
-                                <input
-                                  type="text"
                                   value={item.description}
                                   onChange={(e) => handleItemChange(index, 'description', e.target.value)}
                                   className="form-control"
@@ -641,10 +637,11 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
                               </td>
                               <td>
                                 <input
-                                  type="number"
-                                  value={item.total_amount.toFixed(2)}
+                                  type="text"
+                                  value={formatNumber(item.total_amount)}
                                   className="form-control"
                                   disabled
+                                  readOnly
                                 />
                               </td>
                               {!invoiceId && (
@@ -669,16 +666,8 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
                   <div className="financial-summary">
                     <div className="row">
                       <div className="col-md-6">
-                        <div className="amount-in-words">
-                          <h4>Amount in Words</h4>
-                          <div className="words-box">
-                            {convertAmountToWords(grossTotal)}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="col-md-6">
                         <div className="calculations">
-                          <div className="form-group">
+                          <div className="form-group screen-only">
                             <label>Amount of Claim (%):</label>
                             <input
                               type="number"
@@ -697,15 +686,15 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
                             <span>{formatCurrency(subtotal)}</span>
                           </div>
                           <div className="calculation-row">
-                            <label>Amount of claim {formData.claim_percentage}%:</label>
+                            <label>Amount of claim {formData.claim_percentage}% (AED):</label>
                             <span>{formatCurrency(claimAmount)}</span>
                           </div>
                           <div className="calculation-row">
-                            <label>VAT (5%):</label>
+                            <label>VAT (5%) (AED):</label>
                             <span>{formatCurrency(vatAmount)}</span>
                           </div>
                           <div className="calculation-row total">
-                            <label>Gross Payable Amount:</label>
+                            <label>Gross Payable Amount (AED):</label>
                             <span>{formatCurrency(grossTotal)}</span>
                           </div>
                         </div>
@@ -713,12 +702,20 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
                     </div>
                   </div>
 
-                  {/* Bank Account Details */}
+                  {/* Amount in Words */}
+                  <div className="amount-in-words-section">
+                    <h4>Amount in Words</h4>
+                    <div className="words-box">
+                      {convertAmountToWords(grossTotal)}
+                    </div>
+                  </div>
+
+                  {/* Bank Account Details and Signature */}
                   <div className="bank-details-section">
                     <div className="row">
                       <div className="col-md-6">
                         <div className="bank-info">
-                          <h4>Bank Account Details</h4>
+                          <h4>Bank Account details</h4>
                           <div className="bank-box">
                             <div><strong>Account name:</strong> {bankDetails.account_name}</div>
                             <div><strong>Account No (AED):</strong> {bankDetails.account_number}</div>
@@ -783,3 +780,4 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
 };
 
 export default SalesTaxInvoice;
+

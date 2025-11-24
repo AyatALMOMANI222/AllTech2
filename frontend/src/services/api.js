@@ -122,6 +122,28 @@ export const purchaseTaxInvoicesAPI = {
   getByPONumber: (poNumber) => api.get('/purchase-tax-invoices', { params: { po_number: poNumber } }),
 };
 
+const getInvoiceBasePath = (type) => {
+  return type === 'purchase' ? '/purchase-tax-invoices' : '/sales-tax-invoices';
+};
+
+export const invoiceDocumentsAPI = {
+  list: (type, invoiceId) => api.get(`${getInvoiceBasePath(type)}/${invoiceId}/documents`),
+  upload: (type, invoiceId, files = []) => {
+    const formData = new FormData();
+    files.forEach((file) => formData.append('documents', file));
+    return api.post(`${getInvoiceBasePath(type)}/${invoiceId}/documents`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+  download: (type, documentId) =>
+    api.get(`${getInvoiceBasePath(type)}/documents/${documentId}/download`, {
+      responseType: 'blob',
+    }),
+  delete: (type, documentId) => api.delete(`${getInvoiceBasePath(type)}/documents/${documentId}`),
+};
+
 // Inventory Reports API
 export const inventoryReportsAPI = {
   getReport: (params = {}) => api.get('/inventory-reports', { params }),

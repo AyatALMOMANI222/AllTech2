@@ -1,7 +1,26 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
+const multer = require('multer');
 const { calculateAndUpdateDeliveredData } = require('./databaseDashboard');
+const {
+  uploadFile: uploadToBunny,
+  downloadFile,
+  deleteFile: deleteFromBunny
+} = require('../services/bunnyStorage');
+const { detectDocumentType } = require('../utils/document_type');
+
+const INVOICE_DOCUMENT_MAX_FILE_SIZE = parseInt(
+  process.env.INVOICE_DOCUMENT_MAX_FILE_SIZE || `${25 * 1024 * 1024}`,
+  10
+);
+const invoiceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: INVOICE_DOCUMENT_MAX_FILE_SIZE,
+    files: 10,
+  },
+});
 
 // Helper function to convert number to words
 function numberToWords(num) {
@@ -240,29 +259,35 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
       const item = items[i];
       const saleQuantity = parseFloat(item.quantity) || 0;
       
-      // Skip validation if part_no or material_no is missing
-      if (!item.part_no || !item.material_no) {
+      // Skip validation if part_no is missing (required field)
+      if (!item.part_no) {
         inventoryValidationErrors.push({
           item_index: i + 1,
           part_no: item.part_no,
-          material_no: item.material_no,
-          error: 'Missing part_no or material_no'
+          project_no: item.project_no,
+          description: item.description,
+          error: 'Missing part_no (required field)'
         });
         continue;
       }
       
       // Check inventory availability
+      // Match by project_no, part_no, and description (all three must match exactly)
+      // If multiple matches exist, use FIFO (first-in-first-out) - the earliest added record
       const [inventoryItems] = await connection.execute(`
-        SELECT id, part_no, material_no, balance, quantity, sold_quantity, supplier_unit_price
+        SELECT id, part_no, material_no, project_no, description, balance, quantity, sold_quantity, supplier_unit_price
         FROM inventory 
-        WHERE part_no = ? AND material_no = ?
-      `, [item.part_no, item.material_no]);
+        WHERE project_no = ? AND part_no = ? AND description = ?
+        ORDER BY created_at ASC
+        LIMIT 1
+      `, [item.project_no || null, item.part_no, item.description || null]);
       
       if (inventoryItems.length === 0) {
         inventoryValidationErrors.push({
           item_index: i + 1,
+          project_no: item.project_no,
           part_no: item.part_no,
-          material_no: item.material_no,
+          description: item.description,
           requested_quantity: saleQuantity,
           error: 'Item not found in inventory'
         });
@@ -270,16 +295,26 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
       }
       
       const inventoryItem = inventoryItems[0];
-      const availableBalance = parseFloat(inventoryItem.balance) || 0;
+      const currentQuantity = parseFloat(inventoryItem.quantity) || 0;
+      const currentSoldQuantity = parseFloat(inventoryItem.sold_quantity) || 0;
+      const balanceFromDB = parseFloat(inventoryItem.balance) || 0;
+      
+      // Calculate available balance: quantity - sold_quantity (don't rely on balance field alone)
+      // This ensures we always use the correct calculation even if balance is out of sync
+      const calculatedBalance = currentQuantity - currentSoldQuantity;
+      const availableBalance = calculatedBalance;
       
       // Validate balance > 0
       if (availableBalance <= 0) {
         inventoryValidationErrors.push({
           item_index: i + 1,
+          project_no: item.project_no,
           part_no: item.part_no,
-          material_no: item.material_no,
+          description: item.description,
           requested_quantity: saleQuantity,
           available_balance: availableBalance,
+          quantity: currentQuantity,
+          sold_quantity: currentSoldQuantity,
           error: 'No stock available (balance is 0 or negative)'
         });
         continue;
@@ -289,10 +324,13 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
       if (saleQuantity > availableBalance) {
         inventoryValidationErrors.push({
           item_index: i + 1,
+          project_no: item.project_no,
           part_no: item.part_no,
-          material_no: item.material_no,
+          description: item.description,
           requested_quantity: saleQuantity,
           available_balance: availableBalance,
+          quantity: currentQuantity,
+          sold_quantity: currentSoldQuantity,
           error: `Insufficient stock. Requested: ${saleQuantity}, Available: ${availableBalance}`
         });
       }
@@ -359,28 +397,37 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
       ]);
       
       // Update inventory - Reduce stock
-      // Match by project_no, part_no, description
-      if (item.part_no && item.description) {
+      // Match by project_no, part_no, and description (all three must match exactly)
+      // If multiple matches exist (same project_no, part_no, description but different unit prices),
+      // update only one record at a time according to FIFO (first-in-first-out) - the earliest added record
+      if (item.part_no) {
         // Get matching inventory records (FIFO - oldest first)
+        // Match by project_no, part_no, and description (all three must match exactly)
         const [inventoryItems] = await connection.execute(`
-          SELECT id, quantity, sold_quantity, balance, supplier_unit_price, project_no, part_no, description
+          SELECT id, quantity, sold_quantity, balance, supplier_unit_price, project_no, part_no, material_no, description
           FROM inventory 
           WHERE project_no = ? AND part_no = ? AND description = ?
           ORDER BY created_at ASC
-        `, [item.project_no || null, item.part_no, item.description]);
+          LIMIT 1
+        `, [item.project_no || null, item.part_no, item.description || null]);
         
         if (inventoryItems.length > 0) {
-          // Use FIFO - update the oldest matching record first
+          // Use FIFO - update the oldest matching record first (LIMIT 1 ensures only one record)
           const inventoryItem = inventoryItems[0];
           const currentSoldQuantity = parseFloat(inventoryItem.sold_quantity) || 0;
           const currentQuantity = parseFloat(inventoryItem.quantity) || 0;
+          const currentBalance = parseFloat(inventoryItem.balance) || 0;
           const unitPrice = parseFloat(inventoryItem.supplier_unit_price) || 0;
           
-          // Calculate available stock
-          const availableStock = currentQuantity - currentSoldQuantity;
+          // Calculate available stock - always use quantity - sold_quantity to ensure accuracy
+          // Don't rely on balance field alone as it might be out of sync
+          const calculatedBalance = currentQuantity - currentSoldQuantity;
           
-          // Check if there's enough stock
-          if (availableStock >= saleQuantity) {
+          // Use calculated balance (quantity - sold_quantity) for consistency
+          const finalAvailableStock = calculatedBalance;
+          
+          // Check if there's enough stock before deducting to prevent negative inventory
+          if (finalAvailableStock >= saleQuantity && finalAvailableStock > 0) {
             // Calculate new values
             const newSoldQuantity = currentSoldQuantity + saleQuantity;
             const newBalance = currentQuantity - newSoldQuantity;
@@ -402,15 +449,21 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
               inventoryItem.id
             ]);
             
-            console.log(`✓ Inventory updated (FIFO): project_no=${item.project_no}, part_no=${item.part_no}, sold_quantity: ${currentSoldQuantity} + ${saleQuantity} = ${newSoldQuantity}, new_balance=${newBalance}, balance_amount=${newBalanceAmount}`);
+            console.log(`✓ Inventory updated (FIFO): project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}, sold_quantity: ${currentSoldQuantity} + ${saleQuantity} = ${newSoldQuantity}, new_balance=${newBalance}, balance_amount=${newBalanceAmount}`);
           } else {
-            console.log(`⚠️ Insufficient stock: Available=${availableStock}, Required=${saleQuantity}`);
-            throw new Error(`Insufficient stock for ${item.part_no}. Available: ${availableStock}, Required: ${saleQuantity}`);
+            // Insufficient stock - skip this item (don't throw error, just log and continue)
+            console.log(`⚠️ Insufficient stock: Available=${finalAvailableStock}, Required=${saleQuantity}, Balance=${currentBalance}, Quantity=${currentQuantity}, Sold=${currentSoldQuantity}. Skipping inventory update for this item.`);
+            // Continue to next item without updating inventory
           }
         } else {
-          console.log(`⚠️ No matching inventory found for project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}`);
-          // Skip item without creating new record (as per requirements)
+          // No matching inventory record found - skip this item (don't throw error, just log and continue)
+          console.log(`⚠️ No matching inventory found for project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}. Skipping inventory update for this item.`);
+          // Continue to next item without updating inventory
         }
+      } else {
+        // Missing part_no - skip this item (don't throw error, just log and continue)
+        console.log(`⚠️ Missing part_no for item. Skipping inventory update for this item.`);
+        // Continue to next item without updating inventory
       }
     }
     
@@ -421,13 +474,25 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
     // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO if exists
     // This ensures delivered_quantity, delivered_unit_price, delivered_total_price,
     // penalty_amount, and balance_quantity_undelivered are updated from invoice data
+    // For sales tax invoices, only update customer POs (order_type = 'customer')
     if (customer_po_number) {
-      const [pos] = await connection.execute(
-        'SELECT id FROM purchase_orders WHERE po_number = ?',
-        [customer_po_number]
-      );
-      if (pos.length > 0) {
-        await calculateAndUpdateDeliveredData(req.db, pos[0].id);
+      try {
+        const [pos] = await connection.execute(
+          'SELECT id FROM purchase_orders WHERE po_number = ? AND order_type = ? LIMIT 1',
+          [customer_po_number, 'customer']
+        );
+        if (pos.length > 0) {
+          // Wrap in try-catch to prevent failure of entire transaction if calculation fails
+          try {
+            await calculateAndUpdateDeliveredData(req.db, pos[0].id);
+          } catch (calcError) {
+            console.error('Error calculating delivered data (non-fatal):', calcError);
+            // Don't throw - invoice creation should succeed even if calculation fails
+          }
+        }
+      } catch (poError) {
+        console.error('Error finding PO for recalculation (non-fatal):', poError);
+        // Don't throw - invoice creation should succeed even if PO lookup fails
       }
     }
     
@@ -453,6 +518,221 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
   } finally {
     // Release connection back to pool
     connection.release();
+  }
+});
+
+// Document management for sales invoices
+router.get('/:id/documents', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [invoices] = await req.db.execute(
+      'SELECT id, invoice_number FROM sales_tax_invoices WHERE id = ? LIMIT 1',
+      [id]
+    );
+
+    if (invoices.length === 0) {
+      return res.status(404).json({ success: false, message: 'Sales tax invoice not found' });
+    }
+
+    const [documents] = await req.db.execute(
+      `
+        SELECT id, invoice_type, document_name, document_type, storage_path, storage_url, uploaded_by, created_at
+        FROM invoice_documents
+        WHERE invoice_type = 'sales' AND invoice_id = ?
+        ORDER BY created_at DESC
+      `,
+      [id]
+    );
+
+    res.json({ success: true, records: documents });
+  } catch (error) {
+    console.error('Error fetching sales invoice documents:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch sales invoice documents.',
+      error: error.message
+    });
+  }
+});
+
+router.post('/:id/documents', invoiceUpload.array('documents', 10), async (req, res) => {
+  const { id } = req.params;
+
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide at least one document to upload.'
+    });
+  }
+
+  let connection;
+  const uploadedRemotePaths = [];
+  const insertedRecords = [];
+
+  try {
+    const [invoices] = await req.db.execute(
+      'SELECT id, invoice_number FROM sales_tax_invoices WHERE id = ? LIMIT 1',
+      [id]
+    );
+
+    if (invoices.length === 0) {
+      return res.status(404).json({ success: false, message: 'Sales tax invoice not found' });
+    }
+
+    const invoice = invoices[0];
+    const directory = `invoices/sales/${invoice.invoice_number || invoice.id}`;
+    const createdBy = req.user?.id || null;
+
+    connection = await req.db.getConnection();
+    await connection.beginTransaction();
+
+    for (const file of req.files) {
+      const documentType = detectDocumentType(file.mimetype);
+      const { remotePath, url } = await uploadToBunny(
+        file.buffer,
+        file.originalname,
+        directory,
+        file.mimetype || 'application/octet-stream'
+      );
+
+      uploadedRemotePaths.push(remotePath);
+
+      const [result] = await connection.execute(
+        `
+          INSERT INTO invoice_documents
+            (invoice_type, invoice_id, document_name, document_type, storage_path, storage_url, uploaded_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `,
+        ['sales', invoice.id, file.originalname, documentType, remotePath, url, createdBy]
+      );
+
+      insertedRecords.push({
+        id: result.insertId,
+        invoice_type: 'sales',
+        invoice_id: invoice.id,
+        document_name: file.originalname,
+        document_type: documentType,
+        storage_path: remotePath,
+        storage_url: url,
+        uploaded_by: createdBy,
+        created_at: new Date()
+      });
+    }
+
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: 'Documents uploaded successfully.',
+      records: insertedRecords
+    });
+  } catch (error) {
+    if (connection) {
+      await connection.rollback().catch(() => {});
+    }
+
+    for (const remotePath of uploadedRemotePaths) {
+      try {
+        await deleteFromBunny(remotePath);
+      } catch (cleanupError) {
+        console.error('Failed to cleanup Bunny file after invoice upload failure:', cleanupError.message);
+      }
+    }
+
+    console.error('Error uploading sales invoice documents:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload sales invoice documents.',
+      error: error.message
+    });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
+  }
+});
+
+router.get('/documents/:document_id/download', async (req, res) => {
+  try {
+    const { document_id } = req.params;
+    const [documents] = await req.db.execute(
+      `
+        SELECT id, document_name, storage_path
+        FROM invoice_documents
+        WHERE id = ? AND invoice_type = 'sales'
+        LIMIT 1
+      `,
+      [document_id]
+    );
+
+    if (documents.length === 0) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+
+    const document = documents[0];
+    const file = await downloadFile(document.storage_path);
+
+    res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
+    if (file.contentLength) {
+      res.setHeader('Content-Length', file.contentLength);
+    }
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${document.document_name.replace(/"/g, '')}"`
+    );
+
+    res.send(file.data);
+  } catch (error) {
+    console.error('Error downloading sales invoice document:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to download the requested document.',
+      error: error.message
+    });
+  }
+});
+
+router.delete('/documents/:document_id', async (req, res) => {
+  try {
+    const { document_id } = req.params;
+    const [documents] = await req.db.execute(
+      `
+        SELECT id, document_name, storage_path
+        FROM invoice_documents
+        WHERE id = ? AND invoice_type = 'sales'
+        LIMIT 1
+      `,
+      [document_id]
+    );
+
+    if (documents.length === 0) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+
+    const document = documents[0];
+
+    // Delete file from Bunny storage
+    try {
+      await deleteFromBunny(document.storage_path);
+    } catch (error) {
+      console.error('Failed to delete Bunny file for sales invoice document:', error.message);
+      // Continue with database deletion even if file deletion fails
+    }
+
+    // Delete record from database
+    await req.db.execute('DELETE FROM invoice_documents WHERE id = ?', [document_id]);
+
+    res.json({
+      success: true,
+      message: 'Document deleted successfully.'
+    });
+  } catch (error) {
+    console.error('Error deleting sales invoice document:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete document.',
+      error: error.message
+    });
   }
 });
 
@@ -550,6 +830,51 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Sales tax invoice not found' });
     }
     
+    // Get old invoice items to revert inventory changes
+    const [oldItems] = await req.db.execute(
+      'SELECT part_no, project_no, description, quantity FROM sales_tax_invoice_items WHERE invoice_id = ?',
+      [id]
+    );
+    
+    // Revert inventory changes from old items
+    for (const oldItem of oldItems) {
+      if (oldItem.part_no) {
+        const oldQuantity = parseFloat(oldItem.quantity) || 0;
+        
+        // Find matching inventory record (FIFO - oldest first)
+        const [inventoryItems] = await req.db.execute(`
+          SELECT id, quantity, sold_quantity, balance, supplier_unit_price
+          FROM inventory 
+          WHERE project_no = ? AND part_no = ? AND description = ?
+          ORDER BY created_at ASC
+          LIMIT 1
+        `, [oldItem.project_no || null, oldItem.part_no, oldItem.description || null]);
+        
+        if (inventoryItems.length > 0) {
+          const inventoryItem = inventoryItems[0];
+          const currentSoldQuantity = parseFloat(inventoryItem.sold_quantity) || 0;
+          const currentQuantity = parseFloat(inventoryItem.quantity) || 0;
+          const unitPrice = parseFloat(inventoryItem.supplier_unit_price) || 0;
+          
+          // Revert: reduce sold_quantity by old quantity
+          const newSoldQuantity = Math.max(0, currentSoldQuantity - oldQuantity);
+          const newBalance = currentQuantity - newSoldQuantity;
+          const newBalanceAmount = newBalance * unitPrice;
+          
+          await req.db.execute(`
+            UPDATE inventory 
+            SET sold_quantity = ?,
+                balance = ?,
+                balance_amount = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `, [newSoldQuantity, newBalance, newBalanceAmount, inventoryItem.id]);
+          
+          console.log(`✓ Inventory reverted: project_no=${oldItem.project_no}, part_no=${oldItem.part_no}, sold_quantity: ${currentSoldQuantity} - ${oldQuantity} = ${newSoldQuantity}`);
+        }
+      }
+    }
+    
     // Update items
     await req.db.execute('DELETE FROM sales_tax_invoice_items WHERE invoice_id = ?', [id]);
     
@@ -563,17 +888,84 @@ router.put('/:id', async (req, res) => {
         id, item.part_no || null, item.material_no || null, item.project_no || null, item.description || null,
         item.quantity, item.unit_price, totalAmount
       ]);
+      
+      // Update inventory - Reduce stock
+      // Match by project_no, part_no, and description (all three must match exactly)
+      // If multiple matches exist, update only one record at a time according to FIFO
+      if (item.part_no) {
+        const saleQuantity = parseFloat(item.quantity) || 0;
+        
+        // Get matching inventory records (FIFO - oldest first)
+        const [inventoryItems] = await req.db.execute(`
+          SELECT id, quantity, sold_quantity, balance, supplier_unit_price, project_no, part_no, material_no, description
+          FROM inventory 
+          WHERE project_no = ? AND part_no = ? AND description = ?
+          ORDER BY created_at ASC
+          LIMIT 1
+        `, [item.project_no || null, item.part_no, item.description || null]);
+        
+        if (inventoryItems.length > 0) {
+          // Use FIFO - update the oldest matching record first (LIMIT 1 ensures only one record)
+          const inventoryItem = inventoryItems[0];
+          const currentSoldQuantity = parseFloat(inventoryItem.sold_quantity) || 0;
+          const currentQuantity = parseFloat(inventoryItem.quantity) || 0;
+          const currentBalance = parseFloat(inventoryItem.balance) || 0;
+          const unitPrice = parseFloat(inventoryItem.supplier_unit_price) || 0;
+          
+          // Calculate available stock - always use quantity - sold_quantity to ensure accuracy
+          const calculatedBalance = currentQuantity - currentSoldQuantity;
+          const finalAvailableStock = calculatedBalance;
+          
+          // Check if there's enough stock before deducting to prevent negative inventory
+          if (finalAvailableStock >= saleQuantity && finalAvailableStock > 0) {
+            // Calculate new values
+            const newSoldQuantity = currentSoldQuantity + saleQuantity;
+            const newBalance = currentQuantity - newSoldQuantity;
+            const newBalanceAmount = newBalance * unitPrice;
+            
+            // Update inventory record
+            await req.db.execute(`
+              UPDATE inventory 
+              SET sold_quantity = ?,
+                  balance = ?,
+                  balance_amount = ?,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `, [newSoldQuantity, newBalance, newBalanceAmount, inventoryItem.id]);
+            
+            console.log(`✓ Inventory updated (FIFO): project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}, sold_quantity: ${currentSoldQuantity} + ${saleQuantity} = ${newSoldQuantity}`);
+          } else {
+            // Insufficient stock - skip this item
+            console.log(`⚠️ Insufficient stock: Available=${finalAvailableStock}, Required=${saleQuantity}. Skipping inventory update for this item.`);
+          }
+        } else {
+          // No matching inventory record found - skip this item
+          console.log(`⚠️ No matching inventory found for project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}. Skipping inventory update for this item.`);
+        }
+      }
     }
     
     // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO if exists
     // Triggered when invoice items are updated
+    // For sales tax invoices, only update customer POs (order_type = 'customer')
     if (customer_po_number) {
-      const [pos] = await req.db.execute(
-        'SELECT id FROM purchase_orders WHERE po_number = ?',
-        [customer_po_number]
-      );
-      if (pos.length > 0) {
-        await calculateAndUpdateDeliveredData(req.db, pos[0].id);
+      try {
+        const [pos] = await req.db.execute(
+          'SELECT id FROM purchase_orders WHERE po_number = ? AND order_type = ? LIMIT 1',
+          [customer_po_number, 'customer']
+        );
+        if (pos.length > 0) {
+          // Wrap in try-catch to prevent failure of entire transaction if calculation fails
+          try {
+            await calculateAndUpdateDeliveredData(req.db, pos[0].id);
+          } catch (calcError) {
+            console.error('Error calculating delivered data (non-fatal):', calcError);
+            // Don't throw - invoice update should succeed even if calculation fails
+          }
+        }
+      } catch (poError) {
+        console.error('Error finding PO for recalculation (non-fatal):', poError);
+        // Don't throw - invoice update should succeed even if PO lookup fails
       }
     }
     
@@ -601,13 +993,25 @@ router.delete('/:id', async (req, res) => {
     
     // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO if it exists
     // Triggered when invoice is deleted to remove its contribution to delivered quantities
+    // For sales tax invoices, only update customer POs (order_type = 'customer')
     if (invoice && invoice.customer_po_number) {
-      const [pos] = await req.db.execute(
-        'SELECT id FROM purchase_orders WHERE po_number = ?',
-        [invoice.customer_po_number]
-      );
-      if (pos.length > 0) {
-        await calculateAndUpdateDeliveredData(req.db, pos[0].id);
+      try {
+        const [pos] = await req.db.execute(
+          'SELECT id FROM purchase_orders WHERE po_number = ? AND order_type = ? LIMIT 1',
+          [invoice.customer_po_number, 'customer']
+        );
+        if (pos.length > 0) {
+          // Wrap in try-catch to prevent failure of entire transaction if calculation fails
+          try {
+            await calculateAndUpdateDeliveredData(req.db, pos[0].id);
+          } catch (calcError) {
+            console.error('Error calculating delivered data (non-fatal):', calcError);
+            // Don't throw - invoice deletion should succeed even if calculation fails
+          }
+        }
+      } catch (poError) {
+        console.error('Error finding PO for recalculation (non-fatal):', poError);
+        // Don't throw - invoice deletion should succeed even if PO lookup fails
       }
     }
     

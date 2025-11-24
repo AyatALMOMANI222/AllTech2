@@ -2,8 +2,26 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { authenticateToken } = require('../middleware/auth');
 const { calculateAndUpdateDeliveredData } = require('./databaseDashboard');
-const puppeteer = require('puppeteer');
+const multer = require('multer');
 const path = require('path');
+const {
+  uploadFile: uploadToBunny,
+  downloadFile,
+  deleteFile: deleteFromBunny
+} = require('../services/bunnyStorage');
+const { detectDocumentType } = require('../utils/document_type');
+
+const INVOICE_DOCUMENT_MAX_FILE_SIZE = parseInt(
+  process.env.INVOICE_DOCUMENT_MAX_FILE_SIZE || `${25 * 1024 * 1024}`,
+  10
+);
+const invoiceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: INVOICE_DOCUMENT_MAX_FILE_SIZE,
+    files: 10,
+  },
+});
 
 const router = express.Router();
 
@@ -142,6 +160,7 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
     
     // Start transaction
     await connection.beginTransaction();
+    console.log('Transaction started for invoice:', invoice_number);
     
     // Calculate totals according to specifications
     let subtotal = 0;
@@ -160,7 +179,22 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
     // Gross Total = Amount of Claim + VAT
     const grossTotal = amountOfClaim + vatAmount;
     
+    // Check if invoice_number already exists
+    console.log('Checking if invoice_number exists:', invoice_number);
+    const [existingInvoices] = await connection.execute(
+      'SELECT id FROM purchase_tax_invoices WHERE invoice_number = ? LIMIT 1',
+      [invoice_number]
+    );
+    if (existingInvoices.length > 0) {
+      await connection.rollback();
+      return res.status(400).json({ 
+        message: 'Invoice number already exists',
+        error: `Invoice number ${invoice_number} is already in use` 
+      });
+    }
+    
     // Create invoice
+    console.log('Creating invoice with data:', { invoice_number, invoice_date, supplier_id, po_number, project_number });
     const createdBy = req.user?.id || null;
     const [result] = await connection.execute(`
       INSERT INTO purchase_tax_invoices (
@@ -173,14 +207,19 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
     ]);
     
     const invoiceId = result.insertId;
+    console.log('Invoice created with ID:', invoiceId);
     
     // Add items and update inventory
-    for (const item of items) {
+    console.log('Processing items, count:', items.length);
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      console.log(`Processing item ${i + 1}/${items.length}:`, { part_no: item.part_no, description: item.description });
       const itemTotal = parseFloat(item.quantity) * parseFloat(item.supplier_unit_price);
       const quantity = parseFloat(item.quantity) || 0;
       const unitPrice = parseFloat(item.supplier_unit_price) || 0;
       
       // Insert invoice item
+      console.log('Inserting invoice item...');
       await connection.execute(`
         INSERT INTO purchase_tax_invoice_items (
           invoice_id, serial_no, project_no, part_no, material_no,
@@ -195,6 +234,7 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
       // ⚠️ IMPORTANT: Only update existing inventory if ALL four fields match exactly
       // If any field differs (including project_no), create a new inventory record
       if (item.part_no && item.description) {
+        console.log('Checking inventory for item:', { part_no: item.part_no, description: item.description, unitPrice });
         // Determine the project_no to use for matching (from item or fallback to invoice project_number)
         const projectNoForMatching = item.project_no || project_number || null;
         
@@ -211,6 +251,7 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
               AND part_no = ? 
               AND description = ? 
               AND supplier_unit_price = ?
+          LIMIT 1
           `, [
             item.part_no,
             item.description,
@@ -225,6 +266,7 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
               AND part_no = ? 
               AND description = ? 
               AND supplier_unit_price = ?
+          LIMIT 1
           `, [
             projectNoForMatching,
             item.part_no,
@@ -300,16 +342,28 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
     await connection.commit();
     
     // Recalculate delivered data for the PO if exists
+    // For purchase tax invoices, only update supplier POs (order_type = 'supplier')
     if (po_number) {
-      const [pos] = await connection.execute(
-        'SELECT id FROM purchase_orders WHERE po_number = ?',
-        [po_number]
-      );
-      if (pos.length > 0) {
-        // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO
-        // This ensures delivered_quantity, delivered_unit_price, delivered_total_price,
-        // penalty_amount, and balance_quantity_undelivered are updated from invoice data
-        await calculateAndUpdateDeliveredData(req.db, pos[0].id);
+      try {
+        const [pos] = await connection.execute(
+          'SELECT id FROM purchase_orders WHERE po_number = ? AND order_type = ? LIMIT 1',
+          [po_number, 'supplier']
+        );
+        if (pos.length > 0) {
+          // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO
+          // This ensures delivered_quantity, delivered_unit_price, delivered_total_price,
+          // penalty_amount, and balance_quantity_undelivered are updated from invoice data
+          // Wrap in try-catch to prevent failure of entire transaction if calculation fails
+          try {
+            await calculateAndUpdateDeliveredData(req.db, pos[0].id);
+          } catch (calcError) {
+            console.error('Error calculating delivered data (non-fatal):', calcError);
+            // Don't throw - invoice creation should succeed even if calculation fails
+          }
+        }
+      } catch (poError) {
+        console.error('Error finding PO for recalculation (non-fatal):', poError);
+        // Don't throw - invoice creation should succeed even if PO lookup fails
       }
     }
     
@@ -322,9 +376,15 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
     // Rollback transaction on error
     await connection.rollback();
     console.error('Error creating purchase tax invoice:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error code:', error.code);
+    console.error('Error sqlState:', error.sqlState);
+    console.error('Error sqlMessage:', error.sqlMessage);
     res.status(500).json({ 
       message: 'Error creating purchase tax invoice',
-      error: error.message 
+      error: error.message,
+      code: error.code,
+      sqlState: error.sqlState
     });
   } finally {
     // Release connection back to pool
@@ -418,10 +478,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
     
     // Recalculate delivered data for the PO if exists
+    // For purchase tax invoices, only update supplier POs (order_type = 'supplier')
     if (po_number) {
       const [pos] = await req.db.execute(
-        'SELECT id FROM purchase_orders WHERE po_number = ?',
-        [po_number]
+        'SELECT id FROM purchase_orders WHERE po_number = ? AND order_type = ?',
+        [po_number, 'supplier']
       );
       if (pos.length > 0) {
         // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO
@@ -454,10 +515,11 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     
     // ⚠️ AUTOMATIC TRIGGER: Recalculate delivered data for the PO if it exists
     // Triggered when invoice is deleted to remove its contribution to delivered quantities
+    // For purchase tax invoices, only update supplier POs (order_type = 'supplier')
     if (invoice && invoice.po_number) {
       const [pos] = await req.db.execute(
-        'SELECT id FROM purchase_orders WHERE po_number = ?',
-        [invoice.po_number]
+        'SELECT id FROM purchase_orders WHERE po_number = ? AND order_type = ?',
+        [invoice.po_number, 'supplier']
       );
       if (pos.length > 0) {
         await calculateAndUpdateDeliveredData(req.db, pos[0].id);
@@ -630,6 +692,221 @@ router.get('/:id/pdf', authenticateToken, async (req, res) => {
     if (browser) {
       await browser.close();
     }
+  }
+});
+
+// Document management for purchase invoices
+router.get('/:id/documents', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [invoices] = await req.db.execute(
+      'SELECT id, invoice_number FROM purchase_tax_invoices WHERE id = ? LIMIT 1',
+      [id]
+    );
+
+    if (invoices.length === 0) {
+      return res.status(404).json({ success: false, message: 'Purchase tax invoice not found' });
+    }
+
+    const [documents] = await req.db.execute(
+      `
+        SELECT id, invoice_type, document_name, document_type, storage_path, storage_url, uploaded_by, created_at
+        FROM invoice_documents
+        WHERE invoice_type = 'purchase' AND invoice_id = ?
+        ORDER BY created_at DESC
+      `,
+      [id]
+    );
+
+    res.json({ success: true, records: documents });
+  } catch (error) {
+    console.error('Error fetching purchase invoice documents:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch purchase invoice documents.',
+      error: error.message
+    });
+  }
+});
+
+router.post('/:id/documents', authenticateToken, invoiceUpload.array('documents', 10), async (req, res) => {
+  const { id } = req.params;
+
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please provide at least one document to upload.'
+    });
+  }
+
+  let connection;
+  const uploadedRemotePaths = [];
+  const insertedRecords = [];
+
+  try {
+    const [invoices] = await req.db.execute(
+      'SELECT id, invoice_number FROM purchase_tax_invoices WHERE id = ? LIMIT 1',
+      [id]
+    );
+
+    if (invoices.length === 0) {
+      return res.status(404).json({ success: false, message: 'Purchase tax invoice not found' });
+    }
+
+    const invoice = invoices[0];
+    const directory = `invoices/purchase/${invoice.invoice_number || invoice.id}`;
+    const createdBy = req.user?.id || null;
+
+    connection = await req.db.getConnection();
+    await connection.beginTransaction();
+
+    for (const file of req.files) {
+      const documentType = detectDocumentType(file.mimetype);
+      const { remotePath, url } = await uploadToBunny(
+        file.buffer,
+        file.originalname,
+        directory,
+        file.mimetype || 'application/octet-stream'
+      );
+
+      uploadedRemotePaths.push(remotePath);
+
+      const [result] = await connection.execute(
+        `
+          INSERT INTO invoice_documents
+            (invoice_type, invoice_id, document_name, document_type, storage_path, storage_url, uploaded_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `,
+        ['purchase', invoice.id, file.originalname, documentType, remotePath, url, createdBy]
+      );
+
+      insertedRecords.push({
+        id: result.insertId,
+        invoice_type: 'purchase',
+        invoice_id: invoice.id,
+        document_name: file.originalname,
+        document_type: documentType,
+        storage_path: remotePath,
+        storage_url: url,
+        uploaded_by: createdBy,
+        created_at: new Date()
+      });
+    }
+
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: 'Documents uploaded successfully.',
+      records: insertedRecords
+    });
+  } catch (error) {
+    if (connection) {
+      await connection.rollback().catch(() => {});
+    }
+
+    for (const remotePath of uploadedRemotePaths) {
+      try {
+        await deleteFromBunny(remotePath);
+      } catch (cleanupError) {
+        console.error('Failed to cleanup Bunny file after invoice upload failure:', cleanupError.message);
+      }
+    }
+
+    console.error('Error uploading purchase invoice documents:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload purchase invoice documents.',
+      error: error.message
+    });
+  } finally {
+    if (connection) {
+      await connection.release();
+    }
+  }
+});
+
+router.get('/documents/:document_id/download', authenticateToken, async (req, res) => {
+  try {
+    const { document_id } = req.params;
+    const [documents] = await req.db.execute(
+      `
+        SELECT id, document_name, storage_path
+        FROM invoice_documents
+        WHERE id = ? AND invoice_type = 'purchase'
+        LIMIT 1
+      `,
+      [document_id]
+    );
+
+    if (documents.length === 0) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+
+    const document = documents[0];
+    const file = await downloadFile(document.storage_path);
+
+    res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
+    if (file.contentLength) {
+      res.setHeader('Content-Length', file.contentLength);
+    }
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${document.document_name.replace(/"/g, '')}"`
+    );
+
+    res.send(file.data);
+  } catch (error) {
+    console.error('Error downloading purchase invoice document:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to download the requested document.',
+      error: error.message
+    });
+  }
+});
+
+router.delete('/documents/:document_id', authenticateToken, async (req, res) => {
+  try {
+    const { document_id } = req.params;
+    const [documents] = await req.db.execute(
+      `
+        SELECT id, document_name, storage_path
+        FROM invoice_documents
+        WHERE id = ? AND invoice_type = 'purchase'
+        LIMIT 1
+      `,
+      [document_id]
+    );
+
+    if (documents.length === 0) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+
+    const document = documents[0];
+
+    // Delete file from Bunny storage
+    try {
+      await deleteFromBunny(document.storage_path);
+    } catch (error) {
+      console.error('Failed to delete Bunny file for purchase invoice document:', error.message);
+      // Continue with database deletion even if file deletion fails
+    }
+
+    // Delete record from database
+    await req.db.execute('DELETE FROM invoice_documents WHERE id = ?', [document_id]);
+
+    res.json({
+      success: true,
+      message: 'Document deleted successfully.'
+    });
+  } catch (error) {
+    console.error('Error deleting purchase invoice document:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete document.',
+      error: error.message
+    });
   }
 });
 

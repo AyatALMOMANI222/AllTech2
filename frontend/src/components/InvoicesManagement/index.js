@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { salesTaxInvoicesAPI, purchaseTaxInvoicesAPI } from '../../services/api';
+import {
+  salesTaxInvoicesAPI,
+  purchaseTaxInvoicesAPI,
+  invoiceDocumentsAPI,
+} from '../../services/api';
 import formatCurrency from '../../utils/formatCurrency';
+import formatNumber from '../../utils/formatNumber';
 import SalesTaxInvoice from '../SalesTaxInvoice';
 import PurchaseTaxInvoice from '../PurchaseTaxInvoice';
 import './style.scss';
@@ -22,10 +27,26 @@ const InvoicesManagement = () => {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
   const invoiceModalBodyRef = useRef(null);
+  const [documentRecords, setDocumentRecords] = useState([]);
+  const [documentInvoice, setDocumentInvoice] = useState(null);
+  const [documentLoading, setDocumentLoading] = useState(false);
+  const [documentUploadLoading, setDocumentUploadLoading] = useState(false);
+  const [documentFeedback, setDocumentFeedback] = useState('');
+  const [documentDownloadingId, setDocumentDownloadingId] = useState(null);
+  const [documentDeletingId, setDocumentDeletingId] = useState(null);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const documentInputRef = useRef(null);
 
   useEffect(() => {
     fetchInvoices();
   }, [activeTab, currentPage, showAll, itemsPerPage]);
+
+  useEffect(() => {
+    setDocumentInvoice(null);
+    setDocumentRecords([]);
+    setDocumentFeedback('');
+    setShowDocumentModal(false);
+  }, [activeTab]);
 
   const fetchInvoices = async () => {
     setLoading(true);
@@ -282,6 +303,125 @@ const InvoicesManagement = () => {
     }
   };
 
+  const handleDocumentFeedback = (message) => {
+    setDocumentFeedback(message);
+    setTimeout(() => {
+      setDocumentFeedback('');
+    }, 4000);
+  };
+
+  const loadDocumentRecords = async (invoiceId, type) => {
+    setDocumentLoading(true);
+    try {
+      const response = await invoiceDocumentsAPI.list(type, invoiceId);
+      setDocumentRecords(response.data.records || []);
+    } catch (error) {
+      console.error('Error fetching invoice documents:', error);
+      handleDocumentFeedback('Unable to fetch documents');
+    } finally {
+      setDocumentLoading(false);
+    }
+  };
+
+  const handleManageDocuments = async (invoice, type) => {
+    if (!invoice?.id) return;
+    setDocumentInvoice({
+      id: invoice.id,
+      type,
+      invoice_number: invoice.invoice_number || invoice.id,
+    });
+    await loadDocumentRecords(invoice.id, type);
+    setShowDocumentModal(true);
+  };
+
+  const handleClearDocumentsPanel = () => {
+    setDocumentInvoice(null);
+    setDocumentRecords([]);
+    setDocumentFeedback('');
+    setShowDocumentModal(false);
+  };
+
+  const handleImportClick = () => {
+    if (!documentInvoice) {
+      alert('Select an invoice first');
+      return;
+    }
+    documentInputRef.current?.click();
+  };
+
+  const handleSelectedFiles = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!documentInvoice || files.length === 0) {
+      event.target.value = '';
+      return;
+    }
+
+    setDocumentUploadLoading(true);
+    try {
+      await invoiceDocumentsAPI.upload(documentInvoice.type, documentInvoice.id, files);
+      handleDocumentFeedback('Files uploaded successfully');
+      await loadDocumentRecords(documentInvoice.id, documentInvoice.type);
+    } catch (error) {
+      console.error('Error uploading documents:', error);
+      handleDocumentFeedback('Upload failed');
+    } finally {
+      setDocumentUploadLoading(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleDownloadDocument = async (doc) => {
+    if (!doc) return;
+    setDocumentDownloadingId(doc.id);
+    try {
+      const response = await invoiceDocumentsAPI.download(doc.invoice_type, doc.id);
+      const blob = new Blob([response.data], {
+        type: response.headers['content-type'] || 'application/octet-stream',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = doc.document_name;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 0);
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      alert('Unable to download document');
+    } finally {
+      setDocumentDownloadingId(null);
+    }
+  };
+
+  const handleDeleteDocument = async (doc) => {
+    if (!doc) return;
+    if (
+      !window.confirm(
+        `Delete "${doc.document_name || 'document'}"? This action cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setDocumentDeletingId(doc.id);
+      setDocumentFeedback('');
+      await invoiceDocumentsAPI.delete(doc.invoice_type, doc.id);
+      handleDocumentFeedback('Document deleted successfully');
+      await loadDocumentRecords(documentInvoice.id, documentInvoice.type);
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      handleDocumentFeedback(
+        error.response?.data?.message || 'Failed to delete document'
+      );
+    } finally {
+      setDocumentDeletingId(null);
+    }
+  };
+
 
   const filteredInvoices = getFilteredInvoices();
 
@@ -491,6 +631,14 @@ const InvoicesManagement = () => {
                                     <i className="fas fa-money-bill-wave me-1"></i>
                                     Payment
                                   </button>
+                                <button
+                                  className="btn btn-sm btn-outline-secondary"
+                                  onClick={() => handleManageDocuments(invoice, activeTab)}
+                                  title="Manage Documents"
+                                >
+                                  <i className="fas fa-file-medical-alt me-1"></i>
+                                  Documents
+                                </button>
                                 </div>
                               </td>
                             </tr>
@@ -551,6 +699,126 @@ const InvoicesManagement = () => {
           </div>
         </div>
       </div>
+
+    {showDocumentModal && documentInvoice && (
+      <div className="invoice-documents-modal modal show" tabIndex="-1" style={{ display: 'flex' }}>
+        <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-content">
+            <div className="modal-header">
+              <div>
+                <h5 className="modal-title mb-1">Documents · {documentInvoice.invoice_number}</h5>
+                <small className="text-muted">
+                  {documentInvoice.type === 'sales' ? 'Sales Tax Invoice' : 'Purchase Tax Invoice'}
+                </small>
+              </div>
+              <button type="button" className="btn-close" onClick={handleClearDocumentsPanel}></button>
+            </div>
+            <div className="modal-body">
+              <input
+                ref={documentInputRef}
+                type="file"
+                multiple
+                style={{ display: 'none' }}
+                onChange={handleSelectedFiles}
+              />
+              <div className="d-flex flex-wrap gap-2 mb-3">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={handleImportClick}
+                  disabled={documentUploadLoading}
+                >
+                  <i className="fas fa-file-import me-1"></i>
+                  Import
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary btn-sm"
+                  onClick={() => loadDocumentRecords(documentInvoice.id, documentInvoice.type)}
+                  disabled={documentLoading}
+                >
+                  <i className="fas fa-sync-alt me-1"></i>
+                  Refresh
+                </button>
+              </div>
+              {documentFeedback && (
+                <div className="alert alert-info py-2 px-3 mb-3">{documentFeedback}</div>
+              )}
+              {documentLoading ? (
+                <div className="text-center text-muted py-3">
+                  <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                  Loading documents...
+                </div>
+              ) : documentRecords.length === 0 ? (
+                <div className="text-center text-muted py-4">No documents uploaded yet.</div>
+              ) : (
+                <div className="list-group invoice-document-list">
+                  {documentRecords.map((doc) => (
+                    <div
+                      className="list-group-item d-flex justify-content-between align-items-center"
+                      key={doc.id}
+                    >
+                      <div>
+                        <strong>{doc.document_name}</strong>
+                        <div className="text-muted small">
+                          {doc.created_at ? new Date(doc.created_at).toLocaleString() : ''}
+                          {' · '}
+                          {doc.document_type || 'file'}
+                        </div>
+                      </div>
+                      <div className="btn-group" role="group">
+                        <button
+                          className="btn btn-sm btn-outline-primary"
+                          onClick={() => handleDownloadDocument(doc)}
+                          disabled={documentDownloadingId === doc.id || documentDeletingId === doc.id}
+                          title="Export"
+                        >
+                          {documentDownloadingId === doc.id ? (
+                            <>
+                              <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                              Exporting...
+                            </>
+                          ) : (
+                            <>
+                              <i className="fas fa-file-export me-1"></i>
+                              Export
+                            </>
+                          )}
+                        </button>
+                        <button
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => handleDeleteDocument(doc)}
+                          disabled={documentDownloadingId === doc.id || documentDeletingId === doc.id}
+                          title="Delete"
+                        >
+                          {documentDeletingId === doc.id ? (
+                            <>
+                              <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                              Deleting...
+                            </>
+                          ) : (
+                            <>
+                              <i className="fas fa-trash me-1"></i>
+                              Delete
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer justify-content-end">
+              <button type="button" className="btn btn-secondary btn-sm" onClick={handleClearDocumentsPanel}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    {showDocumentModal && <div className="modal-backdrop show"></div>}
 
       {/* Invoice View Modal */}
       {showInvoiceModal && selectedInvoice && (

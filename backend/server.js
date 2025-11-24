@@ -3,6 +3,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const mysql = require('mysql2/promise');
 const path = require('path');
+const fs = require('fs');
 
 // Load environment variables
 dotenv.config();
@@ -225,6 +226,52 @@ async function ensurePurchaseOrdersColumns() {
       }
     }
     
+    // Remove UNIQUE constraint from po_number to allow supplier POs to use same number as customer POs
+    try {
+      // First, try to find and drop the unique index
+      const [indexes] = await connection.execute(`
+        SELECT INDEX_NAME 
+        FROM information_schema.STATISTICS 
+        WHERE table_schema = DATABASE() 
+        AND table_name = 'purchase_orders' 
+        AND column_name = 'po_number' 
+        AND NON_UNIQUE = 0
+      `);
+      
+      if (indexes.length > 0) {
+        // Drop the unique index (MySQL creates an index for UNIQUE constraints)
+        for (const index of indexes) {
+          try {
+            const indexName = index.INDEX_NAME;
+            // Use backticks to handle index names that might be reserved words
+            await connection.execute(`
+              ALTER TABLE purchase_orders 
+              DROP INDEX \`${indexName}\`
+            `);
+            console.log(`✓ Removed UNIQUE constraint from po_number (dropped index: ${indexName})`);
+          } catch (dropError) {
+            // Try alternative method - drop by column name
+            try {
+              await connection.execute(`
+                ALTER TABLE purchase_orders 
+                DROP INDEX po_number
+              `);
+              console.log('✓ Removed UNIQUE constraint from po_number');
+            } catch (dropError2) {
+              console.log('Note: Could not drop unique index on po_number:', dropError2.message);
+            }
+          }
+        }
+      } else {
+        console.log('✓ No UNIQUE constraint found on po_number (already removed or never existed)');
+      }
+    } catch (error) {
+      // If the query fails, the constraint might not exist, which is fine
+      if (error.code !== 'ER_NO_SUCH_TABLE' && !error.message.includes('doesn\'t exist')) {
+        console.log('Note: Error checking/removing UNIQUE constraint on po_number:', error.message);
+      }
+    }
+    
     connection.release();
   } catch (error) {
     console.error('Error checking purchase_orders columns:', error.message);
@@ -289,6 +336,121 @@ async function ensureInvoiceColumns() {
     connection.release();
   } catch (error) {
     console.error('Error checking invoice columns:', error.message);
+  }
+}
+
+// Auto-migration: Fix purchase tax invoice triggers to handle multiple POs with same po_number
+async function fixPurchaseInvoiceTriggers() {
+  try {
+    const connection = await pool.getConnection();
+    
+    console.log('Checking and fixing purchase tax invoice triggers...');
+    
+    // Drop existing triggers
+    try {
+      await connection.execute('DROP TRIGGER IF EXISTS update_purchase_order_status_after_invoice_insert');
+      await connection.execute('DROP TRIGGER IF EXISTS update_purchase_order_status_after_invoice_update');
+      await connection.execute('DROP TRIGGER IF EXISTS update_purchase_order_status_after_invoice_delete');
+      console.log('✓ Old triggers dropped');
+    } catch (error) {
+      console.log('Note: Error dropping triggers (may not exist):', error.message);
+    }
+    
+    // Create triggers one by one without DELIMITER (MySQL2 handles it)
+    // Recreate trigger for AFTER INSERT
+    try {
+      await connection.query(`
+        CREATE TRIGGER update_purchase_order_status_after_invoice_insert
+        AFTER INSERT ON purchase_tax_invoice_items
+        FOR EACH ROW
+        BEGIN
+          DECLARE po_id_var INT;
+          DECLARE po_number_var VARCHAR(100);
+          
+          SELECT po.id, po.po_number INTO po_id_var, po_number_var
+          FROM purchase_tax_invoices pt
+          INNER JOIN purchase_orders po ON pt.po_number = po.po_number AND po.order_type = 'supplier'
+          WHERE pt.id = NEW.invoice_id
+          LIMIT 1;
+          
+          IF po_id_var IS NOT NULL THEN
+            CALL update_purchase_order_status_fn(po_id_var);
+          END IF;
+        END
+      `);
+      console.log('✓ Trigger update_purchase_order_status_after_invoice_insert created');
+    } catch (error) {
+      if (error.code === 'ER_TRG_ALREADY_EXISTS') {
+        console.log('Note: Trigger update_purchase_order_status_after_invoice_insert already exists');
+      } else {
+        console.log('Note: Error creating INSERT trigger:', error.message);
+      }
+    }
+    
+    // Recreate trigger for AFTER UPDATE
+    try {
+      await connection.query(`
+        CREATE TRIGGER update_purchase_order_status_after_invoice_update
+        AFTER UPDATE ON purchase_tax_invoice_items
+        FOR EACH ROW
+        BEGIN
+          DECLARE po_id_var INT;
+          DECLARE po_number_var VARCHAR(100);
+          
+          SELECT po.id, po.po_number INTO po_id_var, po_number_var
+          FROM purchase_tax_invoices pt
+          INNER JOIN purchase_orders po ON pt.po_number = po.po_number AND po.order_type = 'supplier'
+          WHERE pt.id = NEW.invoice_id
+          LIMIT 1;
+          
+          IF po_id_var IS NOT NULL THEN
+            CALL update_purchase_order_status_fn(po_id_var);
+          END IF;
+        END
+      `);
+      console.log('✓ Trigger update_purchase_order_status_after_invoice_update created');
+    } catch (error) {
+      if (error.code === 'ER_TRG_ALREADY_EXISTS') {
+        console.log('Note: Trigger update_purchase_order_status_after_invoice_update already exists');
+      } else {
+        console.log('Note: Error creating UPDATE trigger:', error.message);
+      }
+    }
+    
+    // Recreate trigger for AFTER DELETE
+    try {
+      await connection.query(`
+        CREATE TRIGGER update_purchase_order_status_after_invoice_delete
+        AFTER DELETE ON purchase_tax_invoice_items
+        FOR EACH ROW
+        BEGIN
+          DECLARE po_id_var INT;
+          DECLARE po_number_var VARCHAR(100);
+          
+          SELECT po.id, po.po_number INTO po_id_var, po_number_var
+          FROM purchase_tax_invoices pt
+          INNER JOIN purchase_orders po ON pt.po_number = po.po_number AND po.order_type = 'supplier'
+          WHERE pt.id = OLD.invoice_id
+          LIMIT 1;
+          
+          IF po_id_var IS NOT NULL THEN
+            CALL update_purchase_order_status_fn(po_id_var);
+          END IF;
+        END
+      `);
+      console.log('✓ Trigger update_purchase_order_status_after_invoice_delete created');
+    } catch (error) {
+      if (error.code === 'ER_TRG_ALREADY_EXISTS') {
+        console.log('Note: Trigger update_purchase_order_status_after_invoice_delete already exists');
+      } else {
+        console.log('Note: Error creating DELETE trigger:', error.message);
+      }
+    }
+    
+    connection.release();
+    console.log('✓ Purchase tax invoice triggers check completed');
+  } catch (error) {
+    console.error('Error fixing purchase invoice triggers:', error.message);
   }
 }
 
@@ -610,6 +772,7 @@ ensureInvoiceColumns();
 ensureWarrantyTable();
 ensureCustomerSupplierDocumentsTable();
 ensurePODocumentsTable();
+fixPurchaseInvoiceTriggers();
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
@@ -772,7 +935,7 @@ app.get('/api/initialize-database', async (req, res) => {
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS purchase_orders (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        po_number VARCHAR(100) UNIQUE NOT NULL,
+        po_number VARCHAR(100) NOT NULL,
         order_type ENUM('customer', 'supplier') NOT NULL,
         customer_supplier_id VARCHAR(50),
         customer_supplier_name VARCHAR(255),

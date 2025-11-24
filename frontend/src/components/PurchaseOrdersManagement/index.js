@@ -6,6 +6,7 @@ import {
   purchaseOrderDocumentsAPI,
 } from "../../services/api";
 import formatCurrency from "../../utils/formatCurrency";
+import formatNumber from "../../utils/formatNumber";
 import SalesTaxInvoice from "../SalesTaxInvoice";
 import PurchaseTaxInvoice from "../PurchaseTaxInvoice";
 
@@ -430,6 +431,35 @@ const documentFileInputRef = React.useRef(null);
       });
     } finally {
       setDocumentUploading(false);
+    }
+  };
+
+  const handleOpenDocument = async (document) => {
+    try {
+      setDocumentMessage({ type: "", text: "" });
+      setDocumentDownloadingId(document.id);
+      const response = await purchaseOrderDocumentsAPI.download(document.id);
+      
+      if (response.status === 200) {
+        const blob = response.data;
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        // Clean up the URL after a delay
+        setTimeout(() => window.URL.revokeObjectURL(url), 100);
+      } else {
+        setDocumentMessage({
+          type: "error",
+          text: "Failed to open the selected document.",
+        });
+      }
+    } catch (error) {
+      console.error("Error opening PO document:", error);
+      setDocumentMessage({
+        type: "error",
+        text: error.response?.data?.message || "Failed to open the selected document.",
+      });
+    } finally {
+      setDocumentDownloadingId(null);
     }
   };
 
@@ -2756,15 +2786,21 @@ View Details                                </button>
                                 </p>
                               </div>
                               <div className="document-card__actions">
-                        <a
-                          href={buildSafeDocumentUrl(document.storage_url)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-sm btn-outline-info"
-                        >
-                                  <i className="fas fa-external-link-alt"></i>
+                                <button
+                                  className="btn btn-sm btn-outline-info"
+                                  type="button"
+                                  onClick={() => handleOpenDocument(document)}
+                                  disabled={
+                                    documentDownloadingId === document.id
+                                  }
+                                >
+                                  {documentDownloadingId === document.id ? (
+                                    <span className="spinner-border spinner-border-sm" />
+                                  ) : (
+                                    <i className="fas fa-external-link-alt"></i>
+                                  )}
                                   <span>Open</span>
-                                </a>
+                                </button>
                                 <button
                                   className="btn btn-sm btn-outline-primary"
                                   type="button"
@@ -3107,6 +3143,23 @@ View Details                                </button>
                   <p className="form-control-plaintext">
                     {selectedCustomerPO.po_number} - {selectedCustomerPO.customer_supplier_name}
                   </p>
+                </div>
+                <div className="mb-3">
+                  <label htmlFor="supplierPONumber" className="form-label">
+                    <strong>Supplier PO Number:</strong>
+                  </label>
+                  <input
+                    type="text"
+                    id="supplierPONumber"
+                    className="form-control"
+                    value={selectedCustomerPO.po_number}
+                    readOnly
+                    disabled
+                    style={{ backgroundColor: '#e9ecef', cursor: 'not-allowed' }}
+                  />
+                  <small className="form-text text-muted">
+                    Supplier PO Number will match the Customer PO Number
+                  </small>
                 </div>
                 <div className="mb-3">
                   <label htmlFor="supplierSelect" className="form-label">

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import formatCurrency from '../../utils/formatCurrency';
+import formatNumber from '../../utils/formatNumber';
 import './style.scss';
 
 // API base URL - use environment variable or detect production
@@ -100,9 +101,9 @@ const InventoryManagement = () => {
           alert(
             `${editingItem ? 'Updated' : 'Added'} successfully!\n\n` +
             `Calculated Values:\n` +
-            `Total Price: AED ${result.calculated_values.total_price?.toFixed(2) || 0}\n` +
-            `Balance: ${result.calculated_values.balance?.toFixed(2) || 0}\n` +
-            `Balance Amount: AED ${result.calculated_values.balance_amount?.toFixed(2) || 0}`
+            `Total Price: AED ${formatNumber(result.calculated_values.total_price || 0)}\n` +
+            `Balance: ${formatNumber(result.calculated_values.balance || 0)}\n` +
+            `Balance Amount: AED ${formatNumber(result.calculated_values.balance_amount || 0)}`
           );
         } else {
           alert(editingItem ? 'Inventory item updated successfully!' : 'Inventory item added successfully!');

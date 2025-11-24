@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { databaseDashboardAPI } from '../../services/api';
+import formatNumber from '../../utils/formatNumber';
 import './style.scss';
 
 const DatabaseDashboard = () => {
@@ -329,11 +330,8 @@ const DatabaseDashboard = () => {
                           // Check if item has supplier or customer orders based on aggregated values
                           // Use aggregated values directly from backend (supplier_po_quantity, customer_po_quantity, etc.)
                           // For customer orders without linked suppliers, supplier_po_quantity will be NULL, so hasSupplierApproved will be false
-                          const hasSupplierApproved = item.supplier_po_quantity != null && item.supplier_po_quantity !== '' && parseFloat(item.supplier_po_quantity) > 0;
-                          const hasSupplierDelivered = item.supplier_delivered_quantity != null && item.supplier_delivered_quantity !== '' && parseFloat(item.supplier_delivered_quantity) > 0;
-                          const hasCustomerApproved = item.customer_po_quantity && parseFloat(item.customer_po_quantity) > 0;
-                          const hasCustomerDelivered = item.customer_delivered_quantity && parseFloat(item.customer_delivered_quantity) > 0;
-                          
+                          // Also check approvedOrders array for supplier orders
+                          const hasSupplierApprovedFromBackend = item.supplier_po_quantity != null && item.supplier_po_quantity !== '' && parseFloat(item.supplier_po_quantity) > 0;
                           // Get additional info from arrays (for lead_time, due_date, po_number, etc.)
                           const approvedOrders = item.purchase_orders?.approved_orders || [];
                           const deliveredOrders = item.purchase_orders?.delivered_orders || [];
@@ -344,13 +342,31 @@ const DatabaseDashboard = () => {
                           const customerApprovedOrders = approvedOrders.filter(o => o.order_type === 'customer');
                           const customerDeliveredOrders = deliveredOrders.filter(o => o.order_type === 'customer');
                           
+                          // Check if we have supplier approved orders from the array
+                          const hasSupplierApprovedFromArray = supplierApprovedOrders.length > 0;
+                          const hasSupplierApproved = hasSupplierApprovedFromBackend || hasSupplierApprovedFromArray;
+                          const hasSupplierDelivered = item.supplier_delivered_quantity != null && item.supplier_delivered_quantity !== '' && parseFloat(item.supplier_delivered_quantity) > 0;
+                          const hasCustomerApproved = item.customer_po_quantity && parseFloat(item.customer_po_quantity) > 0;
+                          const hasCustomerDelivered = item.customer_delivered_quantity && parseFloat(item.customer_delivered_quantity) > 0;
+                          
                           // Check PO status separately for supplier and customer
                           // Use separate status fields from backend, or fall back to general status
                           // For customer orders without linked suppliers, supplier_po_status will be NULL
-                          const supplierStatus = item.supplier_po_status != null ? item.supplier_po_status : (item.po_status && item.order_type === 'supplier' ? item.po_status : null);
+                          // For standalone supplier orders, check supplierApprovedOrders for status
+                          let supplierStatus = item.supplier_po_status;
+                          if (supplierStatus == null && supplierApprovedOrders.length > 0) {
+                            // If supplier_po_status is NULL but we have supplier approved orders, use status from orders
+                            supplierStatus = supplierApprovedOrders[0]?.status || null;
+                          }
+                          if (supplierStatus == null && item.po_status && (item.order_type === 'supplier' || (typeof item.order_type === 'string' && item.order_type.includes('supplier')))) {
+                            supplierStatus = item.po_status;
+                          }
                           const customerStatus = item.customer_po_status || item.po_status;
                           
-                          const supplierIsApproved = supplierStatus && ['approved', 'partially_delivered', 'delivered_completed'].includes(supplierStatus);
+                          // Check if supplier is approved - use status or check if we have approved orders
+                          // If we have supplier approved orders, consider it approved even if status is not set
+                          const supplierIsApproved = (supplierStatus && ['approved', 'partially_delivered', 'delivered_completed'].includes(supplierStatus)) || 
+                            (hasSupplierApproved && supplierApprovedOrders.length > 0);
                           const supplierIsDelivered = supplierStatus && ['partially_delivered', 'delivered_completed'].includes(supplierStatus);
                           
                           const customerIsApproved = customerStatus && ['approved', 'partially_delivered', 'delivered_completed'].includes(customerStatus);
@@ -372,7 +388,7 @@ const DatabaseDashboard = () => {
                             po_unit_price: supplierApprovedUnitPrice,
                             po_total_price: supplierApprovedTotalPrice,
                             lead_time: supplierApprovedOrders[0]?.lead_time || item.lead_time || '',
-                            due_date: supplierApprovedOrders[0]?.due_date || item.due_date || '',
+                            due_date: supplierApprovedOrders.length > 0 && supplierApprovedOrders[0]?.due_date ? supplierApprovedOrders[0].due_date : null,
                             customer_supplier_name: supplierApprovedOrders[0]?.supplier_name || item.supplier_name || item.customer_supplier_name || '',
                             po_number: supplierApprovedOrders.length > 0 
                               ? supplierApprovedOrders.map(o => o.po_number).filter(Boolean).join(', ')
@@ -428,7 +444,7 @@ const DatabaseDashboard = () => {
                             po_unit_price: customerApprovedUnitPrice,
                             po_total_price: customerApprovedTotalPrice,
                             lead_time: customerApprovedOrders[0]?.lead_time || item.lead_time || '',
-                            due_date: customerApprovedOrders[0]?.due_date || item.due_date || '',
+                            due_date: customerApprovedOrders.length > 0 && customerApprovedOrders[0]?.due_date ? customerApprovedOrders[0].due_date : null,
                             customer_supplier_name: customerApprovedOrders[0]?.supplier_name || item.customer_supplier_name || '',
                             po_number: customerApprovedOrders.length > 0
                               ? customerApprovedOrders.map(o => o.po_number).filter(Boolean).join(', ')
@@ -484,16 +500,45 @@ const DatabaseDashboard = () => {
                                 {supplierApproved?.po_quantity || '-'}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierApproved?.po_unit_price || '-'}
+                                {supplierApproved?.po_unit_price ? formatNumber(supplierApproved.po_unit_price) : '-'}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierApproved?.po_total_price || '-'}
+                                {supplierApproved?.po_total_price ? formatNumber(supplierApproved.po_total_price) : '-'}
                                   </td>
                                   <td className="purchase-data">
                                 {supplierApproved?.lead_time || '-'}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierApproved?.due_date || '-'}
+                                {(() => {
+                                  // Check if all items are delivered (quantity == delivered_quantity for all items)
+                                  // This is true when status is 'delivered_completed' AND balance_quantity_undelivered is 0 (or very close to 0)
+                                  // Account for floating point precision issues
+                                  const isCompleted = supplierStatus === 'delivered_completed' && 
+                                    (supplierBalanceQuantityUndelivered === 0 || Math.abs(supplierBalanceQuantityUndelivered) < 0.01);
+                                  
+                                  if (isCompleted) {
+                                    return <span style={{ fontWeight: 'bold' }}>Completed</span>;
+                                  }
+                                  
+                                  // Show due_date with red color if overdue
+                                  // Only show if there are values for APPROVED PURCHASED ORDER
+                                  const dueDate = supplierApproved?.due_date;
+                                  if (dueDate) {
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    const due = new Date(dueDate);
+                                    due.setHours(0, 0, 0, 0);
+                                    const isOverdue = due < today;
+                                    
+                                    return (
+                                      <span style={{ color: isOverdue ? 'red' : 'inherit' }}>
+                                        {dueDate}
+                                      </span>
+                                    );
+                                  }
+                                  
+                                  return '-';
+                                })()}
                                   </td>
                                   
                               {/* SUPPLIER DELIVERED PURCHASE ORDER Data (status IN ('partially_delivered', 'delivered_completed')) */}
@@ -506,23 +551,23 @@ const DatabaseDashboard = () => {
                                   </td>
                                   <td className="purchase-data">
                                 {supplierDelivered && (supplierDelivered.delivered_unit_price !== null && supplierDelivered.delivered_unit_price !== undefined)
-                                  ? supplierDelivered.delivered_unit_price
+                                  ? formatNumber(supplierDelivered.delivered_unit_price)
                                   : '-'}
                                   </td>
                                   <td className="purchase-data">
                                 {supplierDelivered && (supplierDelivered.delivered_total_price !== null && supplierDelivered.delivered_total_price !== undefined)
-                                  ? supplierDelivered.delivered_total_price
+                                  ? formatNumber(supplierDelivered.delivered_total_price)
                                   : '-'}
                                   </td>
                                   <td className="purchase-data">
                                 {supplierDelivered && supplierDelivered.penalty_percentage != null && supplierDelivered.penalty_percentage !== '' && supplierDelivered.penalty_percentage !== '0'
-                                      ? supplierDelivered.penalty_percentage 
-                                  : supplierDelivered ? '0' : '-'}
+                                      ? formatNumber(supplierDelivered.penalty_percentage)
+                                  : supplierDelivered ? '0.00' : '-'}
                                   </td>
                                   <td className="purchase-data">
                                 {supplierDelivered && supplierDelivered.penalty_amount != null && supplierDelivered.penalty_amount !== '' && supplierDelivered.penalty_amount !== '0'
-                                      ? supplierDelivered.penalty_amount 
-                                  : supplierDelivered ? '0' : '-'}
+                                      ? formatNumber(supplierDelivered.penalty_amount)
+                                  : supplierDelivered ? '0.00' : '-'}
                                   </td>
                               <td className="purchase-data" title={supplierDelivered?.invoice_no ? `Invoice: ${supplierDelivered.invoice_no}` : ''}>
                                     {supplierDelivered?.invoice_no || '-'}
@@ -542,16 +587,45 @@ const DatabaseDashboard = () => {
                                 {customerApproved?.po_quantity || '-'}
                                   </td>
                                   <td className="approved-sales-data">
-                                {customerApproved?.po_unit_price || '-'}
+                                {customerApproved?.po_unit_price ? formatNumber(customerApproved.po_unit_price) : '-'}
                                   </td>
                                   <td className="approved-sales-data">
-                                {customerApproved?.po_total_price || '-'}
+                                {customerApproved?.po_total_price ? formatNumber(customerApproved.po_total_price) : '-'}
                                   </td>
                                   <td className="approved-sales-data">
                                 {customerApproved?.lead_time || '-'}
                                   </td>
                                   <td className="approved-sales-data">
-                                {customerApproved?.due_date || '-'}
+                                {(() => {
+                                  // Check if all items are delivered (quantity == delivered_quantity for all items)
+                                  // This is true when status is 'delivered_completed' AND balance_quantity_undelivered is 0 (or very close to 0)
+                                  // Account for floating point precision issues
+                                  const isCompleted = customerStatus === 'delivered_completed' && 
+                                    (customerBalanceQuantityUndelivered === 0 || Math.abs(customerBalanceQuantityUndelivered) < 0.01);
+                                  
+                                  if (isCompleted) {
+                                    return <span style={{ fontWeight: 'bold' }}>Completed</span>;
+                                  }
+                                  
+                                  // Show due_date with red color if overdue
+                                  // Only show if there are values for APPROVED PURCHASED ORDER
+                                  const dueDate = customerApproved?.due_date;
+                                  if (dueDate) {
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    const due = new Date(dueDate);
+                                    due.setHours(0, 0, 0, 0);
+                                    const isOverdue = due < today;
+                                    
+                                    return (
+                                      <span style={{ color: isOverdue ? 'red' : 'inherit' }}>
+                                        {dueDate}
+                                      </span>
+                                    );
+                                  }
+                                  
+                                  return '-';
+                                })()}
                                   </td>
                                   
                               {/* CUSTOMER DELIVERED SALES ORDER Data (status IN ('partially_delivered', 'delivered_completed')) */}
@@ -564,23 +638,23 @@ const DatabaseDashboard = () => {
                                   </td>
                                   <td className="delivered-sales-data">
                                 {customerDelivered && (customerDelivered.delivered_unit_price !== null && customerDelivered.delivered_unit_price !== undefined)
-                                  ? customerDelivered.delivered_unit_price
+                                  ? formatNumber(customerDelivered.delivered_unit_price)
                                   : '-'}
                                   </td>
                                   <td className="delivered-sales-data">
                                 {customerDelivered && (customerDelivered.delivered_total_price !== null && customerDelivered.delivered_total_price !== undefined)
-                                  ? customerDelivered.delivered_total_price
+                                  ? formatNumber(customerDelivered.delivered_total_price)
                                   : '-'}
                                   </td>
                                   <td className="delivered-sales-data">
                                 {customerDelivered && customerDelivered.penalty_percentage != null && customerDelivered.penalty_percentage !== '' && customerDelivered.penalty_percentage !== '0'
-                                      ? customerDelivered.penalty_percentage 
-                                  : customerDelivered ? '0' : '-'}
+                                      ? formatNumber(customerDelivered.penalty_percentage)
+                                  : customerDelivered ? '0.00' : '-'}
                                   </td>
                                   <td className="delivered-sales-data">
                                 {customerDelivered && customerDelivered.penalty_amount != null && customerDelivered.penalty_amount !== '' && customerDelivered.penalty_amount !== '0'
-                                      ? customerDelivered.penalty_amount 
-                                  : customerDelivered ? '0' : '-'}
+                                      ? formatNumber(customerDelivered.penalty_amount)
+                                  : customerDelivered ? '0.00' : '-'}
                                   </td>
                               <td className="delivered-sales-data" title={customerDelivered?.invoice_no ? `Invoice: ${customerDelivered.invoice_no}` : ''}>
                                     {customerDelivered?.invoice_no || '-'}

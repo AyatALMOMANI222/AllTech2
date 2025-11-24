@@ -191,6 +191,38 @@ $shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
   }
 }
 
+.invoice-documents-card {
+  border-radius: 12px;
+  box-shadow: $shadow-md;
+  margin-top: 1rem;
+  position: relative;
+
+  .card-body {
+    padding: 1.25rem;
+  }
+
+  .invoice-document-list {
+    border: 1px solid $border-color;
+    border-radius: 8px;
+    overflow: hidden;
+
+    .list-group-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+
+      strong {
+        font-size: 0.95rem;
+      }
+
+      .btn {
+        min-width: 120px;
+      }
+    }
+  }
+}
+
 .btn-group {
   display: flex;
   gap: 4px;
@@ -222,6 +254,76 @@ $shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
   }
 }
 
+.invoice-documents-modal {
+  .modal-dialog {
+    max-width: 560px;
+    width: 100%;
+    margin: 1rem auto;
+    padding: 0 0.5rem;
+  }
+
+  .modal-content {
+    border-radius: 22px;
+    overflow: hidden;
+    background: transparent;
+    box-shadow: none;
+    border: none;
+  }
+
+  .modal-header {
+    background: linear-gradient(135deg, $primary, $primary-dark);
+    color: $white;
+    border-bottom: none;
+    padding: 1.3rem 1.6rem;
+    border-radius: 22px 22px 0 0;
+
+    h5 {
+      margin: 0;
+      font-size: 1.25rem;
+      letter-spacing: 0.5px;
+    }
+
+    small {
+      color: rgba($white, 0.85);
+      display: block;
+    }
+  }
+
+  .modal-body {
+    padding: 1.5rem;
+    background: #f7f8fb;
+  }
+
+  .modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: none;
+    background: transparent;
+  }
+}
+
+.invoice-document-list {
+  max-height: 360px;
+  overflow-y: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: $white;
+
+  .list-group-item {
+    background: transparent;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+    padding: 1rem 1.25rem;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    strong {
+      display: block;
+      font-size: 0.95rem;
+      margin-bottom: 0.25rem;
+    }
+  }
+}
 .modal-backdrop {
   position: fixed;
   top: 0;

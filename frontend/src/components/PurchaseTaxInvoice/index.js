@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { purchaseTaxInvoicesAPI, customersSuppliersAPI, purchaseOrdersAPI } from '../../services/api';
 import formatCurrency from '../../utils/formatCurrency';
+import formatNumber from '../../utils/formatNumber';
 import './style.scss';
 
 const PurchaseTaxInvoice = ({ invoiceId = null }) => {
@@ -664,10 +665,11 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
                               </td>
                               <td>
                                 <input
-                                  type="number"
-                                  value={(parseFloat(item.total_price) || 0).toFixed(2)}
+                                  type="text"
+                                  value={formatNumber(item.total_price)}
                                   className="form-control table-input"
                                   disabled
+                                  readOnly
                                 />
                               </td>
                               {!invoiceId && (

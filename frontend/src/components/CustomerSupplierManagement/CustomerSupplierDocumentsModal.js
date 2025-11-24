@@ -102,6 +102,27 @@ const CustomerSupplierDocumentsModal = ({ record, onClose }) => {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleOpenDocument = async (document) => {
+    try {
+      setDownloadingId(document.id);
+      const response = await customerSupplierDocumentsAPI.download(document.id);
+      
+      if (response.status === 200) {
+        const blob = response.data;
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        // Clean up the URL after a delay
+        setTimeout(() => window.URL.revokeObjectURL(url), 100);
+      } else {
+        setError('Failed to open the selected document.');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to open the document.');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
   const handleDownload = async (document) => {
     try {
       setDownloadingId(document.id);
@@ -297,15 +318,19 @@ const CustomerSupplierDocumentsModal = ({ record, onClose }) => {
                         </p>
                       </div>
                       <div className="document-card__actions">
-                        <a
-                         href={`https://${buildSafeUrl(document.storage_url)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
                           className="btn btn-sm btn-outline-info"
+                          onClick={() => handleOpenDocument(document)}
+                          disabled={downloadingId === document.id}
+                          type="button"
                         >
-                          <i className="fas fa-external-link-alt"></i>
+                          {downloadingId === document.id ? (
+                            <span className="spinner-border spinner-border-sm" />
+                          ) : (
+                            <i className="fas fa-external-link-alt"></i>
+                          )}
                           <span>Open</span>
-                        </a>
+                        </button>
                         <button
                           className="btn btn-sm btn-outline-primary"
                           onClick={() => handleDownload(document)}

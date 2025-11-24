@@ -150,7 +150,7 @@ async function initializeDatabase() {
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS purchase_orders (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        po_number VARCHAR(100) UNIQUE NOT NULL,
+        po_number VARCHAR(100) NOT NULL,
         order_type ENUM('customer', 'supplier') NOT NULL,
         customer_supplier_id VARCHAR(50),
         customer_supplier_name VARCHAR(255),
@@ -356,6 +356,24 @@ async function initializeDatabase() {
       )
     `);
     console.log('✓ Purchase Tax Invoice Items table created');
+
+    // Create invoice_documents table (stores uploaded invoice files)
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS invoice_documents (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        invoice_type ENUM('sales','purchase') NOT NULL,
+        invoice_id INT NOT NULL,
+        document_name VARCHAR(255) NOT NULL,
+        document_type ENUM('pdf','excel','image','other') DEFAULT 'pdf',
+        storage_path VARCHAR(500) NOT NULL,
+        storage_url VARCHAR(500) NOT NULL,
+        uploaded_by INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL,
+        INDEX idx_invoice_documents (invoice_type, invoice_id)
+      )
+    `);
+    console.log('✓ Invoice Documents table created');
     
     // Add amount_paid column if it doesn't exist (for existing databases)
     try {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { warrantyAPI } from '../../services/api';
+import formatNumber from '../../utils/formatNumber';
 import './style.scss';
 
 const WarrantyReport = () => {
@@ -60,10 +61,7 @@ const WarrantyReport = () => {
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return '-';
-    return `AED ${parseFloat(amount).toLocaleString('en-AE', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
+    return `AED ${formatNumber(amount)}`;
   };
 
   const getDaysRemainingColor = (days) => {

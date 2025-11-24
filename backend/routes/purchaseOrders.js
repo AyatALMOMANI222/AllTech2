@@ -65,6 +65,65 @@ const pdfUpload = multer({
 });
 
 // Helper function to convert Excel date serial number to MySQL DATE format
+// Helper function to calculate Due Date: DueDate = PO_Date + LeadTime
+// Lead Time can be in two formats:
+// 1. Number of days (e.g., 10)
+// 2. Number of weeks (e.g., "7 weeks", "7 week", "7w")
+// Only for Customer POs (order_type = 'customer')
+function calculateDueDate(datePo, leadTime) {
+  if (!datePo || !leadTime) {
+    return null;
+  }
+  
+  // Parse date_po
+  let poDate;
+  if (typeof datePo === 'string') {
+    poDate = new Date(datePo);
+  } else if (datePo instanceof Date) {
+    poDate = new Date(datePo);
+  } else {
+    return null;
+  }
+  
+  if (isNaN(poDate.getTime())) {
+    return null;
+  }
+  
+  // Parse lead_time - check if it's in weeks or days
+  let leadTimeDays = 0;
+  const leadTimeStr = String(leadTime).trim().toLowerCase();
+  
+  // Check if lead_time contains "week" or "w" (case-insensitive)
+  if (leadTimeStr.includes('week') || leadTimeStr.includes('w')) {
+    // Extract number from string (e.g., "7 weeks" -> 7, "7w" -> 7)
+    const weekMatch = leadTimeStr.match(/(\d+(?:\.\d+)?)/);
+    if (weekMatch) {
+      const numberOfWeeks = parseFloat(weekMatch[1]);
+      if (!isNaN(numberOfWeeks) && numberOfWeeks > 0) {
+        // Convert weeks to days: number_of_weeks * 7
+        leadTimeDays = numberOfWeeks * 7;
+      } else {
+        return null;
+      }
+    } else {
+      return null;
+    }
+  } else {
+    // Parse as number of days
+    const days = parseFloat(leadTime);
+    if (isNaN(days) || days <= 0) {
+      return null;
+    }
+    leadTimeDays = days;
+  }
+  
+  // Add lead_time days to PO date
+  poDate.setDate(poDate.getDate() + leadTimeDays);
+  
+  // Return in YYYY-MM-DD format
+  return poDate.toISOString().split('T')[0];
+}
+
 function convertExcelDate(excelSerial) {
   if (!excelSerial || isNaN(excelSerial) || excelSerial <= 0) {
     return null;
@@ -668,6 +727,14 @@ router.post('/', validatePurchaseOrder, async (req, res) => {
           delivered_quantity, delivered_unit_price, delivered_total_price
         } = item;
         
+        // For Customer and Supplier POs: Calculate due_date automatically if not provided
+        // DueDate = PO_Date + LeadTime (can be in days or weeks)
+        // Lead Time can be: number of days (e.g., 10) or number of weeks (e.g., "7 weeks")
+        let finalDueDate = due_date || null;
+        if ((order_type === 'customer' || order_type === 'supplier') && date_po && lead_time && !finalDueDate) {
+          finalDueDate = calculateDueDate(date_po, lead_time);
+        }
+        
         await req.db.execute(`
           INSERT INTO purchase_order_items (
             po_id, serial_no, project_no, date_po, part_no, material_no,
@@ -689,9 +756,10 @@ router.post('/', validatePurchaseOrder, async (req, res) => {
           parseFloat(total_price) || (parseFloat(quantity) * parseFloat(unit_price)), 
           comments || null,
           lead_time || null,
-          due_date || null,
+          finalDueDate, // Use calculated due_date for Customer POs
           penalty_percentage ? parseFloat(penalty_percentage) : null,
-          penalty_percentage && quantity ? (parseFloat(quantity) * parseFloat(penalty_percentage) / 100) : null,
+          // Penalty Amount = delivered_total_price × (penalty_percentage / 100)
+          penalty_percentage && delivered_total_price ? (parseFloat(delivered_total_price) * parseFloat(penalty_percentage) / 100) : null,
           invoice_no || null,
           delivered_quantity && quantity ? (parseFloat(quantity) - parseFloat(delivered_quantity)) : null,
           delivered_quantity ? parseFloat(delivered_quantity) : null,
@@ -795,23 +863,33 @@ router.put('/:id', async (req, res) => {
     }
     
     // Update penalty_percentage for all items if provided (regardless of status)
-    // ⚠️ IMPORTANT: Recalculate all delivered values after penalty_percentage update
+    // ⚠️ IMPORTANT: Recalculate penalty_amount based on delivered_total_price
     if (penalty_percentage !== undefined && penalty_percentage !== null && penalty_percentage !== '') {
       console.log('Updating penalty_percentage for all items:', penalty_percentage);
       
       try {
-        // Update penalty_percentage
+        // Update penalty_percentage and recalculate penalty_amount
+        // Penalty Amount = delivered_total_price × (penalty_percentage / 100)
         await req.db.execute(`
           UPDATE purchase_order_items SET
             penalty_percentage = ?,
+            penalty_amount = CASE 
+              WHEN delivered_total_price IS NOT NULL AND delivered_total_price > 0 
+              THEN (delivered_total_price * ? / 100)
+              ELSE NULL
+            END,
             updated_at = CURRENT_TIMESTAMP
           WHERE po_id = ?
-        `, [parseFloat(penalty_percentage), id]);
+        `, [
+          parseFloat(penalty_percentage),
+          parseFloat(penalty_percentage),
+          id
+        ]);
         
-        console.log('✅ Updated penalty_percentage for all items');
+        console.log('✅ Updated penalty_percentage and recalculated penalty_amount for all items');
         
-        // Recalculate all delivered values (including penalty_amount)
-        // This ensures penalty_amount = (penalty_percentage × delivered_total_price) / 100
+        // Recalculate all delivered values (to ensure consistency)
+        // This ensures delivered_quantity, delivered_unit_price, delivered_total_price are up to date
         const { calculateAndUpdateDeliveredData } = require('./databaseDashboard');
         await calculateAndUpdateDeliveredData(req.db, id);
         
@@ -828,6 +906,7 @@ router.put('/:id', async (req, res) => {
       
       try {
         // Update existing items with form-level values for delivered status
+        // Also recalculate penalty_amount if penalty_percentage exists
         await req.db.execute(`
           UPDATE purchase_order_items SET
             balance_quantity_undelivered = CASE 
@@ -838,6 +917,11 @@ router.put('/:id', async (req, res) => {
             delivered_quantity = COALESCE(?, delivered_quantity),
             delivered_unit_price = COALESCE(?, delivered_unit_price),
             delivered_total_price = COALESCE(?, delivered_total_price),
+            penalty_amount = CASE 
+              WHEN penalty_percentage IS NOT NULL AND COALESCE(?, delivered_total_price) IS NOT NULL AND COALESCE(?, delivered_total_price) > 0
+              THEN (COALESCE(?, delivered_total_price) * penalty_percentage / 100)
+              ELSE penalty_amount
+            END,
             updated_at = CURRENT_TIMESTAMP
           WHERE po_id = ?
         `, [
@@ -846,6 +930,9 @@ router.put('/:id', async (req, res) => {
           due_date || null,
           delivered_quantity ? parseFloat(delivered_quantity) : null,
           delivered_unit_price ? parseFloat(delivered_unit_price) : null,
+          delivered_total_price ? parseFloat(delivered_total_price) : null,
+          delivered_total_price ? parseFloat(delivered_total_price) : null,
+          delivered_total_price ? parseFloat(delivered_total_price) : null,
           delivered_total_price ? parseFloat(delivered_total_price) : null,
           id
         ]);
@@ -889,11 +976,20 @@ router.put('/:id', async (req, res) => {
           // For delivered status, use form-level values if item-level values are not provided
           const finalDueDate = item_due_date || due_date || null;
           const finalPenaltyPercentage = item_penalty_percentage || penalty_percentage || null;
-          const finalPenaltyAmount = item_penalty_amount || penalty_amount || null;
           const finalBalanceQuantityUndelivered = item_balance_quantity_undelivered || balance_quantity_undelivered || null;
           const finalDeliveredQuantity = delivered_quantity || null;
           const finalDeliveredUnitPrice = delivered_unit_price || null;
           const finalDeliveredTotalPrice = delivered_total_price || null;
+          
+          // Calculate penalty_amount based on delivered_total_price
+          // Penalty Amount = delivered_total_price × (penalty_percentage / 100)
+          let finalPenaltyAmount = null;
+          if (finalPenaltyPercentage && finalDeliveredTotalPrice) {
+            finalPenaltyAmount = (parseFloat(finalDeliveredTotalPrice) * parseFloat(finalPenaltyPercentage)) / 100;
+          } else if (item_penalty_amount || penalty_amount) {
+            // Fallback to provided value if delivered_total_price is not available
+            finalPenaltyAmount = item_penalty_amount || penalty_amount || null;
+          }
           
           console.log('Item:', part_no, 'Final values:', { 
             finalDueDate, finalPenaltyPercentage, 
@@ -1135,7 +1231,7 @@ router.post('/import', (req, res, next) => {
         const quantity = row.quantity || row['quantity'] || row.Quantity || row.QUANTITY || 0;
         const unit_price = row.unit_price || row['unit_price'] || row['Unit Price'] || row['Unit price'] || row['UNIT PRICE'] || row.supplier_unit_price || row.customer_unit_price || 0;
         const lead_time = row.lead_time || row['lead_time'] || row['Lead Time'] || row['Lead time'] || row['LEAD TIME'] || row['lead time'] || '';
-        const due_date = row.due_date || row['due_date'] || row['Due Date'] || row['Due date'] || row['DUE DATE'] || row['due date'] || '';
+        // Ignore due_date from Excel - it will be calculated automatically
         const comments = row.comments || row['comments'] || row.Comments || row.COMMENTS || '';
         
         // Calculate total_price (not in image, but needed)
@@ -1187,28 +1283,12 @@ router.post('/import', (req, res, next) => {
           }
         }
         
-        // Handle due_date conversion
-        let formattedDueDate = null;
-        if (due_date) {
-          if (!isNaN(due_date) && due_date > 0) {
-            formattedDueDate = convertExcelDate(due_date);
-          } else if (typeof due_date === 'string') {
-            const dateStr = due_date.trim();
-            if (dateStr.includes('/')) {
-              const parts = dateStr.split('/');
-              if (parts.length === 3) {
-                const parsedDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                if (!isNaN(parsedDate.getTime())) {
-                  formattedDueDate = parsedDate.toISOString().split('T')[0];
-                }
-              }
-            } else {
-            const parsedDate = new Date(due_date);
-            if (!isNaN(parsedDate.getTime())) {
-              formattedDueDate = parsedDate.toISOString().split('T')[0];
-              }
-            }
-          }
+        // Calculate due_date automatically: DueDate = PO_Date + LeadTime
+        // Lead Time can be in days or weeks (e.g., "10" or "7 weeks")
+        // Only calculate if date_po and lead_time are available
+        let calculatedDueDate = null;
+        if (formattedDatePo && lead_time) {
+          calculatedDueDate = calculateDueDate(formattedDatePo, lead_time);
         }
 
         // Calculate total_price if not provided or if it's 0
@@ -1228,7 +1308,7 @@ router.post('/import', (req, res, next) => {
           unit_price: parseFloat(unit_price) || 0,
           total_price: calculatedTotalPrice,
           lead_time: lead_time || '',
-          due_date: formattedDueDate,
+          due_date: calculatedDueDate, // Automatically calculated, not imported from Excel
           penalty_percentage: penalty_percentage ? parseFloat(penalty_percentage) : null,
           penalty_amount: penalty_amount ? parseFloat(penalty_amount) : null,
           invoice_no: invoice_no || null,
@@ -1380,8 +1460,8 @@ router.post('/:id/create-supplier-po', async (req, res) => {
     
     const supplierName = suppliers[0].company_name;
     
-    // Generate supplier PO number
-    const supplierPONumber = await generatePONumber(req.db);
+    // Use customer PO number for supplier PO (must match)
+    const supplierPONumber = customerPO.po_number;
     
     // Create supplier PO
     const createdBy = req.user?.id || null;
@@ -1448,26 +1528,27 @@ router.post('/:id/create-supplier-po', async (req, res) => {
           INSERT INTO purchase_order_items (
             po_id, serial_no, project_no, date_po, part_no, material_no,
             description, uom, quantity, unit_price, total_price, comments,
-            lead_time, due_date, penalty_percentage, penalty_amount, invoice_no, balance_quantity_undelivered,
-            delivered_quantity, delivered_unit_price, delivered_total_price
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          supplierPOId, 
-          serial_no || null, 
-          project_no || null, 
-          formatDateForSQL(date_po), 
-          part_no, 
-          material_no,
-          description || null, 
-          uom || null, 
-          parseFloat(quantity) || 0, 
-          parseFloat(unit_price) || 0, 
-          parseFloat(total_price) || (parseFloat(quantity) * parseFloat(unit_price)), 
-          comments || null,
-          lead_time || null,
-          formatDateForSQL(due_date),
-          penalty_percentage ? parseFloat(penalty_percentage) : null,
-          penalty_percentage && quantity ? (parseFloat(quantity) * parseFloat(penalty_percentage) / 100) : null,
+          lead_time, due_date, penalty_percentage, penalty_amount, invoice_no, balance_quantity_undelivered,
+          delivered_quantity, delivered_unit_price, delivered_total_price
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        supplierPOId, 
+        serial_no || null, 
+        project_no || null, 
+        formatDateForSQL(date_po), 
+        part_no, 
+        material_no,
+        description || null, 
+        uom || null, 
+        parseFloat(quantity) || 0, 
+        parseFloat(unit_price) || 0, 
+        parseFloat(total_price) || (parseFloat(quantity) * parseFloat(unit_price)), 
+        comments || null,
+        lead_time || null,
+        formatDateForSQL(due_date),
+        penalty_percentage ? parseFloat(penalty_percentage) : null,
+        // Penalty Amount = delivered_total_price × (penalty_percentage / 100)
+        penalty_percentage && delivered_total_price ? (parseFloat(delivered_total_price) * parseFloat(penalty_percentage) / 100) : null,
           invoice_no || null,
           delivered_quantity && quantity ? (parseFloat(quantity) - parseFloat(delivered_quantity)) : null,
           delivered_quantity ? parseFloat(delivered_quantity) : null,
