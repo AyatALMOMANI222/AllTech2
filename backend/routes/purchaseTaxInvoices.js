@@ -196,6 +196,9 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
     // Create invoice
     console.log('Creating invoice with data:', { invoice_number, invoice_date, supplier_id, po_number, project_number });
     const createdBy = req.user?.id || null;
+    // Ensure status is exactly 'draft' (trim any whitespace)
+    const invoiceStatus = String('draft').trim();
+    console.log('Invoice status:', invoiceStatus, 'Type:', typeof invoiceStatus);
     const [result] = await connection.execute(`
       INSERT INTO purchase_tax_invoices (
         invoice_number, invoice_date, supplier_id, po_number, project_number,
@@ -203,7 +206,7 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       invoice_number, invoice_date, supplier_id, po_number, project_number,
-      claim_percentage, subtotal, vatAmount, grossTotal, amount_paid, createdBy, 'draft'
+      claim_percentage, subtotal, vatAmount, grossTotal, amount_paid, createdBy, invoiceStatus
     ]);
     
     const invoiceId = result.insertId;
