@@ -155,7 +155,8 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
       project_number,
       claim_percentage = 100,
       amount_paid = 0,
-      items = []
+      items = [],
+      status: bodyStatus // Ignore status from body, we'll use 'draft' explicitly
     } = req.body;
     
     // Start transaction
@@ -196,28 +197,42 @@ router.post('/', authenticateToken, validatePurchaseTaxInvoice, async (req, res)
     // Create invoice
     console.log('Creating invoice with data:', { invoice_number, invoice_date, supplier_id, po_number, project_number });
     const createdBy = req.user?.id || null;
-    // Ensure status is exactly 'draft' - must match ENUM values exactly
-    const invoiceStatus = 'draft';
-    console.log('Invoice status value:', JSON.stringify(invoiceStatus), 'Length:', invoiceStatus.length);
     
-    // Prepare values array with explicit types
+    // Ensure status is exactly 'draft' - must match ENUM('draft', 'received', 'paid', 'cancelled') exactly
+    // Do NOT use status from req.body, always use 'draft' for new invoices
+    const invoiceStatus = 'draft';
+    
+    // Validate status value matches ENUM
+    const validStatuses = ['draft', 'received', 'paid', 'cancelled'];
+    if (!validStatuses.includes(invoiceStatus)) {
+      await connection.rollback();
+      return res.status(400).json({ 
+        message: 'Invalid status value',
+        error: `Status must be one of: ${validStatuses.join(', ')}` 
+      });
+    }
+    
+    console.log('Invoice status value:', JSON.stringify(invoiceStatus), 'Length:', invoiceStatus.length, 'Valid:', validStatuses.includes(invoiceStatus));
+    
+    // Prepare values array with explicit types - ensure exact match with column order
     const insertValues = [
-      invoice_number,
+      String(invoice_number || '').trim(),
       invoice_date,
-      supplier_id,
-      po_number || null,
-      project_number || null,
+      String(supplier_id || '').trim(),
+      po_number ? String(po_number).trim() : null,
+      project_number ? String(project_number).trim() : null,
       parseFloat(claim_percentage) || 100,
       parseFloat(subtotal) || 0,
       parseFloat(vatAmount) || 0,
       parseFloat(grossTotal) || 0,
       parseFloat(amount_paid) || 0,
       createdBy,
-      invoiceStatus
+      String(invoiceStatus).trim() // Ensure status is a clean string
     ];
     
     console.log('Insert values count:', insertValues.length);
-    console.log('Status value in array:', JSON.stringify(insertValues[11]));
+    console.log('Status value in array (index 11):', JSON.stringify(insertValues[11]), 'Type:', typeof insertValues[11]);
+    console.log('All insert values:', insertValues.map((v, i) => `[${i}]: ${typeof v} = ${JSON.stringify(v)}`).join(', '));
     
     const [result] = await connection.execute(`
       INSERT INTO purchase_tax_invoices (
