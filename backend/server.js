@@ -331,6 +331,21 @@ async function ensureInvoiceColumns() {
           console.log('Note: amount_paid column check for purchase_tax_invoices:', error.message);
         }
       }
+
+      // Add status column to purchase_tax_invoices if it doesn't exist
+      try {
+        await connection.execute(`
+          ALTER TABLE purchase_tax_invoices 
+          ADD COLUMN status ENUM('draft', 'received', 'paid', 'cancelled') DEFAULT 'draft' AFTER amount_paid
+        `);
+        console.log('✓ status column added to purchase_tax_invoices table');
+      } catch (error) {
+        if (error.code === 'ER_DUP_FIELDNAME' || error.message.includes('Duplicate column name')) {
+          console.log('✓ status column already exists in purchase_tax_invoices table');
+        } else {
+          console.log('Note: status column check for purchase_tax_invoices:', error.message);
+        }
+      }
     }
     
     connection.release();
