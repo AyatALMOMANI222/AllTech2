@@ -596,14 +596,28 @@ const WarrantyManagement = () => {
                   <button type="button" className="btn btn-secondary" onClick={() => { setShowModal(false); resetForm(); }} disabled={loading}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary" disabled={loading}>
+                  <button 
+                    type="submit" 
+                    className={`btn btn-primary ${editingRecord ? 'btn-update-warranty' : 'btn-save-warranty'}`} 
+                    disabled={loading}
+                  >
                     {loading ? (
                       <>
                         <span className="spinner-border spinner-border-sm me-2"></span>
-                        Saving...
+                        {editingRecord ? 'Updating...' : 'Saving...'}
                       </>
                     ) : (
-                      editingRecord ? 'Update' : 'Save'
+                      editingRecord ? (
+                        <>
+                          <i className="fas fa-sync-alt me-2"></i>
+                          Update
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-save me-2"></i>
+                          Save
+                        </>
+                      )
                     )}
                   </button>
                 </div>
@@ -617,79 +631,108 @@ const WarrantyManagement = () => {
       {showViewModal && viewingRecord && (
         <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-dialog modal-lg">
-            <div className="modal-content">
+            <div className="modal-content warranty-details-modal">
               <div className="modal-header">
-                <h5 className="modal-title">Warranty Record Details</h5>
+                <h5 className="modal-title">
+                  <i className="fas fa-info-circle me-2"></i>
+                  Warranty Record Details
+                </h5>
                 <button 
                   type="button" 
                   className="btn-close" 
                   onClick={() => setShowViewModal(false)}
                 ></button>
               </div>
-              <div className="modal-body">
-                <div className="row mb-3">
-                  <div className="col-12 col-md-6">
-                    <label className="form-label text-muted">Sr. No</label>
-                    <p className="form-control-plaintext">{viewingRecord.sr_no || 'N/A'}</p>
+              <div className="modal-body warranty-details-body">
+                <div className="warranty-details-grid">
+                  <div className="detail-card">
+                    <label className="detail-label">
+                      <i className="fas fa-hashtag me-2"></i>
+                      Sr. No
+                    </label>
+                    <p className="detail-value">{viewingRecord.sr_no || 'N/A'}</p>
                   </div>
-                  <div className="col-12 col-md-6">
-                    <label className="form-label text-muted">Part No</label>
-                    <p className="form-control-plaintext">{viewingRecord.part_no || 'N/A'}</p>
+                  <div className="detail-card">
+                    <label className="detail-label">
+                      <i className="fas fa-cog me-2"></i>
+                      Part No
+                    </label>
+                    <p className="detail-value">{viewingRecord.part_no || 'N/A'}</p>
                   </div>
-                </div>
-                <div className="row mb-3">
-                  <div className="col-12 col-md-6">
-                    <label className="form-label text-muted">Material No</label>
-                    <p className="form-control-plaintext">{viewingRecord.material_no || 'N/A'}</p>
+                  <div className="detail-card">
+                    <label className="detail-label">
+                      <i className="fas fa-barcode me-2"></i>
+                      Material No
+                    </label>
+                    <p className="detail-value">{viewingRecord.material_no || 'N/A'}</p>
                   </div>
-                  <div className="col-12 col-md-6">
-                    <label className="form-label text-muted">Project No</label>
-                    <p className="form-control-plaintext">{viewingRecord.project_no || 'N/A'}</p>
+                  <div className="detail-card">
+                    <label className="detail-label">
+                      <i className="fas fa-project-diagram me-2"></i>
+                      Project No
+                    </label>
+                    <p className="detail-value">{viewingRecord.project_no || 'N/A'}</p>
                   </div>
-                </div>
-                <div className="mb-3">
-                  <label className="form-label text-muted">Description</label>
-                  <p className="form-control-plaintext">{viewingRecord.description || 'N/A'}</p>
-                </div>
-                <div className="row mb-3">
-                  <div className="col-12 col-md-6">
-                    <label className="form-label text-muted">Part Cost</label>
-                    <p className="form-control-plaintext">
+                  <div className="detail-card">
+                    <label className="detail-label">
+                      <i className="fas fa-dollar-sign me-2"></i>
+                      Part Cost
+                    </label>
+                    <p className="detail-value detail-value-highlight">
                       {formatCurrency(viewingRecord.part_cost)}
                     </p>
                   </div>
-                  <div className="col-12 col-md-6">
-                    <label className="form-label text-muted">Serial Number</label>
-                    <p className="form-control-plaintext">{viewingRecord.serial_number || 'N/A'}</p>
+                  <div className="detail-card">
+                    <label className="detail-label">
+                      <i className="fas fa-fingerprint me-2"></i>
+                      Serial Number
+                    </label>
+                    <p className="detail-value">{viewingRecord.serial_number || 'N/A'}</p>
                   </div>
-                </div>
-                <div className="row mb-3">
-                  <div className="col-12 col-md-6">
-                    <label className="form-label text-muted">Warranty Start Date</label>
-                    <p className="form-control-plaintext">{formatDate(viewingRecord.warranty_start_date)}</p>
+                  <div className="detail-card">
+                    <label className="detail-label">
+                      <i className="fas fa-calendar-check me-2"></i>
+                      Warranty Start Date
+                    </label>
+                    <p className="detail-value">{formatDate(viewingRecord.warranty_start_date)}</p>
                   </div>
-                  <div className="col-12 col-md-6">
-                    <label className="form-label text-muted">Warranty End Date</label>
-                    <p className="form-control-plaintext">{formatDate(viewingRecord.warranty_end_date)}</p>
+                  <div className="detail-card">
+                    <label className="detail-label">
+                      <i className="fas fa-calendar-times me-2"></i>
+                      Warranty End Date
+                    </label>
+                    <p className="detail-value">{formatDate(viewingRecord.warranty_end_date)}</p>
                   </div>
-                </div>
-                <div className="row mb-3">
-                  <div className="col-12 col-md-6">
-                    <label className="form-label text-muted">Warranty Type</label>
-                    <p className="form-control-plaintext">
+                  <div className="detail-card">
+                    <label className="detail-label">
+                      <i className="fas fa-tag me-2"></i>
+                      Warranty Type
+                    </label>
+                    <p className="detail-value">
                       <span className={`badge ${viewingRecord.warranty_type === 'sales' ? 'bg-success' : 'bg-info'}`}>
                         {viewingRecord.warranty_type === 'sales' ? 'Sales' : 'Purchase'}
                       </span>
                     </p>
                   </div>
-                </div>
-                <div className="mb-3">
-                  <label className="form-label text-muted">Remarks</label>
-                  <p className="form-control-plaintext">{viewingRecord.remarks || 'N/A'}</p>
+                  <div className="detail-card detail-card-full">
+                    <label className="detail-label">
+                      <i className="fas fa-align-left me-2"></i>
+                      Description
+                    </label>
+                    <p className="detail-value">{viewingRecord.description || 'N/A'}</p>
+                  </div>
+                  <div className="detail-card detail-card-full">
+                    <label className="detail-label">
+                      <i className="fas fa-comment-alt me-2"></i>
+                      Remarks
+                    </label>
+                    <p className="detail-value">{viewingRecord.remarks || 'N/A'}</p>
+                  </div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setShowViewModal(false)}>
+                <button className="btn btn-secondary btn-close-details" onClick={() => setShowViewModal(false)}>
+                  <i className="fas fa-times me-2"></i>
                   Close
                 </button>
               </div>
