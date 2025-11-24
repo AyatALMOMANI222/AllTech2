@@ -783,10 +783,10 @@ const WarrantyManagement = () => {
                       <ul className="mb-2 mt-2" style={{ fontSize: '0.9rem' }}>
                         <li>Sr. No</li>
                         <li>Part No</li>
-                        <li>Material No</li>
+                        <li>MATERIAL NO</li>
                         <li>Description</li>
-                        <li>Project No</li>
-                        <li>Part Cost</li>
+                        <li>PROJECT NO</li>
+                        <li>PART COST</li>
                         <li>Serial Number</li>
                         <li>Warranty Start Date</li>
                         <li>Warranty End Date</li>
