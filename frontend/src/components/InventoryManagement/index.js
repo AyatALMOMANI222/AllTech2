@@ -703,9 +703,8 @@ const InventoryManagement = () => {
                   </label>
                 </div>
                 <div className="file-info">
-                  <p><strong>Required columns:</strong> part_no, material_no, quantity, supplier_unit_price</p>
-                  <p><strong>Optional columns:</strong> serial_no, project_no, date_po, description, uom, sold_quantity, manufacturer_part_number, cost_price</p>
-                  <p><strong>Auto-calculated:</strong> total_price, balance, balance_amount</p>
+                  <p><strong>Columns for the import file:</strong></p>
+                  <p>serial_no, project_no, date_po, part_no, material_no, description, uom, quantity, supplier_unit_price, manufacturer_part_number, cost_price</p>
                 </div>
               </div>
               <div className="modal-footer">

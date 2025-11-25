@@ -746,36 +746,47 @@ const InvoicesManagement = () => {
                 style={{ display: 'none' }}
                 onChange={handleSelectedFiles}
               />
-              <div className="d-flex flex-wrap gap-2 mb-3">
+              <div className="documents-actions-bar">
                 <button
                   type="button"
-                  className="btn btn-primary btn-sm"
+                  className="btn btn-primary btn-import-documents"
                   onClick={handleImportClick}
                   disabled={documentUploadLoading}
                 >
-                  <i className="fas fa-file-import me-1"></i>
-                  Import
+                  <i className="fas fa-file-import me-2"></i>
+                  {documentUploadLoading ? 'Uploading...' : 'Import Documents'}
                 </button>
                 <button
                   type="button"
-                  className="btn btn-outline-secondary btn-sm"
+                  className="btn btn-outline-secondary btn-refresh-documents"
                   onClick={() => loadDocumentRecords(documentInvoice.id, documentInvoice.type)}
                   disabled={documentLoading}
                 >
-                  <i className="fas fa-sync-alt me-1"></i>
+                  <i className="fas fa-sync-alt me-2"></i>
                   Refresh
                 </button>
               </div>
               {documentFeedback && (
-                <div className="alert alert-info py-2 px-3 mb-3">{documentFeedback}</div>
+                <div className={`document-feedback alert-${documentFeedback.includes('success') || documentFeedback.includes('uploaded') ? 'success' : 'info'}`}>
+                  <i className={`fas ${documentFeedback.includes('success') || documentFeedback.includes('uploaded') ? 'fa-check-circle' : 'fa-info-circle'} me-2`}></i>
+                  {documentFeedback}
+                </div>
               )}
               {documentLoading ? (
-                <div className="text-center text-muted py-3">
-                  <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                  Loading documents...
+                <div className="documents-loading-state">
+                  <div className="loading-spinner-wrapper">
+                    <div className="loading-spinner"></div>
+                  </div>
+                  <p className="loading-text">Loading documents...</p>
                 </div>
               ) : documentRecords.length === 0 ? (
-                <div className="text-center text-muted py-4">No documents uploaded yet.</div>
+                <div className="documents-empty-state">
+                  <div className="empty-state-icon">
+                    <i className="fas fa-folder-open"></i>
+                  </div>
+                  <h5>No Documents Yet</h5>
+                  <p>Upload documents to get started. Click "Import Documents" to add files.</p>
+                </div>
               ) : (
                 <div className="list-group invoice-document-list">
                   {documentRecords.map((doc) => (

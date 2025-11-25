@@ -24,6 +24,7 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [toast, setToast] = useState({ show: false, message: '', type: '' });
 
   // AllTech company information (static)
   const sellerInfo = {
@@ -92,7 +93,20 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
         }
       } catch (err) {
         console.error('Error loading invoice:', err);
-        setError('Error loading invoice');
+        let errorMessage = 'Unable to load invoice details. ';
+        if (err.response?.status === 404) {
+          errorMessage += 'The invoice you are trying to view does not exist or has been deleted. Please check the invoice ID and try again.';
+        } else if (err.response?.status === 403) {
+          errorMessage += 'You do not have permission to view this invoice. Please contact your administrator.';
+        } else if (err.response?.data?.message) {
+          errorMessage += err.response.data.message;
+        } else if (err.message) {
+          errorMessage += `Network error: ${err.message}. Please check your internet connection and try again.`;
+        } else {
+          errorMessage += 'An unexpected error occurred. Please refresh the page and try again.';
+        }
+        setError(errorMessage);
+        showToast(errorMessage, 'error');
       } finally {
         setLoading(false);
       }
@@ -142,6 +156,12 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
         } catch (poErr) {
           console.error('Error fetching PO numbers:', poErr);
           setCustomerPONumbers([]);
+          // Show error only if it's a significant issue
+          if (poErr.response?.status === 500 || poErr.response?.status === 503) {
+            const errorMessage = 'Unable to load Purchase Order numbers. Server error occurred. Please refresh the page and try again.';
+            setError(errorMessage);
+            showToast(errorMessage, 'error');
+          }
         }
         
         // Clear PO selection and items when customer changes
@@ -157,6 +177,20 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
         console.error('Error details:', error.response?.data);
         setSelectedCustomer(null);
         setCustomerPONumbers([]);
+        let errorMessage = 'Unable to load customer details. ';
+        if (error.response?.status === 404) {
+          errorMessage += 'The selected customer does not exist or has been deleted. Please select a different customer.';
+        } else if (error.response?.status === 500) {
+          errorMessage += 'Server error occurred while loading customer information. Please try again later.';
+        } else if (error.response?.data?.message) {
+          errorMessage += error.response.data.message;
+        } else if (error.message) {
+          errorMessage += `Network error: ${error.message}. Please check your internet connection.`;
+        } else {
+          errorMessage += 'An unexpected error occurred. Please try selecting the customer again.';
+        }
+        setError(errorMessage);
+        showToast(errorMessage, 'error');
       }
     } else if (name === 'customer_id' && !value) {
       setSelectedCustomer(null);
@@ -195,7 +229,20 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
         }));
       } catch (error) {
         console.error('Error fetching customer PO items:', error);
-        setError('No items found for this customer PO number');
+        let errorMessage = 'Unable to load items for the selected Purchase Order. ';
+        if (error.response?.status === 404) {
+          errorMessage += `The Purchase Order "${poNumber}" does not exist or has been deleted. Please select a different PO number.`;
+        } else if (error.response?.status === 400) {
+          errorMessage += error.response?.data?.message || 'The selected Purchase Order is invalid or not approved. Please select a valid approved PO.';
+        } else if (error.response?.data?.message) {
+          errorMessage += error.response.data.message;
+        } else if (error.message) {
+          errorMessage += `Network error: ${error.message}. Please check your internet connection and try again.`;
+        } else {
+          errorMessage += 'No items found for this Purchase Order. The PO may not have any items assigned, or it may not be approved yet.';
+        }
+        setError(errorMessage);
+        showToast(errorMessage, 'error');
       }
     } else {
       setFormData(prev => ({
@@ -314,6 +361,13 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
     return `AED ${capitalizedWords} and ${decimalPartStr}/100 Only`;
   };
 
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: '' });
+    }, 4000);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -322,7 +376,9 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
 
     try {
       const response = await salesTaxInvoicesAPI.create(formData);
-      setSuccess(`Invoice created successfully! Invoice Number: ${response.data.invoice_number}`);
+      const successMessage = `Invoice created successfully! Invoice Number: ${response.data.invoice_number}`;
+      setSuccess(successMessage);
+      showToast(successMessage, 'success');
       // Reset form
       setFormData({
         customer_id: '',
@@ -336,7 +392,31 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
         items: []
       });
     } catch (error) {
-      setError(error.response?.data?.message || 'Error creating invoice');
+      let errorMessage = 'Unable to create invoice. ';
+      if (error.response?.status === 400) {
+        const validationErrors = error.response?.data?.errors;
+        if (validationErrors && Array.isArray(validationErrors) && validationErrors.length > 0) {
+          errorMessage += 'Please fix the following errors: ' + validationErrors.map(e => e.msg || e.message).join(', ');
+        } else if (error.response?.data?.message) {
+          errorMessage += error.response.data.message;
+        } else {
+          errorMessage += 'Invalid data provided. Please check all required fields and try again.';
+        }
+      } else if (error.response?.status === 409) {
+        errorMessage += 'An invoice with this number already exists. Please use a different invoice number or contact support.';
+      } else if (error.response?.status === 422) {
+        errorMessage += 'The invoice data is invalid. Please ensure all required fields are filled correctly and try again.';
+      } else if (error.response?.status === 500) {
+        errorMessage += 'Server error occurred. Please try again later or contact support if the problem persists.';
+      } else if (error.response?.data?.message) {
+        errorMessage += error.response.data.message;
+      } else if (error.message) {
+        errorMessage += `Network error: ${error.message}. Please check your internet connection and try again.`;
+      } else {
+        errorMessage += 'An unexpected error occurred. Please check all fields and try again.';
+      }
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -346,6 +426,21 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
 
   return (
     <div className="sales-tax-invoice">
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className={`toast-notification toast-${toast.type}`}>
+          <div className="toast-content">
+            <i className={`fas ${toast.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} me-2`}></i>
+            <span>{toast.message}</span>
+          </div>
+          <button 
+            className="toast-close" 
+            onClick={() => setToast({ show: false, message: '', type: '' })}
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      )}
       <div className="container-fluid">
         <div className="row">
           <div className="col-12">

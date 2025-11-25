@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { databaseDashboardAPI } from '../../services/api';
 import formatNumber from '../../utils/formatNumber';
 import './style.scss';
@@ -8,21 +8,40 @@ const DatabaseDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [asOfDate, setAsOfDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(100);
+  const searchTimeoutRef = useRef(null);
+
+  // Debounce search term to reduce API calls
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setCurrentPage(1); // Reset to first page when search changes
+    }, 500); // 500ms debounce delay
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchTerm]);
 
   useEffect(() => {
     fetchDashboard();
-  }, [currentPage, searchTerm, asOfDate]);
+  }, [currentPage, debouncedSearchTerm, asOfDate]);
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
       const response = await databaseDashboardAPI.getDashboard({
-        search: searchTerm,
+        search: debouncedSearchTerm,
         as_of_date: asOfDate,
         page: currentPage,
         limit: itemsPerPage
@@ -38,7 +57,7 @@ const DatabaseDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, debouncedSearchTerm, asOfDate, itemsPerPage]);
 
   const handleExport = async () => {
     try {
@@ -63,9 +82,14 @@ const DatabaseDashboard = () => {
     }
   };
 
-  const handlePrint = () => {
+  const handlePrint = useCallback(() => {
     window.print();
-  };
+  }, []);
+
+  // Memoize expensive calculations
+  const totalPOQuantity = useMemo(() => {
+    return dashboardData.reduce((sum, item) => sum + (item.po_quantity || 0), 0).toLocaleString();
+  }, [dashboardData]);
 
   return (
     <div className="database-dashboard horizontal-layout">
@@ -233,7 +257,7 @@ const DatabaseDashboard = () => {
                       <div className="card-body text-center">
                         <i className="fas fa-chart-line fa-2x text-warning mb-2"></i>
                         <h5 className="card-title">
-                          {dashboardData.reduce((sum, item) => sum + (item.po_quantity || 0), 0).toLocaleString()}
+                          {totalPOQuantity}
                         </h5>
                         <p className="card-text small text-muted">Total PO Quantity</p>
                       </div>

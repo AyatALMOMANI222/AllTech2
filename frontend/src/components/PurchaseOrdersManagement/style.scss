@@ -69,6 +69,62 @@ $danger: #ef4444;
       }
     }
 
+    // Create Supplier PO Button - Enhanced Loading State
+    &.create-supplier-po-btn {
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+      min-width: 180px;
+      
+      &.loading {
+        cursor: not-allowed;
+        opacity: 0.85;
+        pointer-events: none;
+        
+        &::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -100%;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255, 255, 255, 0.3),
+            transparent
+          );
+          animation: shimmer 1.5s infinite;
+        }
+      }
+
+      .loading-spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-top-color: $white;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+
+      .loading-text {
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      i.fa-plus-circle {
+        transition: transform 0.3s ease;
+      }
+
+      &:not(.loading):hover i.fa-plus-circle {
+        transform: rotate(90deg);
+      }
+    }
+
     &.btn-info {
       background: $info;
       color: $white;
@@ -342,6 +398,34 @@ $danger: #ef4444;
     border-width: 0.3rem;
     border-color: $primary;
     border-right-color: transparent;
+  }
+
+  // Enhanced Loading Animations
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      left: -100%;
+    }
+    100% {
+      left: 100%;
+    }
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
   }
 
   // Modal Styles

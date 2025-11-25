@@ -2285,7 +2285,7 @@ View Details                                </button>
                     <div className="form-text">
                       <strong>Required columns (exact match):</strong>
                       <ul className="mb-2 mt-2" style={{ fontSize: '0.9rem' }}>
-                        <li>po_number</li>
+                      <li>serial_no</li>
                         <li>project_no</li>
                         <li>date_po</li>
                         <li>part_no</li>
@@ -2295,7 +2295,7 @@ View Details                                </button>
                         <li>quantity</li>
                         <li>unit_price</li>
                         <li>lead_time</li>
-                        <li>due_date</li>
+                  
                         <li>comments</li>
                       </ul>
                       <small className="text-muted">
@@ -3278,14 +3278,14 @@ View Details                                </button>
                 </button>
                 <button
                   type="button"
-                  className="btn btn-success"
+                  className={`btn btn-success create-supplier-po-btn ${loading ? 'loading' : ''}`}
                   onClick={handleSubmitCreateSupplierPO}
                   disabled={loading || !selectedSupplierId}
                 >
                   {loading ? (
                     <>
-                      <span className="spinner-border spinner-border-sm me-2"></span>
-                      Creating...
+                      <span className="loading-spinner"></span>
+                      <span className="loading-text">Creating Supplier PO...</span>
                     </>
                   ) : (
                     <>

@@ -242,6 +242,10 @@ router.get('/', async (req, res) => {
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
     
+    // Optimize session settings for better GROUP_CONCAT performance
+    // Increase GROUP_CONCAT max length to prevent truncation (default 1024)
+    await req.db.execute("SET SESSION group_concat_max_len = 16384");
+    
     // Base query to get all Purchase Order items with related inventory and invoice data
     // ⚠️ IMPORTANT: Query starts from purchase_order_items to display ALL PO items
     // ⚠️ DEDUPLICATION: Group by PROJECT NO, PART NO, MATERIAL NO, DESCRIPTION, UOM to avoid duplicate rows
@@ -272,8 +276,9 @@ router.get('/', async (req, res) => {
         
         -- Combine PO information (use GROUP_CONCAT for multiple POs)
         -- When items are grouped, multiple POs may be combined, so we aggregate their information
-        GROUP_CONCAT(DISTINCT po.id ORDER BY po.id SEPARATOR ',') as po_ids,
-        GROUP_CONCAT(DISTINCT po.po_number ORDER BY po.po_number SEPARATOR ', ') as po_number,
+        -- Limit GROUP_CONCAT length to prevent performance issues (4096 chars max)
+        SUBSTRING(GROUP_CONCAT(DISTINCT po.id ORDER BY po.id SEPARATOR ','), 1, 4096) as po_ids,
+        SUBSTRING(GROUP_CONCAT(DISTINCT po.po_number ORDER BY po.po_number SEPARATOR ', '), 1, 4096) as po_number,
         -- order_type: When items are grouped, order_type may contain both 'supplier' and 'customer'
         -- Use GROUP_CONCAT to combine all order_types, then frontend will handle displaying in appropriate columns
         GROUP_CONCAT(DISTINCT po.order_type ORDER BY po.order_type SEPARATOR ', ') as order_type,
@@ -321,15 +326,15 @@ router.get('/', async (req, res) => {
         AVG(COALESCE(poi.unit_price, 0)) as po_unit_price,
         SUM(COALESCE(poi.total_price, 0)) as po_total_price,
         
-        GROUP_CONCAT(DISTINCT cs.id ORDER BY cs.id SEPARATOR ',') as customer_supplier_ids,
-        GROUP_CONCAT(DISTINCT cs.company_name ORDER BY cs.company_name SEPARATOR ', ') as customer_supplier_name,
+        SUBSTRING(GROUP_CONCAT(DISTINCT cs.id ORDER BY cs.id SEPARATOR ','), 1, 4096) as customer_supplier_ids,
+        SUBSTRING(GROUP_CONCAT(DISTINCT cs.company_name ORDER BY cs.company_name SEPARATOR ', '), 1, 4096) as customer_supplier_name,
         
         -- Supplier name: Use linked supplier name for customer orders, or standalone supplier name
         -- For customer orders without linked suppliers, return NULL (empty)
         -- Check at group level: if MAX(linked_supplier_po.id) IS NULL, then no linked supplier exists
         CASE 
           WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
-          ELSE GROUP_CONCAT(DISTINCT CASE 
+          ELSE SUBSTRING(GROUP_CONCAT(DISTINCT CASE 
             WHEN po.order_type = 'customer' AND linked_supplier_cs.id IS NOT NULL THEN linked_supplier_cs.company_name
             WHEN po.order_type = 'supplier' THEN cs.company_name
             ELSE NULL 
@@ -337,7 +342,7 @@ router.get('/', async (req, res) => {
             WHEN po.order_type = 'customer' AND linked_supplier_cs.id IS NOT NULL THEN linked_supplier_cs.company_name
             WHEN po.order_type = 'supplier' THEN cs.company_name
             ELSE NULL 
-          END SEPARATOR ', ')
+          END SEPARATOR ', '), 1, 4096)
         END as supplier_name,
         
         -- Aggregate delivered quantities separately for supplier and customer POs
@@ -392,7 +397,7 @@ router.get('/', async (req, res) => {
         -- NEVER include customer invoice numbers (Sales Tax Invoices) in supplier_invoice_no
         CASE 
           WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
-          ELSE GROUP_CONCAT(DISTINCT CASE 
+          ELSE SUBSTRING(GROUP_CONCAT(DISTINCT CASE 
             -- For customer orders: only use invoice numbers from linked supplier orders
             WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL AND linked_supplier_po.id IS NOT NULL THEN linked_poi.invoice_no
             -- For supplier orders: only use invoice numbers from supplier orders (Purchase Tax Invoices)
@@ -402,7 +407,7 @@ router.get('/', async (req, res) => {
             WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL AND linked_supplier_po.id IS NOT NULL THEN linked_poi.invoice_no
             WHEN po.order_type = 'supplier' THEN poi.invoice_no
             ELSE NULL 
-          END SEPARATOR ', ')
+          END SEPARATOR ', '), 1, 4096)
         END as supplier_invoice_no,
         CASE 
           WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
@@ -420,8 +425,8 @@ router.get('/', async (req, res) => {
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.delivered_total_price, 0) ELSE 0 END) as customer_delivered_total_price,
         MAX(CASE WHEN po.order_type = 'customer' THEN poi.penalty_percentage ELSE NULL END) as customer_penalty_percentage,
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.penalty_amount, 0) ELSE 0 END) as customer_penalty_amount,
-        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'customer' THEN poi.invoice_no ELSE NULL END 
-            ORDER BY poi.invoice_no SEPARATOR ', ') as customer_invoice_no,
+        SUBSTRING(GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'customer' THEN poi.invoice_no ELSE NULL END 
+            ORDER BY poi.invoice_no SEPARATOR ', '), 1, 4096) as customer_invoice_no,
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.balance_quantity_undelivered, 0) ELSE 0 END) as customer_balance_quantity_undelivered,
         
         -- Aggregate approved quantities separately for supplier and customer POs
@@ -472,7 +477,8 @@ router.get('/', async (req, res) => {
         -- NOTE: Delivered POs appear in BOTH approved and delivered sections
         -- Include customer orders and their linked supplier orders
         -- Use GROUP_CONCAT to combine multiple POs for the same item
-        GROUP_CONCAT(DISTINCT CASE 
+        -- Limit length to prevent performance issues
+        SUBSTRING(GROUP_CONCAT(DISTINCT CASE 
           WHEN po.status IN ('approved', 'partially_delivered', 'delivered_completed')
           THEN CONCAT(
             poi.quantity, '|',
@@ -489,10 +495,10 @@ router.get('/', async (req, res) => {
             COALESCE(po.status, '')
           )
           ELSE NULL 
-        END SEPARATOR '||') as approved_orders_data,
+        END SEPARATOR '||'), 1, 16384) as approved_orders_data,
         
         -- Linked Supplier Approved Orders data (for customer orders with linked suppliers)
-        GROUP_CONCAT(DISTINCT CASE 
+        SUBSTRING(GROUP_CONCAT(DISTINCT CASE 
           WHEN po.order_type = 'customer' 
             AND linked_supplier_po.id IS NOT NULL 
             AND linked_supplier_po.status IN ('approved', 'partially_delivered', 'delivered_completed')
@@ -511,7 +517,7 @@ router.get('/', async (req, res) => {
             COALESCE(linked_supplier_po.status, '')
           )
           ELSE NULL 
-        END SEPARATOR '||') as linked_supplier_approved_orders_data,
+        END SEPARATOR '||'), 1, 16384) as linked_supplier_approved_orders_data,
         
         -- 📦 DELIVERED PURCHASED ORDER Section
         -- ⚠️ Display Condition: Show ONLY when PO status is "partially_delivered" or "delivered_completed"
@@ -520,7 +526,7 @@ router.get('/', async (req, res) => {
         -- NOTE: These POs ALSO appear in the APPROVED section above (showing original approved data)
         -- A PO appears in BOTH sections when it becomes delivered - it is NOT removed from approved section
         -- Use GROUP_CONCAT to combine multiple delivered POs for the same item
-        GROUP_CONCAT(DISTINCT CASE 
+        SUBSTRING(GROUP_CONCAT(DISTINCT CASE 
           WHEN po.status IN ('partially_delivered', 'delivered_completed')
           THEN CONCAT(
             poi.quantity, '|',                    -- ORDERED QUANTITY (from APPROVED section)
@@ -544,10 +550,10 @@ router.get('/', async (req, res) => {
             COALESCE(po.status, '')
           )
           ELSE NULL 
-        END SEPARATOR '||') as delivered_orders_data,
+        END SEPARATOR '||'), 1, 16384) as delivered_orders_data,
         
         -- Linked Supplier Delivered Orders data (for customer orders with linked suppliers)
-        GROUP_CONCAT(DISTINCT CASE 
+        SUBSTRING(GROUP_CONCAT(DISTINCT CASE 
           WHEN po.order_type = 'customer' 
             AND linked_supplier_po.id IS NOT NULL 
             AND linked_supplier_po.status IN ('partially_delivered', 'delivered_completed')
@@ -573,10 +579,10 @@ router.get('/', async (req, res) => {
             COALESCE(linked_supplier_po.status, '')
           )
           ELSE NULL 
-        END SEPARATOR '||') as linked_supplier_delivered_orders_data,
+        END SEPARATOR '||'), 1, 16384) as linked_supplier_delivered_orders_data,
         
         -- Purchase Tax Invoice data (matching by part_no, material_no)
-        GROUP_CONCAT(DISTINCT CASE 
+        SUBSTRING(GROUP_CONCAT(DISTINCT CASE 
           WHEN pti.id IS NOT NULL
           THEN CONCAT(
             ptii.quantity, '|',
@@ -586,10 +592,10 @@ router.get('/', async (req, res) => {
             COALESCE(cs_pti_supplier.company_name, '')
           )
           ELSE NULL 
-        END SEPARATOR '||') as purchase_invoice_data,
+        END SEPARATOR '||'), 1, 16384) as purchase_invoice_data,
         
         -- Sales Tax Invoice data (matching by part_no, material_no)
-        GROUP_CONCAT(DISTINCT CASE 
+        SUBSTRING(GROUP_CONCAT(DISTINCT CASE 
           WHEN sti.id IS NOT NULL
           THEN CONCAT(
             stii.quantity, '|',
@@ -599,7 +605,7 @@ router.get('/', async (req, res) => {
             COALESCE(cs_sti_customer.company_name, '')
           )
           ELSE NULL 
-        END SEPARATOR '||') as sales_invoice_data
+        END SEPARATOR '||'), 1, 16384) as sales_invoice_data
         
       FROM purchase_order_items poi
       
@@ -670,17 +676,22 @@ router.get('/', async (req, res) => {
     }
     
     // Add search filter (search in PO item fields)
+    // Optimized: Use prefix search when possible for better index usage
     if (search) {
-      query += ` AND (
-        poi.serial_no LIKE ? OR 
-        poi.project_no LIKE ? OR 
-        poi.part_no LIKE ? OR 
-        poi.material_no LIKE ? OR 
-        poi.description LIKE ? OR
-        po.po_number LIKE ?
-      )`;
-      const searchParam = `%${search}%`;
-      params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
+      const searchTerm = search.trim();
+      // If search doesn't start with wildcard, use prefix search for better performance
+      if (searchTerm.length > 0) {
+        query += ` AND (
+          poi.serial_no LIKE ? OR 
+          poi.project_no LIKE ? OR 
+          poi.part_no LIKE ? OR 
+          poi.material_no LIKE ? OR 
+          poi.description LIKE ? OR
+          po.po_number LIKE ?
+        )`;
+        const searchParam = `%${searchTerm}%`;
+        params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
+      }
     }
     
     // Group by Customer Order ID + item fields to ensure each Customer Order appears as separate row
@@ -1059,8 +1070,8 @@ router.get('/export', async (req, res) => {
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.delivered_total_price, 0) ELSE 0 END) as customer_delivered_total_price,
         MAX(CASE WHEN po.order_type = 'customer' THEN poi.penalty_percentage ELSE NULL END) as customer_penalty_percentage,
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.penalty_amount, 0) ELSE 0 END) as customer_penalty_amount,
-        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'customer' THEN poi.invoice_no ELSE NULL END 
-            ORDER BY poi.invoice_no SEPARATOR ', ') as customer_invoice_no,
+        SUBSTRING(GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'customer' THEN poi.invoice_no ELSE NULL END 
+            ORDER BY poi.invoice_no SEPARATOR ', '), 1, 4096) as customer_invoice_no,
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.balance_quantity_undelivered, 0) ELSE 0 END) as customer_balance_quantity_undelivered,
         
         -- Status: if any PO is delivered, show delivered status

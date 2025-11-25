@@ -21,6 +21,7 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [toast, setToast] = useState({ show: false, message: '', type: '' });
 
   useEffect(() => {
     fetchSuppliers();
@@ -64,7 +65,9 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
         }
       } catch (err) {
         console.error('Error loading invoice:', err);
-        setError('Error loading invoice');
+        const errorMessage = formatErrorMessages(err);
+        setError(errorMessage);
+        showToast(errorMessage, 'error');
       } finally {
         setLoading(false);
       }
@@ -166,7 +169,9 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
         setError('');
       } catch (error) {
         console.error('Error fetching PO items:', error);
-        setError('No items found for this PO number');
+        const errorMessage = formatErrorMessages(error);
+        setError(errorMessage);
+        showToast(errorMessage, 'error');
         setFormData(prev => ({
           ...prev,
           items: []
@@ -225,6 +230,62 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
     }));
   };
 
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: '' });
+    }, 4000);
+  };
+
+  const formatErrorMessages = (error) => {
+    let errorMessages = [];
+    
+    // Check for validation errors array
+    if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+      error.response.data.errors.forEach(err => {
+        if (err.msg || err.message) {
+          errorMessages.push(err.msg || err.message);
+        }
+      });
+    }
+    
+    // Check for single error message
+    if (error.response?.data?.message) {
+      const message = error.response.data.message;
+      // If it's already a combined message or single message, add it
+      if (!errorMessages.includes(message)) {
+        errorMessages.push(message);
+      }
+    }
+    
+    // Check for error field in response
+    if (error.response?.data?.error && !errorMessages.includes(error.response.data.error)) {
+      errorMessages.push(error.response.data.error);
+    }
+    
+    // If no specific error messages found, add generic ones based on status
+    if (errorMessages.length === 0) {
+      if (error.response?.status === 400) {
+        errorMessages.push('Invalid data provided. Please check all required fields.');
+      } else if (error.response?.status === 404) {
+        errorMessages.push('The requested resource was not found.');
+      } else if (error.response?.status === 409) {
+        errorMessages.push('A record with this information already exists.');
+      } else if (error.response?.status === 422) {
+        errorMessages.push('The provided data is invalid or incomplete.');
+      } else if (error.response?.status === 500) {
+        errorMessages.push('Server error occurred. Please try again later.');
+      } else if (error.message) {
+        errorMessages.push(`Network error: ${error.message}`);
+      } else {
+        errorMessages.push('An unexpected error occurred. Please try again.');
+      }
+    }
+    
+    // Combine all error messages into one
+    return errorMessages.join(' ');
+  };
+
   const calculateTotals = () => {
     // Subtotal: sum(quantity × unit price)
     const subtotal = formData.items.reduce((sum, item) => {
@@ -258,7 +319,9 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
         status: 'draft' // إضافة القيمة صراحة
       };
       const response = await purchaseTaxInvoicesAPI.create(payload);
-      setSuccess(`Purchase Tax Invoice created successfully! Invoice Number: ${response.data.invoice_number}`);
+      const successMessage = `Purchase Tax Invoice created successfully! Invoice Number: ${response.data.invoice_number}`;
+      setSuccess(successMessage);
+      showToast(successMessage, 'success');
       // Reset form
       setFormData({
         invoice_number: '',
@@ -272,7 +335,9 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
       setSelectedSupplier(null);
       setSelectedPO(null);
     } catch (error) {
-      setError(error.response?.data?.message || 'Error creating invoice');
+      const errorMessage = formatErrorMessages(error);
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -282,7 +347,9 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
     // Get the invoice container element
     const invoiceElement = document.querySelector('.purchase-tax-invoice');
     if (!invoiceElement) {
-      setError('Invoice content not found');
+      const errorMessage = 'Invoice content not found. Please ensure the invoice is loaded correctly.';
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
       return;
     }
 
@@ -313,7 +380,9 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
 
     const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
     if (!iframeDoc) {
-      setError('Unable to create print window');
+      const errorMessage = 'Unable to create print window. Please check your browser settings and try again.';
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
       return;
     }
 
@@ -408,7 +477,9 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
         iframe.contentWindow?.print();
       } catch (error) {
         console.error('Error printing:', error);
-        setError('Error printing invoice');
+        const errorMessage = formatErrorMessages(error);
+        setError(errorMessage);
+        showToast(errorMessage, 'error');
       } finally {
         // Cleanup after a short delay to allow print dialog to open
         setTimeout(() => {
@@ -420,7 +491,9 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
 
   const handleGeneratePDF = async () => {
     if (!invoiceId) {
-      setError('No invoice selected for PDF generation');
+      const errorMessage = 'No invoice selected for PDF generation. Please select an invoice first.';
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
       return;
     }
 
@@ -439,9 +512,13 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
       
-      setSuccess('PDF generated and downloaded successfully!');
+      const successMessage = 'PDF generated and downloaded successfully!';
+      setSuccess(successMessage);
+      showToast(successMessage, 'success');
     } catch (error) {
-      setError('Error generating PDF');
+      const errorMessage = formatErrorMessages(error);
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -451,6 +528,21 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
 
   return (
     <div className="purchase-tax-invoice">
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className={`toast-notification toast-${toast.type}`}>
+          <div className="toast-content">
+            <i className={`fas ${toast.type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} me-2`}></i>
+            <span>{toast.message}</span>
+          </div>
+          <button 
+            className="toast-close" 
+            onClick={() => setToast({ show: false, message: '', type: '' })}
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      )}
       <div className="container-fluid">
         <div className="row">
           <div className="col-12">
