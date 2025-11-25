@@ -47,3 +47,4 @@ node -e "const mysql = require('mysql2/promise'); const fs = require('fs'); (asy
 - الـ triggers ستعمل فقط مع supplier POs (order_type = 'supplier')
 - هذا متوافق مع التغييرات السابقة لإزالة UNIQUE constraint
 
+

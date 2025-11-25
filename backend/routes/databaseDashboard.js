@@ -144,12 +144,27 @@ async function calculateAndUpdateDeliveredData(db, poId) {
       const deliveredTotalPrice = deliveredQuantity * (deliveredUnitPrice || 0);
       
       // PENALTY %: If entered, use it; otherwise, leave empty
-      const penaltyPercentage = item.penalty_percentage || null;
+      // Convert to number and handle empty strings/null values
+      let penaltyPercentage = null;
+      if (item.penalty_percentage !== null && item.penalty_percentage !== '' && item.penalty_percentage !== undefined) {
+        penaltyPercentage = parseFloat(item.penalty_percentage);
+        // Check if parseFloat returned NaN
+        if (isNaN(penaltyPercentage)) {
+          penaltyPercentage = null;
+        }
+      }
       
       // PENALTY AMOUNT = (PENALTY % × DELIVERED TOTAL PRICE) / 100 (if PENALTY % exists)
       let penaltyAmount = null;
-      if (penaltyPercentage !== null && penaltyPercentage !== '' && deliveredTotalPrice > 0) {
-        penaltyAmount = (parseFloat(penaltyPercentage) * deliveredTotalPrice) / 100;
+      if (penaltyPercentage !== null && !isNaN(penaltyPercentage) && penaltyPercentage > 0 && deliveredTotalPrice > 0) {
+        penaltyAmount = (penaltyPercentage * deliveredTotalPrice) / 100;
+        // Round to 2 decimal places to avoid floating point precision issues
+        penaltyAmount = Math.round(penaltyAmount * 100) / 100;
+        console.log(`✓ Item ${item.id} (PO ${poId}): penalty_percentage=${penaltyPercentage}%, deliveredTotalPrice=${deliveredTotalPrice}, penaltyAmount=${penaltyAmount}`);
+      } else {
+        if (deliveredTotalPrice > 0) {
+          console.log(`⚠ Item ${item.id} (PO ${poId}): Skipping penalty - penaltyPercentage=${penaltyPercentage}, deliveredTotalPrice=${deliveredTotalPrice}`);
+        }
       }
       
       // BALANCE QUANTITY UNDELIVERED = ORDERED QUANTITY - DELIVERED QUANTITY
@@ -383,9 +398,9 @@ router.get('/', async (req, res) => {
             ELSE NULL 
           END)
         END as supplier_penalty_percentage,
-        CASE 
+        CASE
           WHEN po.order_type = 'customer' AND MAX(linked_supplier_po.id) IS NULL THEN NULL
-          ELSE NULLIF(SUM(CASE 
+          ELSE NULLIF(MAX(CASE
             WHEN po.order_type = 'customer' AND linked_poi.id IS NOT NULL THEN COALESCE(linked_poi.penalty_amount, 0)
             WHEN po.order_type = 'supplier' THEN COALESCE(poi.penalty_amount, 0)
             ELSE NULL
@@ -420,11 +435,11 @@ router.get('/', async (req, res) => {
         
         -- Customer delivered quantities
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.delivered_quantity, 0) ELSE 0 END) as customer_delivered_quantity,
-        AVG(CASE WHEN po.order_type = 'customer' AND poi.delivered_unit_price IS NOT NULL AND poi.delivered_unit_price > 0 
+        AVG(CASE WHEN po.order_type = 'customer' AND poi.delivered_unit_price IS NOT NULL AND poi.delivered_unit_price > 0
             THEN poi.delivered_unit_price ELSE NULL END) as customer_delivered_unit_price,
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.delivered_total_price, 0) ELSE 0 END) as customer_delivered_total_price,
         MAX(CASE WHEN po.order_type = 'customer' THEN poi.penalty_percentage ELSE NULL END) as customer_penalty_percentage,
-        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.penalty_amount, 0) ELSE 0 END) as customer_penalty_amount,
+        NULLIF(MAX(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.penalty_amount, 0) ELSE NULL END), 0) as customer_penalty_amount,
         SUBSTRING(GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'customer' THEN poi.invoice_no ELSE NULL END 
             ORDER BY poi.invoice_no SEPARATOR ', '), 1, 4096) as customer_invoice_no,
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.balance_quantity_undelivered, 0) ELSE 0 END) as customer_balance_quantity_undelivered,
@@ -923,7 +938,7 @@ router.get('/', async (req, res) => {
         customer_delivered_unit_price: item.customer_delivered_unit_price ? parseFloat(item.customer_delivered_unit_price) : 0,
         customer_delivered_total_price: item.customer_delivered_total_price ? parseFloat(item.customer_delivered_total_price) : 0,
         customer_penalty_percentage: item.customer_penalty_percentage || null,
-        customer_penalty_amount: item.customer_penalty_amount ? parseFloat(item.customer_penalty_amount) : 0,
+        customer_penalty_amount: item.customer_penalty_amount ? (item.customer_penalty_amount) : 0,
         customer_invoice_no: item.customer_invoice_no || '',
         customer_balance_quantity_undelivered: item.customer_balance_quantity_undelivered ? parseFloat(item.customer_balance_quantity_undelivered) : 0,
         
@@ -1059,17 +1074,17 @@ router.get('/export', async (req, res) => {
             THEN poi.delivered_unit_price ELSE NULL END) as supplier_delivered_unit_price,
         SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.delivered_total_price, 0) ELSE 0 END) as supplier_delivered_total_price,
         MAX(CASE WHEN po.order_type = 'supplier' THEN poi.penalty_percentage ELSE NULL END) as supplier_penalty_percentage,
-        SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.penalty_amount, 0) ELSE 0 END) as supplier_penalty_amount,
-        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'supplier' THEN poi.invoice_no ELSE NULL END 
+        NULLIF(MAX(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.penalty_amount, 0) ELSE NULL END), 0) as supplier_penalty_amount,
+        GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'supplier' THEN poi.invoice_no ELSE NULL END
             ORDER BY poi.invoice_no SEPARATOR ', ') as supplier_invoice_no,
         SUM(CASE WHEN po.order_type = 'supplier' THEN COALESCE(poi.balance_quantity_undelivered, 0) ELSE 0 END) as supplier_balance_quantity_undelivered,
-        
+
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.delivered_quantity, 0) ELSE 0 END) as customer_delivered_quantity,
-        AVG(CASE WHEN po.order_type = 'customer' AND poi.delivered_unit_price IS NOT NULL AND poi.delivered_unit_price > 0 
+        AVG(CASE WHEN po.order_type = 'customer' AND poi.delivered_unit_price IS NOT NULL AND poi.delivered_unit_price > 0
             THEN poi.delivered_unit_price ELSE NULL END) as customer_delivered_unit_price,
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.delivered_total_price, 0) ELSE 0 END) as customer_delivered_total_price,
         MAX(CASE WHEN po.order_type = 'customer' THEN poi.penalty_percentage ELSE NULL END) as customer_penalty_percentage,
-        SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.penalty_amount, 0) ELSE 0 END) as customer_penalty_amount,
+        NULLIF(MAX(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.penalty_amount, 0) ELSE NULL END), 0) as customer_penalty_amount,
         SUBSTRING(GROUP_CONCAT(DISTINCT CASE WHEN po.order_type = 'customer' THEN poi.invoice_no ELSE NULL END 
             ORDER BY poi.invoice_no SEPARATOR ', '), 1, 4096) as customer_invoice_no,
         SUM(CASE WHEN po.order_type = 'customer' THEN COALESCE(poi.balance_quantity_undelivered, 0) ELSE 0 END) as customer_balance_quantity_undelivered,
@@ -1281,6 +1296,58 @@ router.post('/calculate-delivered/:po_id', async (req, res) => {
       success: false,
       message: 'Error calculating delivered data',
       error: error.message 
+    });
+  }
+});
+
+/**
+ * POST /api/database-dashboard/recalculate-all-penalties
+ * 
+ * Recalculate penalty amounts for all purchase orders that have delivered items.
+ * This fixes existing records in the database that may have incorrect penalty amounts.
+ * 
+ * Use this endpoint after fixing the penalty calculation logic to update all existing records.
+ */
+router.post('/recalculate-all-penalties', async (req, res) => {
+  try {
+    // Get all purchase orders that have delivered items
+    const [pos] = await req.db.execute(`
+      SELECT DISTINCT po.id
+      FROM purchase_orders po
+      INNER JOIN purchase_order_items poi ON po.id = poi.po_id
+      WHERE po.status IN ('partially_delivered', 'delivered_completed')
+        AND poi.delivered_quantity > 0
+        AND poi.delivered_total_price > 0
+    `);
+    
+    let recalculated = 0;
+    let errors = [];
+    
+    // Recalculate each PO
+    for (const po of pos) {
+      try {
+        await calculateAndUpdateDeliveredData(req.db, po.id);
+        recalculated++;
+      } catch (error) {
+        errors.push({ po_id: po.id, error: error.message });
+        console.error(`Error recalculating PO ${po.id}:`, error);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Recalculated penalty amounts for ${recalculated} purchase orders`,
+      recalculated: recalculated,
+      total: pos.length,
+      errors: errors.length > 0 ? errors : undefined
+    });
+    
+  } catch (error) {
+    console.error('Error recalculating all penalties:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error recalculating penalty amounts',
+      error: error.message
     });
   }
 });

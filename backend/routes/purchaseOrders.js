@@ -758,8 +758,8 @@ router.post('/', validatePurchaseOrder, async (req, res) => {
           lead_time || null,
           finalDueDate, // Use calculated due_date for Customer POs
           penalty_percentage ? parseFloat(penalty_percentage) : null,
-          // Penalty Amount = delivered_total_price × (penalty_percentage / 100)
-          penalty_percentage && delivered_total_price ? (parseFloat(delivered_total_price) * parseFloat(penalty_percentage) / 100) : null,
+          // Penalty Amount: Always NULL (removed calculations)
+          null,
           invoice_no || null,
           delivered_quantity && quantity ? (parseFloat(quantity) - parseFloat(delivered_quantity)) : null,
           delivered_quantity ? parseFloat(delivered_quantity) : null,
@@ -863,30 +863,24 @@ router.put('/:id', async (req, res) => {
     }
     
     // Update penalty_percentage for all items if provided (regardless of status)
-    // ⚠️ IMPORTANT: Recalculate penalty_amount based on delivered_total_price
+    // Update penalty_percentage (penalty_amount always NULL)
     if (penalty_percentage !== undefined && penalty_percentage !== null && penalty_percentage !== '') {
       console.log('Updating penalty_percentage for all items:', penalty_percentage);
       
       try {
-        // Update penalty_percentage and recalculate penalty_amount
-        // Penalty Amount = delivered_total_price × (penalty_percentage / 100)
+        // Update penalty_percentage (penalty_amount always NULL)
         await req.db.execute(`
           UPDATE purchase_order_items SET
             penalty_percentage = ?,
-            penalty_amount = CASE 
-              WHEN delivered_total_price IS NOT NULL AND delivered_total_price > 0 
-              THEN (delivered_total_price * ? / 100)
-              ELSE NULL
-            END,
+            penalty_amount = NULL,
             updated_at = CURRENT_TIMESTAMP
           WHERE po_id = ?
         `, [
           parseFloat(penalty_percentage),
-          parseFloat(penalty_percentage),
           id
         ]);
         
-        console.log('✅ Updated penalty_percentage and recalculated penalty_amount for all items');
+        console.log('✅ Updated penalty_percentage (penalty_amount set to NULL)');
         
         // Recalculate all delivered values (to ensure consistency)
         // This ensures delivered_quantity, delivered_unit_price, delivered_total_price are up to date
@@ -906,7 +900,7 @@ router.put('/:id', async (req, res) => {
       
       try {
         // Update existing items with form-level values for delivered status
-        // Also recalculate penalty_amount if penalty_percentage exists
+        // Update delivered fields (penalty_amount always NULL)
         await req.db.execute(`
           UPDATE purchase_order_items SET
             balance_quantity_undelivered = CASE 
@@ -917,11 +911,7 @@ router.put('/:id', async (req, res) => {
             delivered_quantity = COALESCE(?, delivered_quantity),
             delivered_unit_price = COALESCE(?, delivered_unit_price),
             delivered_total_price = COALESCE(?, delivered_total_price),
-            penalty_amount = CASE 
-              WHEN penalty_percentage IS NOT NULL AND COALESCE(?, delivered_total_price) IS NOT NULL AND COALESCE(?, delivered_total_price) > 0
-              THEN (COALESCE(?, delivered_total_price) * penalty_percentage / 100)
-              ELSE penalty_amount
-            END,
+            penalty_amount = NULL,
             updated_at = CURRENT_TIMESTAMP
           WHERE po_id = ?
         `, [
@@ -981,15 +971,8 @@ router.put('/:id', async (req, res) => {
           const finalDeliveredUnitPrice = delivered_unit_price || null;
           const finalDeliveredTotalPrice = delivered_total_price || null;
           
-          // Calculate penalty_amount based on delivered_total_price
-          // Penalty Amount = delivered_total_price × (penalty_percentage / 100)
+          // Penalty Amount: Always NULL (removed calculations)
           let finalPenaltyAmount = null;
-          if (finalPenaltyPercentage && finalDeliveredTotalPrice) {
-            finalPenaltyAmount = (parseFloat(finalDeliveredTotalPrice) * parseFloat(finalPenaltyPercentage)) / 100;
-          } else if (item_penalty_amount || penalty_amount) {
-            // Fallback to provided value if delivered_total_price is not available
-            finalPenaltyAmount = item_penalty_amount || penalty_amount || null;
-          }
           
           console.log('Item:', part_no, 'Final values:', { 
             finalDueDate, finalPenaltyPercentage, 
@@ -1547,8 +1530,8 @@ router.post('/:id/create-supplier-po', async (req, res) => {
         lead_time || null,
         formatDateForSQL(due_date),
         penalty_percentage ? parseFloat(penalty_percentage) : null,
-        // Penalty Amount = delivered_total_price × (penalty_percentage / 100)
-        penalty_percentage && delivered_total_price ? (parseFloat(delivered_total_price) * parseFloat(penalty_percentage) / 100) : null,
+        // Penalty Amount = penalty_percentage × delivered_total_price
+        penalty_percentage && delivered_total_price ? (parseFloat(penalty_percentage) * parseFloat(delivered_total_price)) : null,
           invoice_no || null,
           delivered_quantity && quantity ? (parseFloat(quantity) - parseFloat(delivered_quantity)) : null,
           delivered_quantity ? parseFloat(delivered_quantity) : null,
