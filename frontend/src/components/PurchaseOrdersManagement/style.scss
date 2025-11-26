@@ -1353,6 +1353,76 @@ $danger: #ef4444;
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
       }
+
+      // Upload PDFs Button - Smooth Loading State
+      .upload-pdfs-btn {
+        min-width: 140px;
+        height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow: hidden;
+
+        // Ensure consistent spacing and alignment
+        .upload-icon,
+        .upload-spinner {
+          width: 16px;
+          height: 16px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .upload-icon {
+          font-size: 0.875rem;
+          line-height: 1;
+        }
+
+        .upload-spinner {
+          border-width: 0.15em;
+          animation: spinner-border 0.75s linear infinite;
+        }
+
+        .upload-text {
+          display: inline-block;
+          white-space: nowrap;
+          transition: opacity 0.2s ease;
+        }
+
+        // Loading state
+        &.uploading {
+          cursor: wait;
+          opacity: 0.9;
+          
+          .upload-text {
+            opacity: 0.95;
+          }
+
+          .upload-spinner {
+            opacity: 1;
+          }
+        }
+
+        // Disabled state
+        &:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        // Hover state (only when not uploading)
+        &:hover:not(.uploading):not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+        }
+
+        // Active state
+        &:active:not(.uploading):not(:disabled) {
+          transform: translateY(0);
+        }
+      }
     }
   }
 
@@ -1639,6 +1709,80 @@ $danger: #ef4444;
           &:hover {
             background: #ef4444;
             color: #fff;
+          }
+        }
+
+        // Document Action Buttons - Smooth Loading State
+        &.document-action-btn {
+          min-width: 90px;
+          height: 32px;
+          position: relative;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          overflow: hidden;
+
+          // Ensure consistent spacing and alignment
+          .document-action-icon,
+          .document-action-spinner {
+            width: 14px;
+            height: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin: 0;
+          }
+
+          .document-action-icon {
+            font-size: 0.8rem;
+            line-height: 1;
+          }
+
+          .document-action-spinner {
+            border-width: 0.12em;
+            animation: spinner-border 0.75s linear infinite;
+          }
+
+          .document-action-text {
+            display: inline-block;
+            white-space: nowrap;
+            transition: opacity 0.2s ease;
+            margin-left: 0;
+          }
+
+          // Loading state
+          &.loading {
+            cursor: wait;
+            opacity: 0.85;
+            
+            .document-action-text {
+              opacity: 0.9;
+            }
+
+            .document-action-spinner {
+              opacity: 1;
+            }
+
+            &:hover {
+              transform: none;
+              box-shadow: none;
+            }
+          }
+
+          // Disabled state
+          &:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+          }
+
+          // Hover state (only when not loading)
+          &:hover:not(.loading):not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+          }
+
+          // Active state
+          &:active:not(.loading):not(:disabled) {
+            transform: translateY(0);
           }
         }
       }

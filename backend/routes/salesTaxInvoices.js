@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const multer = require('multer');
+const puppeteer = require('puppeteer');
+const path = require('path');
+const fs = require('fs');
 const { calculateAndUpdateDeliveredData } = require('./databaseDashboard');
 const {
   uploadFile: uploadToBunny,
@@ -1070,8 +1073,849 @@ router.get('/customer-po/:po_number', async (req, res) => {
   }
 });
 
+// Function to generate HTML for Sales Tax Invoice PDF
+function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
+  const formatCurrency = (amount) => {
+    const numericAmount = Number(
+      typeof amount === "string" ? amount.replace(/,/g, "") : amount
+    );
+    const safeAmount = Number.isFinite(numericAmount) ? numericAmount : 0;
+    return `AED ${safeAmount.toLocaleString("en-AE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  const formatNumber = (num) => {
+    const numericAmount = Number(
+      typeof num === "string" ? num.replace(/,/g, "") : num
+    );
+    const safeAmount = Number.isFinite(numericAmount) ? numericAmount : 0;
+    return safeAmount.toLocaleString("en-AE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  // Convert number to words
+  function numberToWords(num) {
+    const ones = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+    const teens = ['ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+    const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+    const thousands = ['', 'thousand', 'million', 'billion', 'trillion'];
+
+    function convertHundreds(n) {
+      let result = '';
+      if (n > 99) {
+        result += ones[Math.floor(n / 100)] + ' hundred';
+        n %= 100;
+        if (n > 0) result += ' ';
+      }
+      if (n > 19) {
+        result += tens[Math.floor(n / 10)];
+        n %= 10;
+        if (n > 0) result += ' ' + ones[n];
+      } else if (n > 9) {
+        result += teens[n - 10];
+      } else if (n > 0) {
+        result += ones[n];
+      }
+      return result;
+    }
+
+    if (num === 0) return 'zero';
+    if (num < 0) return 'minus ' + numberToWords(Math.abs(num));
+
+    let result = '';
+    let thousandIndex = 0;
+
+    while (num > 0) {
+      if (num % 1000 !== 0) {
+        result = convertHundreds(num % 1000) + (thousandIndex > 0 ? ' ' + thousands[thousandIndex] + ' ' : '') + result;
+      }
+      num = Math.floor(num / 1000);
+      thousandIndex++;
+    }
+
+    return result.trim();
+  }
+
+  // Convert amount to words format
+  const convertAmountToWords = (amount) => {
+    const wholePart = Math.floor(amount);
+    const decimalPart = Math.floor((amount % 1) * 100);
+    const wholePartWords = numberToWords(wholePart);
+    const capitalizedWords = wholePartWords.charAt(0).toUpperCase() + wholePartWords.slice(1);
+    const decimalPartStr = decimalPart.toString().padStart(2, '0');
+    return `AED ${capitalizedWords} and ${decimalPartStr}/100 Only`;
+  };
+
+  // Static seller info
+  const sellerInfo = {
+    company_name: "ALL TECH FOR HEAVY EQUIPMENT SPARE PARTS TRADING",
+    address: "AL MA'MORAH, KHALIFA INDUSTRIAL ZONE 8 KEZAD, OFFICE IU-65",
+    po_box: "P.O BOX 9026 ABU DHABI, UNITED ARAB EMIRATES",
+    trn_number: "100477132300003",
+    phone: "+971 50 621 3247",
+    email: "Info@alltech-defence.ae"
+  };
+
+  // Bank account details
+  const bankDetails = {
+    account_name: "ALL TECH FOR HEAVY EQUIPMENT SPARE PARTS",
+    account_number: "12025265820001",
+    iban: "AE940030012000000000000",
+    swift_code: "ADCBAEAAXXX",
+    bank_name: "ABU DHABI COMMERCIAL BANK PJSC, KHALIFA CITY BRANCH, ABU DHABI - UNITED ARAB EMIRATES"
+  };
+
+  // Authorized signature
+  const authorizedSignature = {
+    name: "KHALED SALEH ABDULLA ALHAMMADI"
+  };
+
+  // Calculate totals
+  const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.total_amount) || 0), 0);
+  const claimPercentage = invoice.claim_percentage || 100;
+  const claimAmount = subtotal * (claimPercentage / 100);
+  const vatAmount = claimAmount * 0.05;
+  const grossTotal = claimAmount + vatAmount;
+
+  // Format invoice date
+  const formatDate = (dateString) => {
+    if (!dateString) return "";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Format PO date
+  const formatPODate = (dateString) => {
+    if (!dateString) return "";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Generate items table rows
+  const itemsRows = items
+    .map((item) => {
+      return `
+        <tr>
+          <td>${item.quantity || ""}</td>
+          <td>${item.part_no || ""}</td>
+          <td>${item.material_no || ""}</td>
+          <td>${item.description || ""}</td>
+          <td>${formatCurrency(item.unit_price || 0)}</td>
+          <td>${formatCurrency(item.total_amount || 0)}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Tax Invoice - ${invoice.invoice_number}</title>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          
+          body {
+            font-family: 'Segoe UI', 'Arial', 'Helvetica', sans-serif;
+            color: #1a1a1a;
+            background: #fff;
+            padding: 25px;
+            font-size: 14px;
+            line-height: 1.5;
+          }
+          
+          .sales-tax-invoice {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #fff;
+          }
+          
+          /* Top Header with Logo and Title */
+          .invoice-top-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #3498db;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 50%, #ffffff 100%);
+            padding: 20px 25px;
+            margin: -25px -25px 25px -25px;
+            border-radius: 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            position: relative;
+          }
+          
+          .invoice-top-header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #3498db 0%, #2980b9 50%, #3498db 100%);
+          }
+          
+          .logo-section-left {
+            flex: 0 0 auto;
+          }
+          
+          .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          
+          .alltech-logo-image {
+            max-width: 250px;
+            max-height: 150px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            display: block;
+          }
+          
+          .invoice-title-center {
+            flex: 1;
+            text-align: center;
+          }
+          
+          .tax-invoice-title {
+            font-size: 32px;
+            font-weight: 800;
+            color: #2c3e50;
+            margin: 0;
+            letter-spacing: 3px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            position: relative;
+          }
+          
+          /* Invoice Header */
+          .invoice-header {
+            margin-bottom: 22px;
+            padding: 20px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            position: relative;
+            overflow: hidden;
+          }
+          
+          .invoice-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, #3498db 0%, #2980b9 100%);
+          }
+          
+          .seller-info h4,
+          .invoice-details h4 {
+            color: #2c3e50;
+            font-weight: 700;
+            font-size: 15px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            padding-bottom: 8px;
+            border-bottom: 3px solid #3498db;
+            display: inline-block;
+            letter-spacing: 0.5px;
+            position: relative;
+          }
+          
+          .seller-info h4::after,
+          .invoice-details h4::after {
+            content: '';
+            position: absolute;
+            bottom: -3px;
+            left: 0;
+            width: 30px;
+            height: 3px;
+            background: #2980b9;
+          }
+          
+          .company-details {
+            font-size: 12.5px;
+            line-height: 1.8;
+            color: #34495e;
+            padding-left: 8px;
+          }
+          
+          .company-details strong {
+            color: #2c3e50;
+            font-weight: 700;
+          }
+          
+          .form-group {
+            margin-bottom: 8px;
+          }
+          
+          .form-group label {
+            font-weight: 600;
+            color: #34495e;
+            margin-bottom: 5px;
+            font-size: 12px;
+            display: block;
+            line-height: 1.6;
+          }
+          
+          .invoice-number-display,
+          .customer-name-display,
+          .po-number-display {
+            padding: 10px 14px;
+            font-weight: 700;
+            color: #2c3e50;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 50%, #ffffff 100%);
+            border: 2px solid #3498db;
+            border-radius: 6px;
+            font-size: 13.5px;
+            min-height: 40px;
+            line-height: 1.5;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(52, 152, 219, 0.1);
+            letter-spacing: 0.3px;
+          }
+          
+          /* Customer Section */
+          .customer-section {
+            margin-bottom: 22px;
+            padding: 20px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+          }
+          
+          .customer-info h4,
+          .po-details h4 {
+            color: #2c3e50;
+            font-weight: 700;
+            font-size: 15px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            padding-bottom: 8px;
+            border-bottom: 3px solid #3498db;
+            display: inline-block;
+            letter-spacing: 0.5px;
+          }
+          
+          .customer-details {
+            margin-top: 12px;
+            font-size: 12.5px;
+            line-height: 1.8;
+            color: #34495e;
+          }
+          
+          .customer-detail-row {
+            margin-bottom: 6px;
+          }
+          
+          .customer-detail-row strong {
+            color: #2c3e50;
+            font-weight: 700;
+            margin-right: 8px;
+          }
+          
+          /* Line Items Section */
+          .line-items-section {
+            margin-bottom: 22px;
+          }
+          
+          .line-items-header {
+            margin-bottom: 12px;
+          }
+          
+          .line-items-header h4 {
+            color: #2c3e50;
+            font-weight: 700;
+            font-size: 15px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+          }
+          
+          .partial-delivery-note {
+            font-size: 12px;
+            color: #666;
+            font-style: italic;
+            margin: 0;
+          }
+          
+          .table-responsive {
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+          }
+          
+          .invoice-items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0;
+            background-color: white;
+          }
+          
+          .invoice-items-table thead {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            color: white;
+          }
+          
+          .invoice-items-table thead th {
+            border: none;
+            padding: 12px 8px;
+            font-weight: 600;
+            text-align: center;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+            background: transparent;
+          }
+          
+          .invoice-items-table tbody tr:nth-child(even) {
+            background-color: #f8f9fa;
+          }
+          
+          .invoice-items-table tbody td {
+            padding: 10px 8px;
+            border: 1px solid #ddd;
+            text-align: center;
+            font-size: 11px;
+          }
+          
+          /* Financial Summary */
+          .financial-summary {
+            margin-bottom: 22px;
+            padding: 20px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+          }
+          
+          .calculations {
+            font-size: 14px;
+          }
+          
+          .calculation-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+          }
+          
+          .calculation-row:last-child {
+            border-bottom: none;
+          }
+          
+          .calculation-row.total {
+            border-top: 2px solid #28a745;
+            margin-top: 10px;
+            padding-top: 15px;
+            font-weight: 700;
+            font-size: 16px;
+            color: #28a745;
+          }
+          
+          .calculation-row label {
+            font-weight: 600;
+            color: #495057;
+          }
+          
+          .calculation-row span {
+            font-weight: 600;
+            color: #28a745;
+          }
+          
+          .calculation-row.total span {
+            color: #28a745;
+            font-size: 16px;
+          }
+          
+          /* Amount in Words */
+          .amount-in-words-section {
+            margin-bottom: 22px;
+            padding: 20px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+          }
+          
+          .amount-in-words-section h4 {
+            color: #2c3e50;
+            font-weight: 700;
+            font-size: 15px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            padding-bottom: 8px;
+            border-bottom: 3px solid #3498db;
+            display: inline-block;
+            letter-spacing: 0.5px;
+          }
+          
+          .words-box {
+            padding: 15px;
+            background: #fff;
+            border: 2px solid #007bff;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-top: 12px;
+          }
+          
+          /* Bank Details and Signature */
+          .bank-details-section {
+            margin-bottom: 22px;
+          }
+          
+          .bank-info h4,
+          .signature-section h4 {
+            color: #2c3e50;
+            font-weight: 700;
+            font-size: 15px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            padding-bottom: 8px;
+            border-bottom: 3px solid #3498db;
+            display: inline-block;
+            letter-spacing: 0.5px;
+          }
+          
+          .bank-box,
+          .signature-box {
+            padding: 15px;
+            background: #fff;
+            border: 2px solid #007bff;
+            border-radius: 6px;
+            font-size: 12.5px;
+            line-height: 1.8;
+            color: #34495e;
+            margin-top: 12px;
+          }
+          
+          .bank-box div,
+          .signature-box div {
+            margin-bottom: 8px;
+          }
+          
+          .bank-box div:last-child,
+          .signature-box div:last-child {
+            margin-bottom: 0;
+          }
+          
+          .bank-box strong,
+          .signature-box strong {
+            color: #2c3e50;
+            font-weight: 700;
+            margin-right: 8px;
+          }
+          
+          .signature-line,
+          .stamp-line {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #ddd;
+          }
+          
+          /* Footer */
+          .footer-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+          }
+          
+          .contact-info {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+          }
+          
+          .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #666;
+          }
+          
+          .contact-item i {
+            color: #3498db;
+          }
+          
+          .gradient-bar {
+            height: 3px;
+            background: linear-gradient(90deg, #3498db 0%, #2980b9 50%, #3498db 100%);
+            margin-top: 15px;
+          }
+          
+          @media print {
+            @page {
+              size: auto;
+              margin: 12mm;
+            }
+            
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            
+            body {
+              background-color: white !important;
+              padding: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="sales-tax-invoice">
+          <!-- Top Header with Logo and Title -->
+          <div class="invoice-top-header">
+            <div class="logo-section-left">
+              <div class="logo-container">
+                ${logoBase64 
+                  ? `<img src="data:image/jpeg;base64,${logoBase64}" alt="ALL TECH DEFENCE Logo" class="alltech-logo-image" />`
+                  : `<div style="width: 250px; height: 150px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; border: 1px solid #ddd; border-radius: 4px;">
+                      <span style="color: #999; font-size: 12px;">[LOGO]</span>
+                    </div>`
+                }
+              </div>
+            </div>
+            <div class="invoice-title-center">
+              <h1 class="tax-invoice-title" style="color: #2c3e50;">TAX INVOICE</h1>
+            </div>
+          </div>
+
+          <!-- Invoice Header -->
+          <div class="invoice-header">
+            <div style="display: flex; gap: 20px;">
+              <div style="flex: 1;">
+                <div class="seller-info">
+                  <h4>From</h4>
+                  <div class="company-details">
+                    <strong>${sellerInfo.company_name}</strong><br />
+                    ${sellerInfo.address}<br />
+                    ${sellerInfo.po_box}<br />
+                    <strong>TRN No.:</strong> ${sellerInfo.trn_number}<br />
+                    <strong>Tel:</strong> ${sellerInfo.phone}<br />
+                    <strong>Email:</strong> ${sellerInfo.email}
+                  </div>
+                </div>
+              </div>
+              <div style="flex: 1;">
+                <div class="invoice-details">
+                  <h4>Tax Invoice</h4>
+                  <div class="form-group">
+                    <label>Tax Invoice No:</label>
+                    <div class="invoice-number-display">${invoice.invoice_number || 'N/A'}</div>
+                  </div>
+                  <div class="form-group">
+                    <label>Invoice Date:</label>
+                    <div class="invoice-number-display" style="font-weight: normal;">${formatDate(invoice.invoice_date)}</div>
+                  </div>
+                  <div class="form-group">
+                    <label>Payment Terms:</label>
+                    <div class="invoice-number-display" style="font-weight: normal;">${invoice.payment_terms || 'N/A'}</div>
+                  </div>
+                  <div class="form-group">
+                    <label>Contract No:</label>
+                    <div class="invoice-number-display" style="font-weight: normal;">${invoice.contract_number || 'N/A'}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Customer Information -->
+          <div class="customer-section">
+            <div style="display: flex; gap: 20px;">
+              <div style="flex: 1;">
+                <div class="customer-info">
+                  <h4>Customer</h4>
+                  <div class="form-group">
+                    <label>Customer Name:</label>
+                    <div class="customer-name-display">${invoice.customer_name || 'N/A'}</div>
+                  </div>
+                  <div class="customer-details">
+                    <div class="customer-detail-row">
+                      <strong>Name:</strong> ${invoice.customer_name || 'N/A'}
+                    </div>
+                    <div class="customer-detail-row">
+                      <strong>Address:</strong> ${invoice.customer_address || 'N/A'}
+                    </div>
+                    <div class="customer-detail-row">
+                      <strong>TRN No.:</strong> ${invoice.customer_trn || 'N/A'}
+                    </div>
+                    <div class="customer-detail-row">
+                      <strong>Tel:</strong> ${invoice.customer_phone || 'N/A'}
+                    </div>
+                    <div class="customer-detail-row">
+                      <strong>Email:</strong> ${invoice.customer_email || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style="flex: 1;">
+                <div class="po-details">
+                  <h4>Purchase Order Details</h4>
+                  <div class="form-group">
+                    <label>PO No:</label>
+                    <div class="po-number-display">${invoice.customer_po_number || 'N/A'}</div>
+                  </div>
+                  <div class="form-group">
+                    <label>PO Date:</label>
+                    <div class="po-number-display" style="font-weight: normal;">${formatPODate(invoice.customer_po_date)}</div>
+                  </div>
+                  <div class="form-group">
+                    <label>Delivery Terms:</label>
+                    <div class="po-number-display" style="font-weight: normal;">${invoice.delivery_terms || 'N/A'}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Line Items Table -->
+          <div class="line-items-section">
+            <div class="line-items-header">
+              <h4>Line Items</h4>
+              ${items.length > 0 ? `<p class="partial-delivery-note">Partial delivery of (${items.length}) Line items</p>` : ''}
+            </div>
+            <div class="table-responsive">
+              <table class="invoice-items-table">
+                <thead>
+                  <tr>
+                    <th>QTY</th>
+                    <th>Part no.</th>
+                    <th>Material no.</th>
+                    <th>Description</th>
+                    <th>Unit Price (AED)</th>
+                    <th>Total Amount (AED)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsRows}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Financial Summary -->
+          <div class="financial-summary">
+            <div class="calculations">
+              <div class="calculation-row">
+                <label>SUB TOTAL (AED):</label>
+                <span>${formatCurrency(subtotal)}</span>
+              </div>
+              <div class="calculation-row">
+                <label>Amount of claim ${claimPercentage}% (AED):</label>
+                <span>${formatCurrency(claimAmount)}</span>
+              </div>
+              <div class="calculation-row">
+                <label>VAT (5%) (AED):</label>
+                <span>${formatCurrency(vatAmount)}</span>
+              </div>
+              <div class="calculation-row total">
+                <label>Gross Payable Amount (AED):</label>
+                <span>${formatCurrency(grossTotal)}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Amount in Words -->
+          <div class="amount-in-words-section">
+            <h4>Amount in Words</h4>
+            <div class="words-box">
+              ${convertAmountToWords(grossTotal)}
+            </div>
+          </div>
+
+          <!-- Bank Account Details and Signature -->
+          <div class="bank-details-section">
+            <div style="display: flex; gap: 20px;">
+              <div style="flex: 1;">
+                <div class="bank-info">
+                  <h4>Bank Account details</h4>
+                  <div class="bank-box">
+                    <div><strong>Account name:</strong> ${bankDetails.account_name}</div>
+                    <div><strong>Account No (AED):</strong> ${bankDetails.account_number}</div>
+                    <div><strong>IBAN No:</strong> ${bankDetails.iban}</div>
+                    <div><strong>Swift Code:</strong> ${bankDetails.swift_code}</div>
+                    <div><strong>Name of bank & Address:</strong> ${bankDetails.bank_name}</div>
+                  </div>
+                </div>
+              </div>
+              <div style="flex: 1;">
+                <div class="signature-section">
+                  <h4>Authorized Signature</h4>
+                  <div class="signature-box">
+                    <div><strong>NAME:</strong> ${authorizedSignature.name}</div>
+                    <div class="signature-line">Signature: _________________</div>
+                    <div class="stamp-line">Stamp: _________________</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer Contact Information -->
+          <div class="footer-section">
+            <div class="contact-info">
+              <div class="contact-item">
+                <i class="fas fa-envelope"></i>
+                <span>Info@alltech-defence.ae</span>
+              </div>
+              <div class="contact-item">
+                <i class="fas fa-box"></i>
+                <span>Po. Box: 9026, Abu Dhabi, U.A.E.</span>
+              </div>
+              <div class="contact-item">
+                <i class="fas fa-globe"></i>
+                <span>www.alltech-defence.com</span>
+              </div>
+            </div>
+            <div class="gradient-bar"></div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+}
+
 // GET /api/sales-tax-invoices/:id/pdf - Generate PDF for invoice
 router.get('/:id/pdf', async (req, res) => {
+  let browser;
   try {
     const { id } = req.params;
     
@@ -1097,15 +1941,112 @@ router.get('/:id/pdf', async (req, res) => {
       SELECT * FROM sales_tax_invoice_items WHERE invoice_id = ? ORDER BY id
     `, [id]);
     
-    // For now, return JSON data. PDF generation can be implemented later with libraries like puppeteer
-    res.json({
-      invoice: invoices[0],
-      items,
-      message: 'PDF generation endpoint - implement with puppeteer or similar library'
+    const invoice = invoices[0];
+    
+    // Read logo file and convert to base64
+    let logoBase64 = null;
+    try {
+      // Try multiple possible paths for the logo
+      const possiblePaths = [
+        path.join(__dirname, '../../frontend/src/components/SalesTaxInvoice/logo.jpeg'), // From backend/routes to root/frontend
+        path.join(__dirname, '../frontend/src/components/SalesTaxInvoice/logo.jpeg'),   // Alternative path
+        path.join(__dirname, '../../frontend/public/images/logo.jpeg'),                  // Public images folder
+        path.join(__dirname, '../frontend/public/images/logo.jpeg'),                     // Alternative public path
+        path.join(process.cwd(), 'frontend/src/components/SalesTaxInvoice/logo.jpeg'),   // From project root
+        path.join(process.cwd(), 'frontend/public/images/logo.jpeg'),                      // From project root public
+      ];
+      
+      for (const logoPath of possiblePaths) {
+        if (fs.existsSync(logoPath)) {
+          const logoBuffer = fs.readFileSync(logoPath);
+          logoBase64 = logoBuffer.toString('base64');
+          console.log(`Logo loaded from: ${logoPath}`);
+          break;
+        }
+      }
+      
+      if (!logoBase64) {
+        console.warn('Logo file not found in any of the expected locations. PDF will be generated without logo.');
+      }
+    } catch (logoError) {
+      console.warn('Error loading logo file:', logoError.message);
+      // Continue without logo
+    }
+    
+    // Generate HTML for PDF
+    const html = generateSalesInvoiceHTML(invoice, items, logoBase64);
+    
+    // Launch browser
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
+    
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    
+    // Generate PDF
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      preferCSSPageSize: false,
+      margin: {
+        top: '12mm',
+        right: '12mm',
+        bottom: '12mm',
+        left: '12mm'
+      }
+    });
+    
+    // Close browser before sending response
+    await browser.close();
+    browser = null;
+    
+    // Validate PDF buffer
+    if (!pdf || pdf.length === 0) {
+      throw new Error('Generated PDF is empty');
+    }
+    
+    // Ensure PDF is a proper Buffer
+    const pdfBuffer = Buffer.isBuffer(pdf) ? pdf : Buffer.from(pdf);
+    
+    // Validate buffer size
+    if (pdfBuffer.length === 0) {
+      throw new Error('PDF buffer is empty');
+    }
+    
+    // Verify PDF magic number
+    const pdfHeader = pdfBuffer.slice(0, 4).toString('ascii');
+    if (pdfHeader !== '%PDF') {
+      throw new Error('Generated file is not a valid PDF');
+    }
+    
+    // Set response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Sales_Tax_Invoice_${invoice.invoice_number}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    
+    // Send PDF buffer
+    res.send(pdfBuffer);
+    
   } catch (error) {
     console.error('Error generating PDF:', error);
-    res.status(500).json({ message: 'Error generating PDF' });
+    console.error('Error stack:', error.stack);
+    // Make sure browser is closed even on error
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.error('Error closing browser:', closeError);
+      }
+    }
+    // Return error response
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        message: 'Error generating PDF',
+        error: error.message 
+      });
+    }
   }
 });
 

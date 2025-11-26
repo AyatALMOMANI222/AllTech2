@@ -50,7 +50,7 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
             material_no: item.material_no || '',
             description: item.description || '',
             uom: item.uom || '',
-            quantity: parseFloat(item.quantity) || 0,
+            quantity: parseFloat(item.quantity) ||0,
             supplier_unit_price: parseFloat(item.supplier_unit_price) || 0,
             total_price: parseFloat(item.total_price) || 0
           }))
@@ -161,7 +161,7 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
             material_no: item.material_no || '',
             description: item.description || item.inventory_description || '',
             uom: item.uom || '',
-            quantity: 0, // User will enter delivered quantity
+            quantity: item.quantity , // User will enter delivered quantity
             supplier_unit_price: parseFloat(item.unit_price) || 0,
             total_price: 0
           }))
@@ -185,6 +185,7 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
       }));
     }
   };
+
 
   const handleItemChange = (index, field, value) => {
     const newItems = [...formData.items];
@@ -745,6 +746,7 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
                                   onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
                                   className="form-control table-input"
                                   min="0"
+                                  max={item.quantity}
                                   step="0.01"
                                 />
                               </td>

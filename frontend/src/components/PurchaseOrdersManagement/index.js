@@ -817,31 +817,43 @@ const documentFileInputRef = React.useRef(null);
     }, 100);
   };
 
-  const downloadInvoice = () => {
-    if (!invoiceModalBodyRef.current) return;
-    const invoiceNode =
-      invoiceModalBodyRef.current.querySelector(".sales-tax-invoice");
-    if (!invoiceNode) return;
+  const downloadInvoice = async () => {
+    if (!viewInvoiceId) {
+      alert("No invoice selected");
+      return;
+    }
 
-    const styles = Array.from(
-      document.querySelectorAll('link[rel="stylesheet"], style')
-    )
-      .map((node) => node.outerHTML)
-      .join("\n");
+    try {
+      const response = await fetch(`${API_BASE_URL}/sales-tax-invoices/${viewInvoiceId}/pdf`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    const html = `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>${styles}<title>Invoice</title><style>html,body{background:#fff !important;}</style></head><body>${invoiceNode.outerHTML}</body></html>`;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to generate PDF' }));
+        throw new Error(errorData.message || 'Failed to generate PDF');
+      }
 
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `invoice-${viewInvoiceId || "preview"}.html`;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 0);
+      // Get the PDF blob
+      const blob = await response.blob();
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Sales_Tax_Invoice_${viewInvoiceId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error downloading PDF:", error);
+      alert(`Error generating PDF: ${error.message || "Unknown error"}`);
+    }
   };
 
   const printSupplierInvoiceOnly = () => {
@@ -890,32 +902,34 @@ const documentFileInputRef = React.useRef(null);
     }, 100);
   };
 
-  const downloadSupplierInvoice = () => {
-    if (!supplierInvoiceModalBodyRef.current) return;
-    const invoiceNode = supplierInvoiceModalBodyRef.current.querySelector(
-      ".purchase-tax-invoice"
-    );
-    if (!invoiceNode) return;
+  const downloadSupplierInvoice = async () => {
+    if (!viewSupplierInvoiceId) {
+      alert("No invoice selected");
+      return;
+    }
 
-    const styles = Array.from(
-      document.querySelectorAll('link[rel="stylesheet"], style')
-    )
-      .map((node) => node.outerHTML)
-      .join("\n");
-
-    const html = `<!doctype html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>${styles}<title>Invoice</title><style>html,body{background:#fff !important;}</style></head><body>${invoiceNode.outerHTML}</body></html>`;
-
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `purchase-invoice-${viewSupplierInvoiceId || "preview"}.html`;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 0);
+    try {
+      const response = await purchaseTaxInvoicesAPI.generatePDF(viewSupplierInvoiceId);
+      
+      // Get the PDF blob from response
+      const blob = response.data;
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Purchase_Tax_Invoice_${viewSupplierInvoiceId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error downloading PDF:", error);
+      const errorMessage = error.response?.data?.message || error.message || "Unknown error";
+      alert(`Error generating PDF: ${errorMessage}`);
+    }
   };
 
   const handleImport = async (e) => {
@@ -1090,316 +1104,44 @@ const documentFileInputRef = React.useRef(null);
     URL.revokeObjectURL(url);
   };
 
-  const handleDownloadPODetailsPDF = () => {
-    if (!selectedOrder || !selectedOrder.items || selectedOrder.items.length === 0) {
-      alert("No data to download");
+  const handleDownloadPODetailsPDF = async () => {
+    if (!selectedOrder || !selectedOrder.order || !selectedOrder.order.id) {
+      alert("No purchase order selected");
       return;
     }
 
-    // Get the customer/supplier name
-    const csName = selectedOrder.order.customer_supplier_name || "N/A";
+    try {
+      const poId = selectedOrder.order.id;
+      const response = await fetch(`${API_BASE_URL}/purchase-orders/${poId}/pdf`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    // Calculate totals
-    const totalQuantity = selectedOrder.items.reduce(
-      (sum, item) => sum + (parseFloat(item.quantity) || 0),
-      0
-    );
-    const totalAmount = selectedOrder.items.reduce(
-      (sum, item) => sum + (parseFloat(item.total_price) || 0),
-      0
-    );
-    const formattedTotalAmount = formatCurrency(totalAmount);
-    const formattedItemsHtml = selectedOrder.items
-      .map((item) => {
-        const unitPriceFormatted = formatCurrency(item.unit_price);
-        const totalPriceFormatted = formatCurrency(item.total_price);
-        const datePO = item.date_po
-          ? new Date(item.date_po).toLocaleDateString()
-          : "";
-
-        return `
-                <tr>
-                  <td>${item.serial_no || ""}</td>
-                  <td>${item.project_no || ""}</td>
-                  <td>${datePO}</td>
-                  <td>${item.part_no || ""}</td>
-                  <td>${item.material_no || ""}</td>
-                  <td>${item.description || ""}</td>
-                  <td>${item.uom || ""}</td>
-                  <td>${item.quantity || ""}</td>
-                  <td>${unitPriceFormatted}</td>
-                  <td>${totalPriceFormatted}</td>
-                  <td>${item.lead_time || ""}</td>
-                  <td>${item.comments || ""}</td>
-                </tr>
-              `;
-      })
-      .join("");
-
-    // Create HTML content for PDF
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Purchase Order - ${selectedOrder.order.po_number}</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              margin: 20px;
-              color: #333;
-            }
-            .header {
-              text-align: center;
-              margin-bottom: 30px;
-              border-bottom: 3px solid #007bff;
-              padding-bottom: 20px;
-            }
-            .header h1 {
-              margin: 0;
-              color: #007bff;
-              font-size: 28px;
-            }
-            .header h2 {
-              margin: 5px 0 0 0;
-              color: #666;
-              font-size: 18px;
-              font-weight: normal;
-            }
-            .info-section {
-              display: flex;
-              justify-content: space-between;
-              margin-bottom: 30px;
-              gap: 20px;
-            }
-            .info-box {
-              flex: 1;
-              border: 2px solid #007bff;
-              padding: 15px;
-              border-radius: 8px;
-              background-color: #f8f9fa;
-            }
-            .info-row {
-              margin-bottom: 10px;
-            }
-            .info-row:last-child {
-              margin-bottom: 0;
-            }
-            .info-label {
-              font-weight: bold;
-              color: #007bff;
-              display: inline-block;
-              min-width: 120px;
-            }
-            .info-value {
-              color: #333;
-            }
-            .items-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 30px;
-            }
-            .items-table thead {
-              background-color: #007bff;
-              color: white;
-            }
-            .items-table th {
-              padding: 12px 8px;
-              text-align: center;
-              font-weight: bold;
-              border: 1px solid #0056b3;
-              font-size: 11px;
-            }
-            .items-table td {
-              padding: 10px 8px;
-              text-align: center;
-              border: 1px solid #ddd;
-              font-size: 11px;
-            }
-            .items-table tbody tr:nth-child(even) {
-              background-color: #f8f9fa;
-            }
-            .items-table tbody tr:hover {
-              background-color: #e9ecef;
-            }
-            .totals-section {
-              margin-top: 30px;
-              display: flex;
-              justify-content: flex-end;
-            }
-            .totals-box {
-              border: 2px solid #28a745;
-              padding: 20px;
-              border-radius: 8px;
-              background-color: #f8f9fa;
-              min-width: 300px;
-            }
-            .total-row {
-              display: flex;
-              justify-content: space-between;
-              margin-bottom: 10px;
-            }
-            .total-row:last-child {
-              margin-bottom: 0;
-              padding-top: 10px;
-              border-top: 2px solid #28a745;
-              font-weight: bold;
-              font-size: 16px;
-              color: #28a745;
-            }
-            .total-label {
-              font-weight: 600;
-            }
-            .total-value {
-              font-weight: 600;
-            }
-            .footer {
-              margin-top: 40px;
-              padding-top: 20px;
-              border-top: 1px solid #ddd;
-              text-align: center;
-              color: #666;
-              font-size: 12px;
-            }
-            @media print {
-              body {
-                margin: 0;
-              }
-              .items-table {
-                page-break-inside: auto;
-              }
-              .items-table tr {
-                page-break-inside: avoid;
-                page-break-after: auto;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>Purchase Order</h1>
-            <h2>${selectedOrder.order.po_number}</h2>
-          </div>
-
-          <div class="info-section">
-            <div class="info-box">
-              <div class="info-row">
-                <span class="info-label">PO Number:</span>
-                <span class="info-value">${selectedOrder.order.po_number}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Order Type:</span>
-                <span class="info-value">${
-                  selectedOrder.order.order_type === "customer"
-                    ? "Customer PO (Sales)"
-                    : "Supplier PO (Purchase)"
-                }</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">${
-                  selectedOrder.order.order_type === "customer"
-                    ? "Customer Name"
-                    : "Supplier Name"
-                }:</span>
-                <span class="info-value" style="font-weight: 600; color: #007bff;">${csName}</span>
-              </div>
-            </div>
-            <div class="info-box">
-              <div class="info-row">
-                <span class="info-label">Total Items:</span>
-                <span class="info-value">${selectedOrder.items.length}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Status:</span>
-                <span class="info-value" style="font-weight: 600; text-transform: uppercase;">${
-                  selectedOrder.order.status
-                }</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Generated Date:</span>
-                <span class="info-value">${new Date().toLocaleDateString()}</span>
-              </div>
-            </div>
-          </div>
-
-          <table class="items-table">
-            <thead>
-              <tr>
-                <th>Serial No</th>
-                <th>Project No</th>
-                <th>Date PO</th>
-                <th>Part No</th>
-                <th>Material No</th>
-                <th>Description</th>
-                <th>UOM</th>
-                <th>Quantity</th>
-                <th>Unit Price</th>
-                <th>Total Price</th>
-                <th>Lead Time</th>
-                <th>Comments</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${formattedItemsHtml}
-            </tbody>
-          </table>
-
-          <div class="totals-section">
-            <div class="totals-box">
-              <div class="total-row">
-                <span class="total-label">Total Quantity:</span>
-                <span class="total-value">${totalQuantity.toFixed(2)}</span>
-              </div>
-              <div class="total-row">
-                <span class="total-label">Total Amount:</span>
-                <span class="total-value">${formattedTotalAmount}</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="footer">
-            <p>This is a computer-generated document. No signature is required.</p>
-            <p>Generated on ${new Date().toLocaleString()} | AllTech Business Management System</p>
-          </div>
-        </body>
-      </html>
-    `;
-
-    // Create a hidden iframe for printing
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "0";
-    document.body.appendChild(iframe);
-
-    const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
-    if (!iframeDoc) {
-      alert("Unable to create print window");
-      return;
-    }
-
-    iframeDoc.open();
-    iframeDoc.write(htmlContent);
-    iframeDoc.close();
-
-    // Wait for content to load, then print (user can save as PDF)
-    setTimeout(() => {
-      try {
-        iframe.contentWindow?.focus();
-        iframe.contentWindow?.print();
-      } catch (error) {
-        console.error("Error printing:", error);
-        alert("Error generating PDF");
-      } finally {
-        // Cleanup after a short delay to allow print dialog to open
-        setTimeout(() => {
-          document.body.removeChild(iframe);
-        }, 500);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to generate PDF' }));
+        throw new Error(errorData.message || 'Failed to generate PDF');
       }
-    }, 250);
+
+      // Get the PDF blob
+      const blob = await response.blob();
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Purchase_Order_${selectedOrder.order.po_number}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      } catch (error) {
+      console.error("Error downloading PDF:", error);
+      alert(`Error generating PDF: ${error.message || "Unknown error"}`);
+    }
   };
 
   const handleExportPODetailsToExcel = () => {
@@ -2677,7 +2419,7 @@ View Details                                </button>
                         Clear Selection
                       </button>
                       <button
-                        className="btn btn-primary"
+                        className={`btn btn-primary upload-pdfs-btn ${documentUploading ? 'uploading' : ''}`}
                         type="button"
                         onClick={handleUploadPODocuments}
                         disabled={
@@ -2688,13 +2430,13 @@ View Details                                </button>
                       >
                         {documentUploading ? (
                           <>
-                            <span className="spinner-border spinner-border-sm me-2" />
-                            Uploading...
+                            <span className="upload-spinner spinner-border spinner-border-sm me-2" />
+                            <span className="upload-text">Uploading...</span>
                           </>
                         ) : (
                           <>
-                            <i className="fas fa-cloud-upload-alt me-2"></i>
-                            Upload PDFs
+                            <i className="fas fa-cloud-upload-alt me-2 upload-icon"></i>
+                            <span className="upload-text">Upload PDFs</span>
                           </>
                         )}
                       </button>
@@ -2794,7 +2536,7 @@ View Details                                </button>
                               </div>
                               <div className="document-card__actions">
                                 <button
-                                  className="btn btn-sm btn-outline-info"
+                                  className={`btn btn-sm btn-outline-info document-action-btn ${documentDownloadingId === document.id ? 'loading' : ''}`}
                                   type="button"
                                   onClick={() => handleOpenDocument(document)}
                                   disabled={
@@ -2802,14 +2544,14 @@ View Details                                </button>
                                   }
                                 >
                                   {documentDownloadingId === document.id ? (
-                                    <span className="spinner-border spinner-border-sm" />
+                                    <span className="document-action-spinner spinner-border spinner-border-sm" />
                                   ) : (
-                                    <i className="fas fa-external-link-alt"></i>
+                                    <i className="fas fa-external-link-alt document-action-icon"></i>
                                   )}
-                                  <span>Open</span>
+                                  <span className="document-action-text">Open</span>
                                 </button>
                                 <button
-                                  className="btn btn-sm btn-outline-primary"
+                                  className={`btn btn-sm btn-outline-primary document-action-btn ${documentDownloadingId === document.id ? 'loading' : ''}`}
                                   type="button"
                                   onClick={() => handleDownloadDocument(document)}
                                   disabled={
@@ -2817,11 +2559,11 @@ View Details                                </button>
                                   }
                                 >
                                   {documentDownloadingId === document.id ? (
-                                    <span className="spinner-border spinner-border-sm" />
+                                    <span className="document-action-spinner spinner-border spinner-border-sm" />
                                   ) : (
-                                    <i className="fas fa-download"></i>
+                                    <i className="fas fa-download document-action-icon"></i>
                                   )}
-                                  <span>Download</span>
+                                  <span className="document-action-text">Download</span>
                                 </button>
                                 <button
                                   className="btn btn-sm btn-outline-danger"

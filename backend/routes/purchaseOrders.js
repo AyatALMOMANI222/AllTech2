@@ -6,6 +6,7 @@ const xlsx = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 const archiver = require('archiver');
+const puppeteer = require('puppeteer');
 const {
   uploadFile: uploadToBunny,
   deleteFile: deleteFromBunny,
@@ -204,6 +205,342 @@ async function generatePONumber(db) {
     return `${prefix}${String(Date.now() % 1000).padStart(3, '0')}`;
     }
   }
+}
+
+// Function to generate HTML for Purchase Order PDF
+function generatePOHtml(order, items) {
+  const formatCurrency = (amount) => {
+    const numericAmount = Number(
+      typeof amount === "string" ? amount.replace(/,/g, "") : amount
+    );
+    const safeAmount = Number.isFinite(numericAmount) ? numericAmount : 0;
+    return `AED ${safeAmount.toLocaleString("en-AE", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return "";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-AE", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Calculate totals
+  const totalQuantity = items.reduce(
+    (sum, item) => sum + (parseFloat(item.quantity) || 0),
+    0
+  );
+  const totalAmount = items.reduce(
+    (sum, item) => sum + (parseFloat(item.total_price) || 0),
+    0
+  );
+
+  // Generate items table rows
+  const itemsRows = items
+    .map((item) => {
+      const unitPriceFormatted = formatCurrency(item.unit_price);
+      const totalPriceFormatted = formatCurrency(item.total_price);
+      const datePO = formatDate(item.date_po);
+
+      return `
+        <tr>
+          <td>${item.serial_no || ""}</td>
+          <td>${item.project_no || ""}</td>
+          <td>${datePO}</td>
+          <td>${item.part_no || ""}</td>
+          <td>${item.material_no || ""}</td>
+          <td>${item.description || ""}</td>
+          <td>${item.uom || ""}</td>
+          <td>${item.quantity || ""}</td>
+          <td>${unitPriceFormatted}</td>
+          <td>${totalPriceFormatted}</td>
+          <td>${item.lead_time || ""}</td>
+          <td>${item.comments || ""}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const orderTypeLabel =
+    order.order_type === "customer"
+      ? "Customer PO (Sales)"
+      : "Supplier PO (Purchase)";
+  const customerSupplierLabel =
+    order.order_type === "customer" ? "Customer Name" : "Supplier Name";
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Purchase Order - ${order.po_number}</title>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 2rem;
+            color: #333;
+            background-color: #f8f9fa;
+            font-size: 14px;
+            line-height: 1.5;
+          }
+          
+          .po-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 2rem;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+          }
+          
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 20px;
+          }
+          
+          .header h1 {
+            margin: 0;
+            color: #007bff;
+            font-size: 28px;
+          }
+          
+          .header h2 {
+            margin: 5px 0 0 0;
+            color: #666;
+            font-size: 18px;
+            font-weight: normal;
+          }
+          
+          .info-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            gap: 20px;
+          }
+          
+          .info-box {
+            flex: 1;
+            border: 2px solid #007bff;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+          }
+          
+          .info-row {
+            margin-bottom: 10px;
+          }
+          
+          .info-row:last-child {
+            margin-bottom: 0;
+          }
+          
+          .info-label {
+            font-weight: bold;
+            color: #007bff;
+            display: inline-block;
+            min-width: 120px;
+          }
+          
+          .info-value {
+            color: #333;
+          }
+          
+          .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+          }
+          
+          .items-table thead {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            color: white;
+          }
+          
+          .items-table th {
+            padding: 12px 8px;
+            text-align: center;
+            font-weight: bold;
+            border: 1px solid #0056b3;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          
+          .items-table td {
+            padding: 10px 8px;
+            border: 1px solid #ddd;
+            text-align: center;
+            font-size: 10px;
+          }
+          
+          .items-table tbody tr:nth-child(even) {
+            background-color: #f8f9fa;
+          }
+          
+          .items-table tbody tr:hover {
+            background-color: #e3f2fd;
+          }
+          
+          .totals-section {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 20px;
+          }
+          
+          .totals-box {
+            border: 2px solid #28a745;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            min-width: 300px;
+          }
+          
+          .total-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 14px;
+          }
+          
+          .total-row:last-child {
+            margin-bottom: 0;
+            padding-top: 10px;
+            border-top: 2px solid #28a745;
+            font-weight: bold;
+            font-size: 16px;
+            color: #28a745;
+          }
+          
+          .total-label {
+            font-weight: 600;
+          }
+          
+          .total-value {
+            font-weight: 600;
+          }
+          
+          .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+          }
+          
+          @media print {
+            body {
+              margin: 0;
+            }
+            .items-table {
+              page-break-inside: auto;
+            }
+            .items-table tr {
+              page-break-inside: avoid;
+              page-break-after: auto;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="po-container">
+          <div class="header">
+            <h1>Purchase Order</h1>
+            <h2>${order.po_number}</h2>
+          </div>
+
+          <div class="info-section">
+            <div class="info-box">
+              <div class="info-row">
+                <span class="info-label">PO Number:</span>
+                <span class="info-value">${order.po_number}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Order Type:</span>
+                <span class="info-value">${orderTypeLabel}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">${customerSupplierLabel}:</span>
+                <span class="info-value" style="font-weight: 600; color: #007bff;">${order.customer_supplier_name || "N/A"}</span>
+              </div>
+            </div>
+            <div class="info-box">
+              <div class="info-row">
+                <span class="info-label">Total Items:</span>
+                <span class="info-value">${items.length}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Status:</span>
+                <span class="info-value" style="font-weight: 600; text-transform: uppercase;">${order.status || "N/A"}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Generated Date:</span>
+                <span class="info-value">${new Date().toLocaleDateString()}</span>
+              </div>
+            </div>
+          </div>
+
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th>Serial No</th>
+                <th>Project No</th>
+                <th>Date PO</th>
+                <th>Part No</th>
+                <th>Material No</th>
+                <th>Description</th>
+                <th>UOM</th>
+                <th>Quantity</th>
+                <th>Unit Price</th>
+                <th>Total Price</th>
+                <th>Lead Time</th>
+                <th>Comments</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsRows}
+            </tbody>
+          </table>
+
+          <div class="totals-section">
+            <div class="totals-box">
+              <div class="total-row">
+                <span class="total-label">Total Quantity:</span>
+                <span class="total-value">${totalQuantity.toFixed(2)}</span>
+              </div>
+              <div class="total-row">
+                <span class="total-label">Total Amount:</span>
+                <span class="total-value">${formatCurrency(totalAmount)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p>This is a computer-generated document. No signature is required.</p>
+            <p>Generated on ${new Date().toLocaleString()} | AllTech Business Management System</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
 }
 
 const APPROVED_PO_STATUSES = ['approved', 'partially_delivered', 'delivered_completed'];
@@ -636,6 +973,118 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching purchase order:', error);
     res.status(500).json({ message: 'Error fetching purchase order' });
+  }
+});
+
+// GET /api/purchase-orders/:id/pdf - Generate PDF for purchase order
+router.get('/:id/pdf', async (req, res) => {
+  let browser;
+  try {
+    const { id } = req.params;
+    
+    // Get purchase order details
+    const [orders] = await req.db.execute(`
+      SELECT po.*, 
+             cs.company_name as customer_supplier_name,
+             cs.address as customer_supplier_address,
+             cs.contact_person as customer_supplier_contact,
+             cs.email as customer_supplier_email,
+             cs.phone as customer_supplier_phone,
+             cs.trn_number as customer_supplier_trn,
+             u1.username as created_by_name,
+             u2.username as approved_by_name
+      FROM purchase_orders po
+      LEFT JOIN customers_suppliers cs ON po.customer_supplier_id = cs.id
+      LEFT JOIN users u1 ON po.created_by = u1.id
+      LEFT JOIN users u2 ON po.approved_by = u2.id
+      WHERE po.id = ?
+    `, [id]);
+    
+    if (orders.length === 0) {
+      return res.status(404).json({ message: 'Purchase order not found' });
+    }
+    
+    // Get purchase order items
+    const [items] = await req.db.execute(`
+      SELECT * FROM purchase_order_items WHERE po_id = ? ORDER BY id
+    `, [id]);
+    
+    const order = orders[0];
+    
+    // Generate HTML for PDF
+    const html = generatePOHtml(order, items);
+    
+    // Launch browser
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    
+    // Generate PDF
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      preferCSSPageSize: false,
+      margin: {
+        top: '12mm',
+        right: '12mm',
+        bottom: '12mm',
+        left: '12mm'
+      }
+    });
+    
+    // Close browser before sending response
+    await browser.close();
+    browser = null;
+    
+    // Validate PDF buffer
+    if (!pdf || pdf.length === 0) {
+      throw new Error('Generated PDF is empty');
+    }
+    
+    // Ensure PDF is a proper Buffer
+    const pdfBuffer = Buffer.isBuffer(pdf) ? pdf : Buffer.from(pdf);
+    
+    // Validate buffer size
+    if (pdfBuffer.length === 0) {
+      throw new Error('PDF buffer is empty');
+    }
+    
+    // Verify PDF magic number
+    const pdfHeader = pdfBuffer.slice(0, 4).toString('ascii');
+    if (pdfHeader !== '%PDF') {
+      throw new Error('Generated file is not a valid PDF');
+    }
+    
+    // Set response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Purchase_Order_${order.po_number}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    
+    // Send PDF buffer
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    console.error('Error stack:', error.stack);
+    // Make sure browser is closed even on error
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.error('Error closing browser:', closeError);
+      }
+    }
+    // Return error response
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        message: 'Error generating PDF',
+        error: error.message 
+      });
+    }
   }
 });
 
