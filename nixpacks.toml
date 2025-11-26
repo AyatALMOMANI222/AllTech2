@@ -1,0 +1,12 @@
+[phases.setup]
+nixPkgs = ['nodejs-18_x', 'glib', 'nss', 'atk', 'at-spi2-atk', 'cups', 'dbus', 'libxkbcommon', 'libxcomposite', 'libxdamage', 'libxfixes', 'libxrandr', 'libgbm', 'libasound2', 'libpangocairo-1.0-0', 'libatk1.0-0', 'libcairo-gobject2', 'libgtk-3-0', 'libgdk-pixbuf2.0-0']
+
+[phases.install]
+cmds = ['npm ci']
+
+[phases.build]
+cmds = ['npm run build']
+
+[start]
+cmd = 'cd backend && npm start'
+

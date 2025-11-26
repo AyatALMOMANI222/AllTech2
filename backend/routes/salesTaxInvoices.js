@@ -2122,10 +2122,24 @@ router.get('/:id/pdf', async (req, res) => {
     // Generate HTML for PDF
     const html = generateSalesInvoiceHTML(invoice, items, logoBase64);
     
-    // Launch browser
+    // Launch browser with args optimized for containerized environments
     browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--disable-extensions',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding'
+      ]
     });
     
     const page = await browser.newPage();
