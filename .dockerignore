@@ -7,7 +7,6 @@ npm-debug.log
 .DS_Store
 *.md
 frontend/node_modules
-frontend/build
 backend/uploads
 *.log
 

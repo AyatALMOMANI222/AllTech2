@@ -33,18 +33,28 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy package files for frontend and backend
 COPY package*.json ./
+COPY frontend/package*.json ./frontend/
 COPY backend/package*.json ./backend/
+
+# Install frontend dependencies
+RUN cd frontend && npm ci
 
 # Install backend dependencies
 RUN cd backend && npm ci
 
-# Copy application files
+# Copy all application files
 COPY . .
+
+# Build frontend (after copying all files)
+RUN cd frontend && npm run build
 
 # Expose port (Railway will set PORT env var)
 EXPOSE 3000
+
+# Set NODE_ENV to production
+ENV NODE_ENV=production
 
 # Start the backend server
 CMD ["node", "backend/server.js"]
