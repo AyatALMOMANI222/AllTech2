@@ -262,26 +262,26 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
       const item = items[i];
       const saleQuantity = parseFloat(item.quantity) || 0;
       
-      // Skip validation if part_no is missing (required field)
-      if (!item.part_no) {
+      // Skip validation if required fields are missing (project_no, part_no, description all required)
+      if (!item.part_no || !item.project_no || !item.description) {
         inventoryValidationErrors.push({
           item_index: i + 1,
           part_no: item.part_no,
           project_no: item.project_no,
           description: item.description,
-          error: 'Missing part_no (required field)'
+          error: 'Missing required fields: project_no, part_no, and description are all required for inventory matching'
         });
         continue;
       }
       
       // Check inventory availability
       // Match by project_no, part_no, and description (all three must match exactly)
-      // If multiple matches exist, use FIFO (first-in-first-out) - the earliest added record
+      // If multiple matches exist, use the row with the highest balance
       const [inventoryItems] = await connection.execute(`
         SELECT id, part_no, material_no, project_no, description, balance, quantity, sold_quantity, supplier_unit_price
         FROM inventory 
         WHERE project_no = ? AND part_no = ? AND description = ?
-        ORDER BY created_at ASC
+        ORDER BY balance DESC
         LIMIT 1
       `, [item.project_no || null, item.part_no, item.description || null]);
       
@@ -399,73 +399,48 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
         saleQuantity, item.unit_price, totalAmount
       ]);
       
-      // Update inventory - Reduce stock
+      // Update inventory - Increase sold_quantity
       // Match by project_no, part_no, and description (all three must match exactly)
-      // If multiple matches exist (same project_no, part_no, description but different unit prices),
-      // update only one record at a time according to FIFO (first-in-first-out) - the earliest added record
-      if (item.part_no) {
-        // Get matching inventory records (FIFO - oldest first)
+      // If multiple matches exist, update the row with the highest balance
+      if (item.part_no && item.project_no && item.description) {
+        // Get matching inventory records - select the one with highest balance
         // Match by project_no, part_no, and description (all three must match exactly)
         const [inventoryItems] = await connection.execute(`
           SELECT id, quantity, sold_quantity, balance, supplier_unit_price, project_no, part_no, material_no, description
           FROM inventory 
           WHERE project_no = ? AND part_no = ? AND description = ?
-          ORDER BY created_at ASC
+          ORDER BY balance DESC
           LIMIT 1
         `, [item.project_no || null, item.part_no, item.description || null]);
         
         if (inventoryItems.length > 0) {
-          // Use FIFO - update the oldest matching record first (LIMIT 1 ensures only one record)
+          // Update the inventory record with highest balance
           const inventoryItem = inventoryItems[0];
           const currentSoldQuantity = parseFloat(inventoryItem.sold_quantity) || 0;
-          const currentQuantity = parseFloat(inventoryItem.quantity) || 0;
-          const currentBalance = parseFloat(inventoryItem.balance) || 0;
-          const unitPrice = parseFloat(inventoryItem.supplier_unit_price) || 0;
           
-          // Calculate available stock - always use quantity - sold_quantity to ensure accuracy
-          // Don't rely on balance field alone as it might be out of sync
-          const calculatedBalance = currentQuantity - currentSoldQuantity;
+          // Calculate new sold_quantity
+          const newSoldQuantity = currentSoldQuantity + saleQuantity;
           
-          // Use calculated balance (quantity - sold_quantity) for consistency
-          const finalAvailableStock = calculatedBalance;
+          // Update inventory record - ONLY sold_quantity (all other fields remain unchanged)
+          await connection.execute(`
+            UPDATE inventory 
+            SET sold_quantity = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `, [
+            newSoldQuantity,
+            inventoryItem.id
+          ]);
           
-          // Check if there's enough stock before deducting to prevent negative inventory
-          if (finalAvailableStock >= saleQuantity && finalAvailableStock > 0) {
-            // Calculate new values
-            const newSoldQuantity = currentSoldQuantity + saleQuantity;
-            const newBalance = currentQuantity - newSoldQuantity;
-            // Calculate balance_amount = balance × supplier_unit_price
-            const newBalanceAmount = newBalance * unitPrice;
-            
-            // Update inventory record - sold_quantity, balance, and balance_amount
-            await connection.execute(`
-              UPDATE inventory 
-              SET sold_quantity = ?,
-                  balance = ?,
-                  balance_amount = ?,
-                  updated_at = CURRENT_TIMESTAMP
-              WHERE id = ?
-            `, [
-              newSoldQuantity,
-              newBalance,
-              newBalanceAmount,
-              inventoryItem.id
-            ]);
-            
-            console.log(`✓ Inventory updated (FIFO): project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}, sold_quantity: ${currentSoldQuantity} + ${saleQuantity} = ${newSoldQuantity}, new_balance=${newBalance}, balance_amount=${newBalanceAmount}`);
-          } else {
-            // Insufficient stock - skip this item (don't throw error, just log and continue)
-            console.log(`⚠️ Insufficient stock: Available=${finalAvailableStock}, Required=${saleQuantity}, Balance=${currentBalance}, Quantity=${currentQuantity}, Sold=${currentSoldQuantity}. Skipping inventory update for this item.`);
-            // Continue to next item without updating inventory
-          }
+          console.log(`✓ Inventory updated: project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}, sold_quantity: ${currentSoldQuantity} + ${saleQuantity} = ${newSoldQuantity}`);
         } else {
           // No matching inventory record found - skip this item (don't throw error, just log and continue)
           console.log(`⚠️ No matching inventory found for project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}. Skipping inventory update for this item.`);
           // Continue to next item without updating inventory
         }
       } else {
-        // Missing part_no - skip this item (don't throw error, just log and continue)
-        console.log(`⚠️ Missing part_no for item. Skipping inventory update for this item.`);
+        // Missing required fields (project_no, part_no, or description) - skip this item
+        console.log(`⚠️ Missing required fields (project_no, part_no, or description) for item. Skipping inventory update for this item.`);
         // Continue to next item without updating inventory
       }
     }
@@ -841,39 +816,33 @@ router.put('/:id', async (req, res) => {
     
     // Revert inventory changes from old items
     for (const oldItem of oldItems) {
-      if (oldItem.part_no) {
+      if (oldItem.part_no && oldItem.project_no && oldItem.description) {
         const oldQuantity = parseFloat(oldItem.quantity) || 0;
         
-        // Find matching inventory record (FIFO - oldest first)
+        // Find matching inventory record - select the one with highest balance
         const [inventoryItems] = await req.db.execute(`
-          SELECT id, quantity, sold_quantity, balance, supplier_unit_price
+          SELECT id, sold_quantity
           FROM inventory 
           WHERE project_no = ? AND part_no = ? AND description = ?
-          ORDER BY created_at ASC
+          ORDER BY balance DESC
           LIMIT 1
         `, [oldItem.project_no || null, oldItem.part_no, oldItem.description || null]);
         
         if (inventoryItems.length > 0) {
           const inventoryItem = inventoryItems[0];
           const currentSoldQuantity = parseFloat(inventoryItem.sold_quantity) || 0;
-          const currentQuantity = parseFloat(inventoryItem.quantity) || 0;
-          const unitPrice = parseFloat(inventoryItem.supplier_unit_price) || 0;
           
-          // Revert: reduce sold_quantity by old quantity
+          // Revert: reduce sold_quantity by old quantity (only update sold_quantity)
           const newSoldQuantity = Math.max(0, currentSoldQuantity - oldQuantity);
-          const newBalance = currentQuantity - newSoldQuantity;
-          const newBalanceAmount = newBalance * unitPrice;
           
           await req.db.execute(`
             UPDATE inventory 
             SET sold_quantity = ?,
-                balance = ?,
-                balance_amount = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-          `, [newSoldQuantity, newBalance, newBalanceAmount, inventoryItem.id]);
+          `, [newSoldQuantity, inventoryItem.id]);
           
-          console.log(`✓ Inventory reverted: project_no=${oldItem.project_no}, part_no=${oldItem.part_no}, sold_quantity: ${currentSoldQuantity} - ${oldQuantity} = ${newSoldQuantity}`);
+          console.log(`✓ Inventory reverted: project_no=${oldItem.project_no}, part_no=${oldItem.part_no}, description=${oldItem.description}, sold_quantity: ${currentSoldQuantity} - ${oldQuantity} = ${newSoldQuantity}`);
         }
       }
     }
@@ -892,59 +861,45 @@ router.put('/:id', async (req, res) => {
         item.quantity, item.unit_price, totalAmount
       ]);
       
-      // Update inventory - Reduce stock
+      // Update inventory - Increase sold_quantity
       // Match by project_no, part_no, and description (all three must match exactly)
-      // If multiple matches exist, update only one record at a time according to FIFO
-      if (item.part_no) {
+      // If multiple matches exist, update the row with the highest balance
+      if (item.part_no && item.project_no && item.description) {
         const saleQuantity = parseFloat(item.quantity) || 0;
         
-        // Get matching inventory records (FIFO - oldest first)
+        // Get matching inventory records - select the one with highest balance
         const [inventoryItems] = await req.db.execute(`
-          SELECT id, quantity, sold_quantity, balance, supplier_unit_price, project_no, part_no, material_no, description
+          SELECT id, sold_quantity
           FROM inventory 
           WHERE project_no = ? AND part_no = ? AND description = ?
-          ORDER BY created_at ASC
+          ORDER BY balance DESC
           LIMIT 1
         `, [item.project_no || null, item.part_no, item.description || null]);
         
         if (inventoryItems.length > 0) {
-          // Use FIFO - update the oldest matching record first (LIMIT 1 ensures only one record)
+          // Update the inventory record with highest balance
           const inventoryItem = inventoryItems[0];
           const currentSoldQuantity = parseFloat(inventoryItem.sold_quantity) || 0;
-          const currentQuantity = parseFloat(inventoryItem.quantity) || 0;
-          const currentBalance = parseFloat(inventoryItem.balance) || 0;
-          const unitPrice = parseFloat(inventoryItem.supplier_unit_price) || 0;
           
-          // Calculate available stock - always use quantity - sold_quantity to ensure accuracy
-          const calculatedBalance = currentQuantity - currentSoldQuantity;
-          const finalAvailableStock = calculatedBalance;
+          // Calculate new sold_quantity
+          const newSoldQuantity = currentSoldQuantity + saleQuantity;
           
-          // Check if there's enough stock before deducting to prevent negative inventory
-          if (finalAvailableStock >= saleQuantity && finalAvailableStock > 0) {
-            // Calculate new values
-            const newSoldQuantity = currentSoldQuantity + saleQuantity;
-            const newBalance = currentQuantity - newSoldQuantity;
-            const newBalanceAmount = newBalance * unitPrice;
-            
-            // Update inventory record
-            await req.db.execute(`
-              UPDATE inventory 
-              SET sold_quantity = ?,
-                  balance = ?,
-                  balance_amount = ?,
-                  updated_at = CURRENT_TIMESTAMP
-              WHERE id = ?
-            `, [newSoldQuantity, newBalance, newBalanceAmount, inventoryItem.id]);
-            
-            console.log(`✓ Inventory updated (FIFO): project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}, sold_quantity: ${currentSoldQuantity} + ${saleQuantity} = ${newSoldQuantity}`);
-          } else {
-            // Insufficient stock - skip this item
-            console.log(`⚠️ Insufficient stock: Available=${finalAvailableStock}, Required=${saleQuantity}. Skipping inventory update for this item.`);
-          }
+          // Update inventory record - ONLY sold_quantity (all other fields remain unchanged)
+          await req.db.execute(`
+            UPDATE inventory 
+            SET sold_quantity = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `, [newSoldQuantity, inventoryItem.id]);
+          
+          console.log(`✓ Inventory updated: project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}, sold_quantity: ${currentSoldQuantity} + ${saleQuantity} = ${newSoldQuantity}`);
         } else {
           // No matching inventory record found - skip this item
           console.log(`⚠️ No matching inventory found for project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}. Skipping inventory update for this item.`);
         }
+      } else {
+        // Missing required fields (project_no, part_no, or description) - skip this item
+        console.log(`⚠️ Missing required fields (project_no, part_no, or description) for item. Skipping inventory update for this item.`);
       }
     }
     
