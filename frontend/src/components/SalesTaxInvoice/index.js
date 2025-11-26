@@ -20,6 +20,7 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerPONumbers, setCustomerPONumbers] = useState([]);
+  const [totalClaimPercentage, setTotalClaimPercentage] = useState(0); // Total claim from previous invoices
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -79,6 +80,7 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
             project_no: item.project_no || '',
             description: item.description || '',
             quantity: item.quantity || 0,
+            max_quantity: item.quantity || 0, // For existing invoices, use current quantity as max
             unit_price: item.unit_price || 0,
             total_amount: (item.quantity || 0) * (item.unit_price || 0)
           }))
@@ -90,6 +92,18 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
             const customerData = custRes.data.record || custRes.data;
             setSelectedCustomer(customerData);
           } catch (_) {}
+        }
+        
+        // Load total claim percentage from previous invoices (excluding current invoice)
+        if (inv.customer_po_number) {
+          try {
+            const params = { exclude_invoice_id: invoiceId };
+            const poResponse = await salesTaxInvoicesAPI.getCustomerPOItems(inv.customer_po_number, params);
+            const totalClaim = parseFloat(poResponse.data.total_claim_percentage || 0);
+            setTotalClaimPercentage(totalClaim);
+          } catch (_) {
+            setTotalClaimPercentage(0);
+          }
         }
       } catch (err) {
         console.error('Error loading invoice:', err);
@@ -169,8 +183,10 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
           ...prev,
           customer_po_number: '',
           customer_po_date: '',
+          claim_percentage: 100,
           items: []
         }));
+        setTotalClaimPercentage(0);
         setError('');
       } catch (error) {
         console.error('Error fetching customer details:', error);
@@ -200,8 +216,10 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
         ...prev,
         customer_po_number: '',
         customer_po_date: '',
+        claim_percentage: 100,
         items: []
       }));
+      setTotalClaimPercentage(0);
     }
   };
 
@@ -214,18 +232,38 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
 
     if (poNumber) {
       try {
-        const response = await salesTaxInvoicesAPI.getCustomerPOItems(poNumber);
+        // Pass current invoice ID if editing to exclude it from already invoiced calculation
+        const params = invoiceId ? { exclude_invoice_id: invoiceId } : {};
+        const response = await salesTaxInvoicesAPI.getCustomerPOItems(poNumber, params);
+        const items = response.data.items || response.data || [];
+        const totalClaim = parseFloat(response.data.total_claim_percentage || 0);
+        
+        setTotalClaimPercentage(totalClaim);
+        
+        // Set default Amount of Claim (%) = 100 - previous claims
+        // If no previous claims, default = 100
+        const defaultClaimPercentage = Math.max(0, 100 - totalClaim);
+        
+        // Use remaining_quantity (Total Quantity – Already Invoiced Quantity) if available
         setFormData(prev => ({
           ...prev,
-          items: response.data.map(item => ({
-            part_no: item.part_no || '',
-            material_no: item.material_no || '',
-            project_no: item.project_no || '',
-            description: item.description || '',
-            quantity: item.quantity || 0,
-            unit_price: item.unit_price || 0,
-            total_amount: (item.quantity || 0) * (item.unit_price || 0)
-          }))
+          claim_percentage: invoiceId ? prev.claim_percentage : defaultClaimPercentage,
+          items: items.map(item => {
+            // Use remaining_quantity if available, otherwise use full quantity
+            const remainingQty = parseFloat((item.remaining_quantity ?? item.quantity) || 0);
+            const unitPrice = parseFloat(item.unit_price) || 0;
+            const totalAmount = remainingQty * unitPrice;
+            return {
+              part_no: item.part_no || '',
+              material_no: item.material_no || '',
+              project_no: item.project_no || '',
+              description: item.description || '',
+              quantity: remainingQty,
+              max_quantity: remainingQty, // Store the maximum allowed quantity (remaining from PO)
+              unit_price: unitPrice,
+              total_amount: totalAmount
+            };
+          })
         }));
       } catch (error) {
         console.error('Error fetching customer PO items:', error);
@@ -254,10 +292,21 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
 
   const handleItemChange = (index, field, value) => {
     const newItems = [...formData.items];
-    newItems[index][field] = value;
+    
+    // If changing quantity, validate it doesn't exceed max_quantity
+    if (field === 'quantity') {
+      const maxQty = parseFloat(newItems[index].max_quantity) || parseFloat(newItems[index].quantity) || 0;
+      const newQty = parseFloat(value) || 0;
+      // Restrict to max_quantity if it exists, otherwise use current quantity as max
+      newItems[index].quantity = Math.min(newQty, maxQty);
+    } else {
+      newItems[index][field] = value;
+    }
     
     if (field === 'quantity' || field === 'unit_price') {
-      newItems[index].total_amount = newItems[index].quantity * newItems[index].unit_price;
+      const quantity = parseFloat(newItems[index].quantity) || 0;
+      const unitPrice = parseFloat(newItems[index].unit_price) || 0;
+      newItems[index].total_amount = quantity * unitPrice;
     }
     
     setFormData(prev => ({
@@ -275,6 +324,7 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
         project_no: '',
         description: '',
         quantity: 0,
+        max_quantity: undefined, // Manually added items have no max restriction
         unit_price: 0,
         total_amount: 0
       }]
@@ -391,6 +441,7 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
         claim_percentage: 100,
         items: []
       });
+      setTotalClaimPercentage(0);
     } catch (error) {
       let errorMessage = 'Unable to create invoice. ';
       if (error.response?.status === 400) {
@@ -688,6 +739,7 @@ const SalesTaxInvoice = ({ invoiceId = null }) => {
                                   onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
                                   className="form-control"
                                   min="0"
+                                  max={item.max_quantity || item.quantity}
                                   step="0.01"
                                   readOnly={!!invoiceId}
                                 />

@@ -617,18 +617,30 @@
     }
 
     .btn-close-modal {
-      background: none;
+      background: rgba(255, 255, 255, 0.9) !important; // Light background for contrast
       border: none;
       font-size: 1.25rem;
-      color: #6c757d;
+      color: #1f2937 !important; // Dark gray - visible on all backgrounds
       cursor: pointer;
       padding: 0.5rem;
       line-height: 1;
-      opacity: 0.7;
+      opacity: 1 !important; // Full opacity for visibility
       transition: all 0.2s ease;
       width: 2.5rem;
       height: 2.5rem;
       display: flex;
+      border-radius: 4px;
+      
+      &:hover {
+        color: #dc2626 !important; // Red on hover
+        background: rgba(220, 38, 38, 0.1) !important;
+      }
+      
+      // Ensure icons are visible
+      i.fas,
+      i.fa-times {
+        color: #1f2937 !important;
+      }
       align-items: center;
       justify-content: center;
       border-radius: 50%;

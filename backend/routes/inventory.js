@@ -352,6 +352,58 @@ router.post('/import', (req, res, next) => {
       const workbook = xlsx.readFile(filePath);
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
+      
+      // Validate required columns before processing (case-insensitive)
+      // Required columns: serial_no, project_no, date_po, part_no, material_no, description, uom, quantity, supplier_unit_price, manufacturer_part_number, cost_price
+      const requiredColumns = [
+        'serial_no',
+        'project_no',
+        'date_po',
+        'part_no',
+        'material_no',
+        'description',
+        'uom',
+        'quantity',
+        'supplier_unit_price',
+        'manufacturer_part_number',
+        'cost_price'
+      ];
+      
+      // Get headers from worksheet (first row)
+      const range = xlsx.utils.decode_range(worksheet['!ref'] || 'A1');
+      const headers = [];
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellAddress = xlsx.utils.encode_cell({ r: 0, c: col });
+        const cell = worksheet[cellAddress];
+        if (cell && cell.v !== null && cell.v !== undefined) {
+          headers.push(String(cell.v).trim());
+        }
+      }
+      
+      // Normalize headers (lowercase, replace spaces with underscores, remove special chars)
+      const normalizedHeaders = headers.map(h => 
+        h.toLowerCase().replace(/\s+/g, '_').replace(/[^\w_]/g, '')
+      );
+      
+      // Check for missing columns
+      const missingColumns = requiredColumns.filter(reqCol => 
+        !normalizedHeaders.includes(reqCol.toLowerCase())
+      );
+      
+      if (missingColumns.length > 0) {
+        // Clean up file
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+        return res.status(400).json({
+          message: 'Missing required columns in Excel file',
+          missing_columns: missingColumns,
+          required_columns: requiredColumns,
+          found_columns: normalizedHeaders
+        });
+      }
+      
+      // Read data after validation
       data = xlsx.utils.sheet_to_json(worksheet);
     }
     

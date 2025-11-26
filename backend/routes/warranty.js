@@ -602,6 +602,61 @@ router.post('/import', upload.single('file'), async (req, res) => {
     const workbook = xlsx.readFile(filePath);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
+
+    // Validate required columns before processing (case-insensitive)
+    // Required columns (from user requirement):
+    // Sr. No, Part No, MATERIAL NO, Description, PROJECT NO, PART COST,
+    // Serial Number, Warranty Start Date, Warranty End Date, Remarks
+    const requiredColumns = [
+      'sr_no',
+      'part_no',
+      'material_no',
+      'description',
+      'project_no',
+      'part_cost',
+      'serial_number',
+      'warranty_start_date',
+      'warranty_end_date',
+      'remarks'
+    ];
+
+    // Extract header row (first row) and normalize
+    const headerRows = xlsx.utils.sheet_to_json(worksheet, { header: 1, defval: null }) || [];
+    const headerRow = headerRows[0] || [];
+
+    const normalizedHeaders = headerRow
+      .filter((h) => h !== null && h !== undefined && String(h).trim() !== '')
+      .map((h) =>
+        String(h)
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '_')
+          .replace(/[^\w_]/g, '')
+      );
+
+    const missingColumns = requiredColumns.filter(
+      (col) => !normalizedHeaders.includes(col)
+    );
+
+    if (missingColumns.length > 0) {
+      // Clean up uploaded file before returning error
+      try {
+        if (filePath && fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (cleanupError) {
+        console.error('Error cleaning up file after missing columns:', cleanupError);
+      }
+
+      return res.status(400).json({
+        message:
+          'Missing required columns in Excel file. Please ensure all required columns are present (case-insensitive).',
+        missing_columns: missingColumns,
+        required_columns: requiredColumns,
+        found_columns: normalizedHeaders
+      });
+    }
+
     // Use raw: true to get raw values (Excel serial numbers for dates)
     // This gives us full control over date conversion without timezone issues
     const data = xlsx.utils.sheet_to_json(worksheet, { raw: true, defval: null });

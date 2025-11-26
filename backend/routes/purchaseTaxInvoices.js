@@ -4,6 +4,7 @@ const { authenticateToken } = require('../middleware/auth');
 const { calculateAndUpdateDeliveredData } = require('./databaseDashboard');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const puppeteer = require('puppeteer');
 const {
   uploadFile: uploadToBunny,
@@ -634,19 +635,82 @@ router.get('/po/:po_number', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: 'Purchase order not found' });
     }
     
-    // Get PO items
-    const [items] = await req.db.execute(`
+    // Get exclude_invoice_id from query params (for editing existing invoice)
+    const excludeInvoiceId = req.query.exclude_invoice_id ? parseInt(req.query.exclude_invoice_id) : null;
+    
+    // Get PO items with already invoiced quantities
+    // Calculate sum of quantities from all purchase tax invoices for this PO (excluding current invoice if editing)
+    let subqueryCondition = 'pti.po_number = ?';
+    const subqueryParams = [po_number];
+    
+    if (excludeInvoiceId) {
+      subqueryCondition += ' AND pti.id != ?';
+      subqueryParams.push(excludeInvoiceId);
+    }
+    
+    const itemsQuery = `
       SELECT 
         poi.*,
-        poi.description AS inventory_description
+        poi.description AS inventory_description,
+        COALESCE((
+          SELECT SUM(ptii.quantity)
+          FROM purchase_tax_invoice_items ptii
+          INNER JOIN purchase_tax_invoices pti ON ptii.invoice_id = pti.id
+          WHERE ${subqueryCondition}
+            AND ptii.part_no = poi.part_no
+            AND (ptii.material_no = poi.material_no OR (ptii.material_no IS NULL AND poi.material_no IS NULL))
+        ), 0) as already_invoiced_quantity
       FROM purchase_order_items poi
       WHERE poi.po_id = ?
       ORDER BY poi.id
-    `, [pos[0].id]);
+    `;
+    
+    const queryParams = [...subqueryParams, pos[0].id];
+    const [items] = await req.db.execute(itemsQuery, queryParams);
+    
+    // Calculate remaining quantity for each item
+    // IMPORTANT: remaining_quantity = total_quantity - already_invoiced_quantity
+    // Do NOT return 0 unless the real remaining quantity is actually 0
+    const itemsWithRemaining = items.map(item => {
+      const totalQuantity = parseFloat(item.quantity) || 0;
+      const alreadyInvoiced = parseFloat(item.already_invoiced_quantity) || 0;
+      
+      // Calculate remaining quantity: total - already invoiced
+      // Ensure it's never negative, but allow 0 if that's the actual remaining
+      const remainingQuantity = Math.max(0, totalQuantity - alreadyInvoiced);
+      
+      // Debug logging to verify calculation
+      if (totalQuantity > 0) {
+        console.log(`PO Item: part_no=${item.part_no}, total=${totalQuantity}, already_invoiced=${alreadyInvoiced}, remaining=${remainingQuantity}`);
+      }
+      
+      return {
+        ...item,
+        already_invoiced_quantity: alreadyInvoiced,
+        remaining_quantity: remainingQuantity
+      };
+    });
+    
+    // Calculate total claim percentage from previous invoices for this PO (excluding current invoice if editing)
+    let totalClaimQuery = `
+      SELECT COALESCE(SUM(pti.claim_percentage), 0) as total_claim_percentage
+      FROM purchase_tax_invoices pti
+      WHERE pti.po_number = ?
+    `;
+    const totalClaimParams = [po_number];
+    
+    if (excludeInvoiceId) {
+      totalClaimQuery += ' AND pti.id != ?';
+      totalClaimParams.push(excludeInvoiceId);
+    }
+    
+    const [totalClaimResult] = await req.db.execute(totalClaimQuery, totalClaimParams);
+    const totalClaimPercentage = parseFloat(totalClaimResult[0]?.total_claim_percentage || 0);
     
     res.json({
       po: pos[0],
-      items
+      items: itemsWithRemaining,
+      total_claim_percentage: totalClaimPercentage
     });
   } catch (error) {
     console.error('Error fetching PO items:', error);
@@ -680,17 +744,63 @@ router.get('/:id/pdf', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: 'Purchase tax invoice not found' });
     }
     
-    // Get invoice items
+    // Get invoice items - IMPORTANT: Fetch data exactly as stored, do NOT modify or recalculate
+    // Use explicit column list to ensure all data is fetched correctly
     const [items] = await req.db.execute(`
-      SELECT * FROM purchase_tax_invoice_items 
+      SELECT 
+        id,
+        invoice_id,
+        serial_no,
+        project_no,
+        part_no,
+        material_no,
+        description,
+        uom,
+        quantity,
+        supplier_unit_price,
+        total_price
+      FROM purchase_tax_invoice_items 
       WHERE invoice_id = ? 
-      ORDER BY serial_no
+      ORDER BY id ASC
     `, [id]);
     
     const invoice = invoices[0];
     
+    // Read logo file and convert to base64
+    let logoBase64 = null;
+    try {
+      // Try multiple possible paths for the logo
+      const possiblePaths = [
+        path.join(__dirname, '../../frontend/src/components/PurchaseTaxInvoice/logo.jpeg'),
+        path.join(__dirname, '../frontend/src/components/PurchaseTaxInvoice/logo.jpeg'),
+        path.join(__dirname, '../../frontend/src/components/SalesTaxInvoice/logo.jpeg'),
+        path.join(__dirname, '../frontend/src/components/SalesTaxInvoice/logo.jpeg'),
+        path.join(__dirname, '../../frontend/public/images/logo.jpeg'),
+        path.join(__dirname, '../frontend/public/images/logo.jpeg'),
+        path.join(process.cwd(), 'frontend/src/components/PurchaseTaxInvoice/logo.jpeg'),
+        path.join(process.cwd(), 'frontend/src/components/SalesTaxInvoice/logo.jpeg'),
+        path.join(process.cwd(), 'frontend/public/images/logo.jpeg'),
+      ];
+      
+      for (const logoPath of possiblePaths) {
+        if (fs.existsSync(logoPath)) {
+          const logoBuffer = fs.readFileSync(logoPath);
+          logoBase64 = logoBuffer.toString('base64');
+          console.log(`Purchase Tax Invoice: Logo loaded from: ${logoPath}`);
+          break;
+        }
+      }
+      
+      if (!logoBase64) {
+        console.warn('Purchase Tax Invoice: Logo file not found at expected paths.');
+      }
+    } catch (logoError) {
+      console.warn('Purchase Tax Invoice: Error loading logo file:', logoError.message);
+      // Continue without logo
+    }
+    
     // Generate HTML for PDF
-    const html = generateInvoiceHTML(invoice, items);
+    const html = generateInvoiceHTML(invoice, items, logoBase64);
     
     // Launch browser
     browser = await puppeteer.launch({
@@ -982,7 +1092,8 @@ router.delete('/documents/:document_id', authenticateToken, async (req, res) => 
 });
 
 // Helper function to generate HTML for PDF - Matching frontend design exactly
-function generateInvoiceHTML(invoice, items) {
+// IMPORTANT: This function only displays data as-is, it does NOT modify any invoice data
+function generateInvoiceHTML(invoice, items, logoBase64 = null) {
   const formatCurrency = (amount) => {
     const numericAmount = Number(
       typeof amount === "string" ? amount.replace(/,/g, "") : amount
@@ -1032,6 +1143,38 @@ function generateInvoiceHTML(invoice, items) {
         /* Invoice Header Section - Matching frontend design */
         .invoice-header-section {
           margin-bottom: 2rem;
+        }
+        
+        /* Top Header with Logo */
+        .invoice-top-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 25px;
+          padding-bottom: 20px;
+          border-bottom: 3px solid #007bff;
+          background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 50%, #ffffff 100%);
+          padding: 20px 25px;
+          margin: -25px -25px 25px -25px;
+        }
+        
+        .logo-section-left {
+          flex: 0 0 auto;
+        }
+        
+        .logo-container {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        
+        .alltech-logo-image {
+          max-width: 250px;
+          max-height: 150px;
+          width: auto;
+          height: auto;
+          object-fit: contain;
+          display: block;
         }
         
         .header-row {
@@ -1314,6 +1457,20 @@ function generateInvoiceHTML(invoice, items) {
     </head>
     <body>
       <div class="invoice-container">
+        <!-- Top Header with Logo -->
+        <div class="invoice-top-header">
+          <div class="logo-section-left">
+            <div class="logo-container">
+              ${logoBase64 
+                ? `<img src="data:image/jpeg;base64,${logoBase64}" alt="ALL TECH DEFENCE Logo" class="alltech-logo-image" />`
+                : `<div style="width: 250px; height: 150px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; border: 1px solid #ddd; border-radius: 4px;">
+                    <span style="color: #999; font-size: 12px;">[LOGO]</span>
+                  </div>`
+              }
+            </div>
+          </div>
+        </div>
+        
         <!-- Invoice Header Section -->
         <div class="invoice-header-section">
           <div class="header-row">
@@ -1370,18 +1527,30 @@ function generateInvoiceHTML(invoice, items) {
             </tr>
           </thead>
           <tbody>
-            ${items.map(item => `
+            ${(items || []).map(item => {
+              // IMPORTANT: Use data exactly as stored, do NOT modify or recalculate
+              const serialNo = item.serial_no != null ? String(item.serial_no) : '';
+              const partNo = item.part_no != null ? String(item.part_no) : '';
+              const materialNo = item.material_no != null ? String(item.material_no) : '';
+              const description = item.description != null ? String(item.description) : '';
+              const uom = item.uom != null ? String(item.uom) : '';
+              const quantity = item.quantity != null ? Number(item.quantity) : 0;
+              const supplierUnitPrice = item.supplier_unit_price != null ? Number(item.supplier_unit_price) : 0;
+              const totalPrice = item.total_price != null ? Number(item.total_price) : 0;
+              
+              return `
               <tr>
-                    <td>${item.serial_no || ''}</td>
-                <td>${item.part_no || ''}</td>
-                <td>${item.material_no || ''}</td>
-                <td>${item.description || ''}</td>
-                <td>${item.uom || ''}</td>
-                <td>${Number(item.quantity || 0).toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                <td>${formatCurrency(item.supplier_unit_price)}</td>
-                <td>${formatCurrency(item.total_price)}</td>
+                <td>${serialNo}</td>
+                <td>${partNo}</td>
+                <td>${materialNo}</td>
+                <td>${description}</td>
+                <td>${uom}</td>
+                <td>${quantity.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td>${formatCurrency(supplierUnitPrice)}</td>
+                <td>${formatCurrency(totalPrice)}</td>
               </tr>
-            `).join('')}
+            `;
+            }).join('')}
           </tbody>
         </table>
           </div>

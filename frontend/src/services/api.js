@@ -99,7 +99,7 @@ export const salesTaxInvoicesAPI = {
   update: (id, data) => api.put(`/sales-tax-invoices/${id}`, data),
   delete: (id) => api.delete(`/sales-tax-invoices/${id}`),
   getCustomerPONumbers: (customerId) => api.get(`/sales-tax-invoices/customer/${customerId}/po-numbers`),
-  getCustomerPOItems: (poNumber) => api.get(`/sales-tax-invoices/customer-po/${poNumber}`),
+  getCustomerPOItems: (poNumber, params = {}) => api.get(`/sales-tax-invoices/customer-po/${poNumber}`, { params }),
   getCustomerAutoData: (customerId) => api.get(`/sales-tax-invoices/customer/${customerId}/auto-data`),
   generatePDF: (id) => api.get(`/sales-tax-invoices/${id}/pdf`, { responseType: 'blob' }),
   getByPONumber: (poNumber) => api.get('/sales-tax-invoices', { params: { customer_po_number: poNumber } }),
@@ -117,7 +117,7 @@ export const purchaseTaxInvoicesAPI = {
     const params = supplierId ? { supplier_id: supplierId } : {};
     return api.get('/purchase-tax-invoices/po/list', { params });
   },
-  getPoItems: (poNumber) => api.get(`/purchase-tax-invoices/po/${poNumber}`),
+  getPoItems: (poNumber, params = {}) => api.get(`/purchase-tax-invoices/po/${poNumber}`, { params }),
   generatePDF: (id) => api.get(`/purchase-tax-invoices/${id}/pdf`, { responseType: 'blob' }),
   getByPONumber: (poNumber) => api.get('/purchase-tax-invoices', { params: { po_number: poNumber } }),
 };

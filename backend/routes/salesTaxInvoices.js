@@ -1053,20 +1053,76 @@ router.get('/customer/:customer_id/po-numbers', async (req, res) => {
 router.get('/customer-po/:po_number', async (req, res) => {
   try {
     const { po_number } = req.params;
+    const excludeInvoiceId = req.query.exclude_invoice_id ? parseInt(req.query.exclude_invoice_id) : null;
     
-    // Get purchase order items for the customer PO
-    const [items] = await req.db.execute(`
-      SELECT poi.part_no, poi.material_no, poi.project_no, poi.description, poi.quantity, poi.unit_price
+    // Get purchase order items for the customer PO with already invoiced quantities
+    let itemsQuery = `
+      SELECT 
+        poi.part_no, 
+        poi.material_no, 
+        poi.project_no, 
+        poi.description, 
+        poi.quantity, 
+        poi.unit_price,
+        COALESCE((
+          SELECT SUM(stii.quantity)
+          FROM sales_tax_invoice_items stii
+          INNER JOIN sales_tax_invoices sti ON stii.invoice_id = sti.id
+          WHERE sti.customer_po_number = ?
+            AND stii.part_no = poi.part_no
+            AND (stii.material_no = poi.material_no OR (stii.material_no IS NULL AND poi.material_no IS NULL))
+            ${excludeInvoiceId ? 'AND sti.id != ?' : ''}
+        ), 0) as already_invoiced_quantity
       FROM purchase_order_items poi
       INNER JOIN purchase_orders po ON poi.po_id = po.id
       WHERE po.po_number = ? AND po.order_type = 'customer'
-    `, [po_number]);
+    `;
+    
+    const queryParams = [po_number];
+    if (excludeInvoiceId) {
+      queryParams.push(excludeInvoiceId);
+    }
+    queryParams.push(po_number);
+    
+    const [items] = await req.db.execute(itemsQuery, queryParams);
     
     if (items.length === 0) {
       return res.status(404).json({ message: 'No items found for this customer PO number' });
     }
     
-    res.json(items);
+    // Calculate remaining quantity for each item
+    const itemsWithRemaining = items.map(item => {
+      const totalQuantity = parseFloat(item.quantity) || 0;
+      const alreadyInvoiced = parseFloat(item.already_invoiced_quantity) || 0;
+      const remainingQuantity = Math.max(0, totalQuantity - alreadyInvoiced);
+      
+      return {
+        ...item,
+        already_invoiced_quantity: alreadyInvoiced,
+        remaining_quantity: remainingQuantity
+      };
+    });
+    
+    // Calculate total claim percentage from previous invoices for this PO (excluding current invoice if editing)
+    let totalClaimQuery = `
+      SELECT COALESCE(SUM(sti.claim_percentage), 0) as total_claim_percentage
+      FROM sales_tax_invoices sti
+      WHERE sti.customer_po_number = ?
+    `;
+    const totalClaimParams = [po_number];
+    
+    if (excludeInvoiceId) {
+      totalClaimQuery += ' AND sti.id != ?';
+      totalClaimParams.push(excludeInvoiceId);
+    }
+    
+    const [totalClaimResult] = await req.db.execute(totalClaimQuery, totalClaimParams);
+    const totalClaimPercentage = parseFloat(totalClaimResult[0]?.total_claim_percentage || 0);
+    
+    res.json({
+      items: itemsWithRemaining,
+      total_claim_percentage: totalClaimPercentage
+    });
   } catch (error) {
     console.error('Error fetching customer PO items:', error);
     res.status(500).json({ message: 'Error fetching customer PO items' });
@@ -1164,8 +1220,8 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
   const bankDetails = {
     account_name: "ALL TECH FOR HEAVY EQUIPMENT SPARE PARTS",
     account_number: "12025265820001",
-    iban: "AE940030012000000000000",
-    swift_code: "ADCBAEAAXXX",
+    iban: "AE840030012000000000000",
+    swift_code: "ADCBAEAXXXX",
     bank_name: "ABU DHABI COMMERCIAL BANK PJSC, KHALIFA CITY BRANCH, ABU DHABI - UNITED ARAB EMIRATES"
   };
 
@@ -1245,8 +1301,8 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
             font-family: 'Segoe UI', 'Arial', 'Helvetica', sans-serif;
             color: #1a1a1a;
             background: #fff;
-            padding: 25px;
-            font-size: 14px;
+            padding: 20px;
+            font-size: 13px;
             line-height: 1.5;
           }
           
@@ -1261,25 +1317,20 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 25px;
-            padding-bottom: 20px;
-            border-bottom: 3px solid #3498db;
-            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 50%, #ffffff 100%);
-            padding: 20px 25px;
-            margin: -25px -25px 25px -25px;
-            border-radius: 0;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            margin-bottom: 18px;
+            padding: 15px 0;
+            border-bottom: 2px solid #2c3e50;
             position: relative;
           }
           
           .invoice-top-header::after {
             content: '';
             position: absolute;
-            bottom: 0;
+            bottom: -2px;
             left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, #3498db 0%, #2980b9 50%, #3498db 100%);
+            width: 80px;
+            height: 2px;
+            background: #3498db;
           }
           
           .logo-section-left {
@@ -1293,86 +1344,89 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
           }
           
           .alltech-logo-image {
-            max-width: 250px;
-            max-height: 150px;
+            max-width: 220px;
+            max-height: 120px;
             width: auto;
             height: auto;
             object-fit: contain;
             display: block;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
           }
           
           .invoice-title-center {
             flex: 1;
             text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding-left: 15px;
           }
           
           .tax-invoice-title {
-            font-size: 32px;
+            font-size: 28px;
             font-weight: 800;
             color: #2c3e50;
             margin: 0;
             letter-spacing: 3px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-transform: uppercase;
             position: relative;
+            padding: 0 15px;
+          }
+          
+          .tax-invoice-title::before,
+          .tax-invoice-title::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 30px;
+            height: 2px;
+            background: #3498db;
+          }
+          
+          .tax-invoice-title::before {
+            left: 0;
+          }
+          
+          .tax-invoice-title::after {
+            right: 0;
           }
           
           /* Invoice Header */
           .invoice-header {
-            margin-bottom: 22px;
-            padding: 20px;
-            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-            border-radius: 8px;
+            margin-bottom: 15px;
+            padding: 12px 15px;
+            background: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 100%);
             border: 1px solid #e0e0e0;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-            position: relative;
-            overflow: hidden;
-          }
-          
-          .invoice-header::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 4px;
-            height: 100%;
-            background: linear-gradient(180deg, #3498db 0%, #2980b9 100%);
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
           }
           
           .seller-info h4,
-          .invoice-details h4 {
+          .customer-info h4 {
             color: #2c3e50;
             font-weight: 700;
-            font-size: 15px;
-            margin-bottom: 12px;
+            font-size: 13px;
+            margin-bottom: 10px;
             text-transform: uppercase;
-            padding-bottom: 8px;
-            border-bottom: 3px solid #3498db;
+            letter-spacing: 0.8px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #3498db;
             display: inline-block;
-            letter-spacing: 0.5px;
-            position: relative;
-          }
-          
-          .seller-info h4::after,
-          .invoice-details h4::after {
-            content: '';
-            position: absolute;
-            bottom: -3px;
-            left: 0;
-            width: 30px;
-            height: 3px;
-            background: #2980b9;
+            min-width: 100px;
           }
           
           .company-details {
-            font-size: 12.5px;
-            line-height: 1.8;
+            font-size: 11.5px;
+            line-height: 1.6;
             color: #34495e;
-            padding-left: 8px;
+            padding-left: 3px;
           }
           
           .company-details strong {
             color: #2c3e50;
             font-weight: 700;
+            display: block;
+            margin-bottom: 2px;
           }
           
           .form-group {
@@ -1381,97 +1435,99 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
           
           .form-group label {
             font-weight: 600;
-            color: #34495e;
-            margin-bottom: 5px;
-            font-size: 12px;
+            color: #2c3e50;
+            margin-bottom: 4px;
+            font-size: 10.5px;
             display: block;
-            line-height: 1.6;
+            line-height: 1.4;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
           }
           
           .invoice-number-display,
           .customer-name-display,
           .po-number-display {
-            padding: 10px 14px;
-            font-weight: 700;
+            padding: 6px 10px;
+            font-weight: 600;
             color: #2c3e50;
-            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 50%, #ffffff 100%);
-            border: 2px solid #3498db;
-            border-radius: 6px;
-            font-size: 13.5px;
-            min-height: 40px;
-            line-height: 1.5;
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(52, 152, 219, 0.1);
-            letter-spacing: 0.3px;
+            background: #ffffff;
+            border: 1.5px solid #3498db;
+            border-radius: 3px;
+            font-size: 12px;
+            min-height: 32px;
+            line-height: 1.4;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 1px 2px rgba(52, 152, 219, 0.1);
           }
           
           /* Customer Section */
           .customer-section {
-            margin-bottom: 22px;
-            padding: 20px;
-            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-            border-radius: 8px;
+            margin-bottom: 15px;
+            padding: 12px 15px;
+            background: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 100%);
             border: 1px solid #e0e0e0;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
           }
           
-          .customer-info h4,
-          .po-details h4 {
-            color: #2c3e50;
-            font-weight: 700;
-            font-size: 15px;
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            padding-bottom: 8px;
-            border-bottom: 3px solid #3498db;
-            display: inline-block;
-            letter-spacing: 0.5px;
+          .invoice-details {
+            padding: 0;
           }
           
           .customer-details {
-            margin-top: 12px;
-            font-size: 12.5px;
-            line-height: 1.8;
+            margin-top: 8px;
+            font-size: 11.5px;
+            line-height: 1.6;
             color: #34495e;
+            padding-left: 3px;
           }
           
           .customer-detail-row {
-            margin-bottom: 6px;
+            margin-bottom: 5px;
+            padding: 2px 0;
           }
           
           .customer-detail-row strong {
             color: #2c3e50;
             font-weight: 700;
             margin-right: 8px;
+            min-width: 70px;
+            display: inline-block;
           }
           
           /* Line Items Section */
           .line-items-section {
-            margin-bottom: 22px;
+            margin-bottom: 15px;
           }
           
           .line-items-header {
-            margin-bottom: 12px;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e0e0e0;
           }
           
           .line-items-header h4 {
             color: #2c3e50;
             font-weight: 700;
-            font-size: 15px;
-            margin-bottom: 8px;
+            font-size: 13px;
+            margin-bottom: 5px;
             text-transform: uppercase;
+            letter-spacing: 0.8px;
           }
           
           .partial-delivery-note {
-            font-size: 12px;
-            color: #666;
+            font-size: 10.5px;
+            color: #7f8c8d;
             font-style: italic;
-            margin: 0;
+            margin: 3px 0 0 0;
+            padding-left: 3px;
           }
           
           .table-responsive {
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: visible;
+            border-radius: 4px;
+            box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
           }
           
           .invoice-items-table {
@@ -1479,56 +1535,81 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
             border-collapse: collapse;
             margin: 0;
             background-color: white;
+            border: 1px solid #2c3e50;
+            border-radius: 4px;
+            overflow: hidden;
           }
           
           .invoice-items-table thead {
-            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
             color: white;
           }
           
           .invoice-items-table thead th {
-            border: none;
-            padding: 12px 8px;
-            font-weight: 600;
+            border: 1px solid #1a252f;
+            padding: 8px 6px;
+            font-weight: 700;
             text-align: center;
-            font-size: 11px;
+            font-size: 10px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.6px;
             color: white;
             background: transparent;
+          }
+          
+          .invoice-items-table tbody tr {
+            transition: background-color 0.2s ease;
           }
           
           .invoice-items-table tbody tr:nth-child(even) {
             background-color: #f8f9fa;
           }
           
+          .invoice-items-table tbody tr:hover {
+            background-color: #e8f4f8;
+          }
+          
           .invoice-items-table tbody td {
-            padding: 10px 8px;
-            border: 1px solid #ddd;
+            padding: 8px 6px;
+            border: 1px solid #e0e0e0;
             text-align: center;
             font-size: 11px;
+            color: #2c3e50;
+            font-weight: 500;
+          }
+          
+          .invoice-items-table tbody td:first-child {
+            font-weight: 600;
+          }
+          
+          .invoice-items-table tbody td:nth-last-child(2),
+          .invoice-items-table tbody td:last-child {
+            font-weight: 600;
+            color: #2c3e50;
           }
           
           /* Financial Summary */
           .financial-summary {
-            margin-bottom: 22px;
-            padding: 20px;
-            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-            border-radius: 8px;
+            margin-bottom: 15px;
+            padding: 12px 15px;
+            background: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 100%);
             border: 1px solid #e0e0e0;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
           }
           
           .calculations {
-            font-size: 14px;
+            font-size: 12.5px;
+            max-width: 450px;
+            margin-left: auto;
           }
           
           .calculation-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid #e9ecef;
+            padding: 6px 0;
+            border-bottom: 1px solid #e0e0e0;
           }
           
           .calculation-row:last-child {
@@ -1536,95 +1617,112 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
           }
           
           .calculation-row.total {
-            border-top: 2px solid #28a745;
-            margin-top: 10px;
-            padding-top: 15px;
-            font-weight: 700;
-            font-size: 16px;
-            color: #28a745;
+            border-top: 2px solid #27ae60;
+            margin-top: 8px;
+            padding-top: 10px;
+            padding-bottom: 4px;
+            font-weight: 800;
+            font-size: 15px;
+            color: #27ae60;
+            background: linear-gradient(to right, rgba(39, 174, 96, 0.05) 0%, transparent 100%);
+            border-radius: 3px;
+            padding-left: 8px;
+            padding-right: 8px;
           }
           
           .calculation-row label {
             font-weight: 600;
-            color: #495057;
+            color: #2c3e50;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.3px;
           }
           
           .calculation-row span {
-            font-weight: 600;
-            color: #28a745;
+            font-weight: 700;
+            color: #2c3e50;
+            font-size: 12.5px;
+          }
+          
+          .calculation-row.total label {
+            font-size: 13px;
           }
           
           .calculation-row.total span {
-            color: #28a745;
+            color: #27ae60;
             font-size: 16px;
           }
           
           /* Amount in Words */
           .amount-in-words-section {
-            margin-bottom: 22px;
-            padding: 20px;
-            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-            border-radius: 8px;
+            margin-bottom: 15px;
+            padding: 12px 15px;
+            background: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 100%);
             border: 1px solid #e0e0e0;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
           }
           
           .amount-in-words-section h4 {
             color: #2c3e50;
             font-weight: 700;
-            font-size: 15px;
-            margin-bottom: 12px;
+            font-size: 13px;
+            margin-bottom: 8px;
             text-transform: uppercase;
-            padding-bottom: 8px;
-            border-bottom: 3px solid #3498db;
+            letter-spacing: 0.8px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #3498db;
             display: inline-block;
-            letter-spacing: 0.5px;
           }
           
           .words-box {
-            padding: 15px;
-            background: #fff;
-            border: 2px solid #007bff;
-            border-radius: 6px;
-            font-size: 14px;
+            padding: 10px 12px;
+            background: #ffffff;
+            border: 2px solid #3498db;
+            border-radius: 3px;
+            font-size: 12.5px;
             font-weight: 600;
             color: #2c3e50;
-            margin-top: 12px;
+            margin-top: 8px;
+            box-shadow: 0 1px 4px rgba(52, 152, 219, 0.1);
+            letter-spacing: 0.2px;
           }
           
           /* Bank Details and Signature */
           .bank-details-section {
-            margin-bottom: 22px;
+            margin-bottom: 15px;
           }
           
           .bank-info h4,
           .signature-section h4 {
             color: #2c3e50;
             font-weight: 700;
-            font-size: 15px;
-            margin-bottom: 12px;
+            font-size: 13px;
+            margin-bottom: 8px;
             text-transform: uppercase;
-            padding-bottom: 8px;
-            border-bottom: 3px solid #3498db;
+            letter-spacing: 0.8px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #3498db;
             display: inline-block;
-            letter-spacing: 0.5px;
           }
           
           .bank-box,
           .signature-box {
-            padding: 15px;
-            background: #fff;
-            border: 2px solid #007bff;
-            border-radius: 6px;
-            font-size: 12.5px;
-            line-height: 1.8;
+            padding: 12px;
+            background: #ffffff;
+            border: 2px solid #3498db;
+            border-radius: 3px;
+            font-size: 11.5px;
+            line-height: 1.6;
             color: #34495e;
-            margin-top: 12px;
+            margin-top: 8px;
+            box-shadow: 0 1px 4px rgba(52, 152, 219, 0.1);
           }
           
           .bank-box div,
           .signature-box div {
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            padding: 2px 0;
           }
           
           .bank-box div:last-child,
@@ -1637,20 +1735,24 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
             color: #2c3e50;
             font-weight: 700;
             margin-right: 8px;
+            min-width: 120px;
+            display: inline-block;
           }
           
           .signature-line,
           .stamp-line {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #ddd;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e0e0e0;
+            font-weight: 500;
+            color: #7f8c8d;
           }
           
           /* Footer */
           .footer-section {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
             text-align: center;
           }
           
@@ -1659,31 +1761,35 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
             justify-content: center;
             gap: 30px;
             flex-wrap: wrap;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
           }
           
           .contact-item {
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 12px;
-            color: #666;
+            font-size: 11.5px;
+            color: #34495e;
+            font-weight: 500;
           }
           
           .contact-item i {
             color: #3498db;
+            font-size: 12px;
           }
           
           .gradient-bar {
             height: 3px;
             background: linear-gradient(90deg, #3498db 0%, #2980b9 50%, #3498db 100%);
-            margin-top: 15px;
+            margin-top: 12px;
+            border-radius: 2px;
+            box-shadow: 0 1px 3px rgba(52, 152, 219, 0.2);
           }
           
           @media print {
             @page {
-              size: auto;
-              margin: 12mm;
+              size: A4;
+              margin: 10mm;
             }
             
             * {
@@ -1693,7 +1799,59 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
             
             body {
               background-color: white !important;
-              padding: 0;
+              padding: 15px;
+              font-size: 12px;
+            }
+            
+            .sales-tax-invoice {
+              page-break-inside: avoid;
+            }
+            
+            .invoice-top-header {
+              page-break-after: avoid;
+            }
+            
+            .invoice-header,
+            .customer-section {
+              page-break-inside: avoid;
+            }
+            
+            .line-items-section {
+              page-break-inside: auto;
+            }
+            
+            .invoice-items-table {
+              page-break-inside: auto;
+              border-collapse: collapse;
+            }
+            
+            .invoice-items-table thead {
+              display: table-header-group;
+              page-break-after: avoid;
+            }
+            
+            .invoice-items-table tbody {
+              display: table-row-group;
+            }
+            
+            .invoice-items-table tbody tr {
+              page-break-inside: avoid;
+              page-break-after: auto;
+            }
+            
+            .invoice-items-table tbody td {
+              page-break-inside: avoid;
+            }
+            
+            .financial-summary,
+            .amount-in-words-section,
+            .bank-details-section {
+              page-break-inside: avoid;
+              page-break-before: auto;
+            }
+            
+            .footer-section {
+              page-break-inside: avoid;
             }
           }
         </style>
@@ -1717,7 +1875,7 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
             </div>
           </div>
 
-          <!-- Invoice Header -->
+          <!-- From and Customer Section - Side by Side -->
           <div class="invoice-header">
             <div style="display: flex; gap: 20px;">
               <div style="flex: 1;">
@@ -1734,39 +1892,8 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
                 </div>
               </div>
               <div style="flex: 1;">
-                <div class="invoice-details">
-                  <h4>Tax Invoice</h4>
-                  <div class="form-group">
-                    <label>Tax Invoice No:</label>
-                    <div class="invoice-number-display">${invoice.invoice_number || 'N/A'}</div>
-                  </div>
-                  <div class="form-group">
-                    <label>Invoice Date:</label>
-                    <div class="invoice-number-display" style="font-weight: normal;">${formatDate(invoice.invoice_date)}</div>
-                  </div>
-                  <div class="form-group">
-                    <label>Payment Terms:</label>
-                    <div class="invoice-number-display" style="font-weight: normal;">${invoice.payment_terms || 'N/A'}</div>
-                  </div>
-                  <div class="form-group">
-                    <label>Contract No:</label>
-                    <div class="invoice-number-display" style="font-weight: normal;">${invoice.contract_number || 'N/A'}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Customer Information -->
-          <div class="customer-section">
-            <div style="display: flex; gap: 20px;">
-              <div style="flex: 1;">
                 <div class="customer-info">
                   <h4>Customer</h4>
-                  <div class="form-group">
-                    <label>Customer Name:</label>
-                    <div class="customer-name-display">${invoice.customer_name || 'N/A'}</div>
-                  </div>
                   <div class="customer-details">
                     <div class="customer-detail-row">
                       <strong>Name:</strong> ${invoice.customer_name || 'N/A'}
@@ -1786,21 +1913,40 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
                   </div>
                 </div>
               </div>
-              <div style="flex: 1;">
-                <div class="po-details">
-                  <h4>Purchase Order Details</h4>
-                  <div class="form-group">
-                    <label>PO No:</label>
-                    <div class="po-number-display">${invoice.customer_po_number || 'N/A'}</div>
-                  </div>
-                  <div class="form-group">
-                    <label>PO Date:</label>
-                    <div class="po-number-display" style="font-weight: normal;">${formatPODate(invoice.customer_po_date)}</div>
-                  </div>
-                  <div class="form-group">
-                    <label>Delivery Terms:</label>
-                    <div class="po-number-display" style="font-weight: normal;">${invoice.delivery_terms || 'N/A'}</div>
-                  </div>
+            </div>
+          </div>
+
+          <!-- Invoice Details Section -->
+          <div class="customer-section">
+            <div class="invoice-details">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="form-group">
+                  <label>Tax Invoice No:</label>
+                  <div class="invoice-number-display">${invoice.invoice_number || 'N/A'}</div>
+                </div>
+                <div class="form-group">
+                  <label>Invoice Date:</label>
+                  <div class="invoice-number-display" style="font-weight: normal;">${formatDate(invoice.invoice_date)}</div>
+                </div>
+                <div class="form-group">
+                  <label>Payment terms:</label>
+                  <div class="invoice-number-display" style="font-weight: normal;">${invoice.payment_terms || 'N/A'}</div>
+                </div>
+                <div class="form-group">
+                  <label>Contract No:</label>
+                  <div class="invoice-number-display" style="font-weight: normal;">${invoice.contract_number || 'N/A'}</div>
+                </div>
+                <div class="form-group">
+                  <label>PO No:</label>
+                  <div class="invoice-number-display" style="font-weight: normal;">${invoice.customer_po_number || 'N/A'}</div>
+                </div>
+                <div class="form-group">
+                  <label>PO Date:</label>
+                  <div class="invoice-number-display" style="font-weight: normal;">${formatPODate(invoice.customer_po_date)}</div>
+                </div>
+                <div class="form-group">
+                  <label>Delivery terms:</label>
+                  <div class="invoice-number-display" style="font-weight: normal;">${invoice.delivery_terms || 'N/A'}</div>
                 </div>
               </div>
             </div>
@@ -1839,7 +1985,7 @@ function generateSalesInvoiceHTML(invoice, items, logoBase64 = null) {
                 <span>${formatCurrency(subtotal)}</span>
               </div>
               <div class="calculation-row">
-                <label>Amount of claim ${claimPercentage}% (AED):</label>
+                <label>Amount of c ${claimPercentage}% (AED):</label>
                 <span>${formatCurrency(claimAmount)}</span>
               </div>
               <div class="calculation-row">

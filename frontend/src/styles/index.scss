@@ -104,6 +104,43 @@ body {
   border-top: 1px solid rgba(0, 0, 0, 0.125);
 }
 
+// Global Close Button Visibility Fix
+// Ensures all X icons are visible against all background colors
+.btn-close,
+.btn-close-modal,
+button.btn-close,
+[class*="btn-close"] {
+  color: #1f2937 !important; // Dark gray - visible on all backgrounds
+  opacity: 1 !important; // Full opacity for visibility
+  filter: none !important; // Remove any filters that might affect visibility
+  
+  // Add light background for contrast if not already set
+  &:not([style*="background"]) {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-radius: 4px;
+    padding: 4px;
+  }
+  
+  &:hover {
+    color: #dc2626 !important; // Red on hover
+    opacity: 1 !important;
+    background: rgba(220, 38, 38, 0.1) !important;
+  }
+  
+  // Ensure × symbol is visible
+  &::before {
+    color: #1f2937 !important;
+  }
+  
+  // Ensure Font Awesome icons are visible
+  i.fas,
+  i.fa-times,
+  i.fa-xmark,
+  i.fa-close {
+    color: #1f2937 !important;
+  }
+}
+
 // Loading spinner
 .spinner-border-sm {
   width: 1rem;

@@ -39,14 +39,25 @@
   }
 
   .btn-close {
-    background: none;
+    background: rgba(255, 255, 255, 0.9) !important; // Light background for contrast
     border: none;
-    color: white;
-    opacity: 0.8;
+    color: #1f2937 !important; // Dark gray - visible on all backgrounds
+    opacity: 1 !important; // Full opacity for visibility
     font-size: 1.5rem;
+    border-radius: 4px;
+    padding: 4px;
 
     &:hover {
-      opacity: 1;
+      opacity: 1 !important;
+      color: #dc2626 !important; // Red on hover
+      background: rgba(220, 38, 38, 0.1) !important;
+    }
+    
+    // Ensure × symbol and icons are visible
+    &::before,
+    i.fas,
+    i.fa-times {
+      color: #1f2937 !important;
     }
 
     &:disabled {

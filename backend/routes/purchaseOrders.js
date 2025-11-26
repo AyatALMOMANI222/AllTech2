@@ -125,6 +125,14 @@ function calculateDueDate(datePo, leadTime) {
   return poDate.toISOString().split('T')[0];
 }
 
+// Helper function to format date as YYYY-MM-DD without timezone conversion
+function formatDateLocal(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function convertExcelDate(excelSerial) {
   if (!excelSerial || isNaN(excelSerial) || excelSerial <= 0) {
     return null;
@@ -138,7 +146,8 @@ function convertExcelDate(excelSerial) {
   const excelEpoch = new Date(1900, 0, 1);
   const jsDate = new Date(excelEpoch.getTime() + (adjustedSerial - 1) * 24 * 60 * 60 * 1000);
   
-  return jsDate.toISOString().split('T')[0];
+  // Use local date formatting to avoid timezone shift
+  return formatDateLocal(jsDate);
 }
 
 // Helper function to generate next PO number in format: PO-YYYY-XXX
@@ -1643,6 +1652,66 @@ router.post('/import', (req, res, next) => {
       const workbook = xlsx.readFile(filePath);
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
+
+      // Validate that required columns exist (case-insensitive) before importing
+      // Required columns (from user requirement):
+      // serial_no, project_no, date_po, part_no, material_no, description,
+      // uom, quantity, unit_price, lead_time, comments
+      const headerRows = xlsx.utils.sheet_to_json(worksheet, { header: 1 }) || [];
+      const headerRow = headerRows[0] || [];
+
+      // Normalize header names: trim, toLowerCase, replace spaces with underscores
+      const normalizeHeader = (h) =>
+        h
+          .toString()
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '_');
+
+      const normalizedHeaders = new Set(
+        headerRow
+          .filter((h) => h !== null && h !== undefined && String(h).trim() !== '')
+          .map((h) => normalizeHeader(h))
+      );
+
+      const requiredColumns = [
+        'serial_no',
+        'project_no',
+        'date_po',
+        'part_no',
+        'material_no',
+        'description',
+        'uom',
+        'quantity',
+        'unit_price',
+        'lead_time',
+        'comments',
+      ];
+
+      const missingColumns = requiredColumns.filter(
+        (col) => !normalizedHeaders.has(col)
+      );
+
+      if (missingColumns.length > 0) {
+        // Clean up uploaded file before returning error
+        try {
+          if (filePath && fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log('File cleaned up due to missing columns:', filePath);
+          }
+        } catch (cleanupError) {
+          console.error('Error cleaning up file after missing columns:', cleanupError);
+        }
+
+        return res.status(400).json({
+          message:
+            'Missing required columns in Excel file. Please ensure all required columns are present (case-insensitive).',
+          missing_columns: missingColumns,
+          required_columns: requiredColumns,
+        });
+      }
+
+      // If validation passes, convert sheet rows to JSON objects (existing logic)
       data = xlsx.utils.sheet_to_json(worksheet);
     }
     
@@ -1685,7 +1754,11 @@ router.post('/import', (req, res, next) => {
         // Convert Excel date if needed
         let formattedDatePo = null;
         if (date_po) {
-          if (!isNaN(date_po) && date_po > 0) {
+          // Handle Date objects (xlsx might return dates as Date objects)
+          if (date_po instanceof Date) {
+            formattedDatePo = formatDateLocal(date_po);
+          } else if (!isNaN(date_po) && date_po > 0) {
+            // Handle Excel serial numbers
             formattedDatePo = convertExcelDate(date_po);
           } else if (typeof date_po === 'string') {
             // Try parsing various date formats (DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD, etc.)
@@ -1695,21 +1768,29 @@ router.post('/import', (req, res, next) => {
               const parts = dateStr.split('/');
               if (parts.length === 3) {
                 // Try DD/MM/YYYY first
-                const parsedDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                const day = parseInt(parts[0], 10);
+                const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+                const year = parseInt(parts[2], 10);
+                const parsedDate = new Date(year, month, day);
                 if (!isNaN(parsedDate.getTime())) {
-                  formattedDatePo = parsedDate.toISOString().split('T')[0];
+                  formattedDatePo = formatDateLocal(parsedDate);
                 } else {
                   // Try MM/DD/YYYY
-                  const parsedDate2 = new Date(`${parts[2]}-${parts[0]}-${parts[1]}`);
+                  const month2 = parseInt(parts[0], 10) - 1; // Month is 0-indexed
+                  const day2 = parseInt(parts[1], 10);
+                  const year2 = parseInt(parts[2], 10);
+                  const parsedDate2 = new Date(year2, month2, day2);
                   if (!isNaN(parsedDate2.getTime())) {
-                    formattedDatePo = parsedDate2.toISOString().split('T')[0];
+                    formattedDatePo = formatDateLocal(parsedDate2);
                   }
                 }
               }
             } else {
-            const parsedDate = new Date(date_po);
-            if (!isNaN(parsedDate.getTime())) {
-              formattedDatePo = parsedDate.toISOString().split('T')[0];
+              // Try parsing as ISO format or other standard formats
+              const parsedDate = new Date(date_po);
+              if (!isNaN(parsedDate.getTime())) {
+                // Use local date formatting to avoid timezone shift
+                formattedDatePo = formatDateLocal(parsedDate);
               }
             }
           }

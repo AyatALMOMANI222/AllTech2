@@ -137,115 +137,46 @@ const InvoicesManagement = () => {
           window.URL.revokeObjectURL(url);
         }, 100);
       } else {
-        // For sales invoices, use client-side PDF generation via print
-        // (Backend PDF endpoint not implemented yet)
-        if (!invoiceModalBodyRef.current) {
-          alert('Invoice content not found');
-          return;
+        // Use backend PDF API for sales invoices (includes logo support)
+        const response = await salesTaxInvoicesAPI.generatePDF(selectedInvoice.id);
+        
+        // Validate response
+        if (!response || !response.data) {
+          throw new Error('Invalid response from server');
         }
         
-        const invoiceNode = invoiceModalBodyRef.current.querySelector('.sales-tax-invoice');
-        
-        if (!invoiceNode) {
-          alert('Invoice content not found');
-          return;
+        // Check if response.data is already a Blob
+        let blob;
+        if (response.data instanceof Blob) {
+          blob = response.data;
+        } else if (response.data instanceof ArrayBuffer) {
+          blob = new Blob([response.data], { type: 'application/pdf' });
+        } else {
+          // Create blob from response data (handles Uint8Array, string, etc.)
+          blob = new Blob([response.data], { type: 'application/pdf' });
         }
-
-        // Clone the node to avoid modifying the original
-        const clonedNode = invoiceNode.cloneNode(true);
         
-        // Get all stylesheets
-        const styles = Array.from(
-          document.querySelectorAll('link[rel="stylesheet"], style')
-        )
-          .map((node) => node.outerHTML)
-          .join('\n');
-
-        // Create a hidden iframe for PDF generation
-        const iframe = document.createElement('iframe');
-        iframe.style.position = 'fixed';
-        iframe.style.right = '0';
-        iframe.style.bottom = '0';
-        iframe.style.width = '0';
-        iframe.style.height = '0';
-        iframe.style.border = '0';
-        document.body.appendChild(iframe);
-
-        const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
-        if (!iframeDoc) {
-          alert('Unable to create PDF');
-          return;
+        // Validate blob
+        if (!blob || blob.size === 0) {
+          throw new Error('Empty PDF file received');
         }
-
-        // Write HTML with print styles
-        iframeDoc.open();
-        iframeDoc.write(`
-          <!doctype html>
-          <html>
-          <head>
-            <meta charset="utf-8"/>
-            <meta name="viewport" content="width=device-width, initial-scale=1"/>
-            ${styles}
-            <title>Sales Tax Invoice - ${selectedInvoice.invoice_number}</title>
-            <style>
-              @page {
-                size: auto;
-                margin: 12mm;
-              }
-              html, body {
-                background: #fff !important;
-                margin: 0;
-                padding: 0;
-              }
-              .modal, .modal-backdrop {
-                display: none !important;
-              }
-              .form-actions {
-                display: none !important;
-              }
-              .card {
-                border: none !important;
-                box-shadow: none !important;
-              }
-              .card-header {
-                display: none !important;
-              }
-              .alert {
-                display: none !important;
-              }
-              .card-body {
-                padding: 1rem !important;
-                background-color: white !important;
-              }
-              .sales-tax-invoice {
-                padding: 0 !important;
-              }
-            </style>
-          </head>
-          <body>
-            ${clonedNode.outerHTML}
-          </body>
-          </html>
-        `);
-        iframeDoc.close();
-
-        // Wait for content to load, then trigger print (user can save as PDF)
+        
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Sales_Tax_Invoice_${selectedInvoice.invoice_number || selectedInvoice.id}.pdf`;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        
+        // Cleanup
         setTimeout(() => {
-          try {
-            iframe.contentWindow?.focus();
-            iframe.contentWindow?.print();
-          } catch (error) {
-            console.error('Error generating PDF:', error);
-            alert('Error generating PDF. Please use the browser\'s print function.');
-          } finally {
-            // Cleanup after a delay to allow print dialog to open
-            setTimeout(() => {
-              if (document.body.contains(iframe)) {
-                document.body.removeChild(iframe);
-              }
-            }, 1000);
+          if (document.body.contains(link)) {
+            document.body.removeChild(link);
           }
-        }, 250);
+          window.URL.revokeObjectURL(url);
+        }, 100);
       }
     } catch (error) {
       console.error('Error downloading invoice:', error);

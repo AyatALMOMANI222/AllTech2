@@ -514,19 +514,26 @@ $shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     width: 36px;
     height: 36px;
     border: none;
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
+    background: rgba(239, 68, 68, 0.15) !important; // Light red background for contrast
+    color: #dc2626 !important; // Dark red - visible on all backgrounds
     border-radius: 10px;
     cursor: pointer;
     transition: all 0.3s ease;
     display: flex;
     align-items: center;
     justify-content: center;
+    opacity: 1 !important; // Full opacity for visibility
     
     &:hover {
-      background: #ef4444;
-      color: $white;
+      background: #dc2626 !important; // Dark red on hover
+      color: $white !important;
       transform: rotate(90deg);
+    }
+    
+    // Ensure icons are visible
+    i.fas,
+    i.fa-times {
+      color: #dc2626 !important;
     }
   }
 }

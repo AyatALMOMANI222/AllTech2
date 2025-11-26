@@ -1074,7 +1074,7 @@ const documentFileInputRef = React.useRef(null);
     // Add data rows
     importedItems.forEach((item) => {
       const row = [
-        `"${(item.serial_no || "").replace(/"/g, '""')}"`,
+        `"${String(item.serial_no || "").replace(/"/g, '""')}"`,
         `"${(item.project_no || "").replace(/"/g, '""')}"`,
         `"${item.date_po || ""}"`,
         `"${(item.part_no || "").replace(/"/g, '""')}"`,
@@ -1173,7 +1173,7 @@ const documentFileInputRef = React.useRef(null);
     // Add data rows
     selectedOrder.items.forEach((item) => {
       const row = [
-        `"${(item.serial_no || "").replace(/"/g, '""')}"`,
+        `"${String(item.serial_no || "").replace(/"/g, '""')}"`,
         `"${(item.project_no || "").replace(/"/g, '""')}"`,
         `"${item.date_po ? new Date(item.date_po).toLocaleDateString() : ""}"`,
         `"${(item.part_no || "").replace(/"/g, '""')}"`,

@@ -955,23 +955,32 @@
   }
 
   .btn-close {
-    background: transparent;
+    background: rgba(255, 255, 255, 0.9) !important; // Light background for contrast
     border: none;
-    color: white;
+    color: #1f2937 !important; // Dark gray - visible on all backgrounds
     font-size: 28px;
     line-height: 1;
     cursor: pointer;
-    padding: 0;
-    width: 32px;
-    height: 32px;
+    padding: 4px;
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 6px;
-    transition: background 0.2s;
+    transition: all 0.2s;
+    opacity: 1 !important;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.2);
+      background: rgba(220, 38, 38, 0.1) !important;
+      color: #dc2626 !important; // Red on hover
+    }
+    
+    // Ensure × symbol and icons are visible
+    &::before,
+    i.fas,
+    i.fa-times {
+      color: #1f2937 !important;
     }
   }
 }

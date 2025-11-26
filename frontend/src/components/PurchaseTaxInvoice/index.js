@@ -18,6 +18,7 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
   const [poNumbers, setPoNumbers] = useState([]);
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [selectedPO, setSelectedPO] = useState(null);
+  const [totalClaimPercentage, setTotalClaimPercentage] = useState(0); // Total claim from previous invoices
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -43,17 +44,23 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
           po_number: inv.po_number || '',
           project_number: inv.project_number || '',
           claim_percentage: inv.claim_percentage || 100,
-          items: items.map(item => ({
-            serial_no: item.serial_no || 1,
-            project_no: item.project_no || '',
-            part_no: item.part_no || '',
-            material_no: item.material_no || '',
-            description: item.description || '',
-            uom: item.uom || '',
-            quantity: parseFloat(item.quantity) ||0,
-            supplier_unit_price: parseFloat(item.supplier_unit_price) || 0,
-            total_price: parseFloat(item.total_price) || 0
-          }))
+          items: items.map(item => {
+            const quantity = parseFloat(item.quantity) || 0;
+            const unitPrice = parseFloat(item.supplier_unit_price) || 0;
+            const totalPrice = quantity * unitPrice;
+            return {
+              serial_no: item.serial_no || 1,
+              project_no: item.project_no || '',
+              part_no: item.part_no || '',
+              material_no: item.material_no || '',
+              description: item.description || '',
+              uom: item.uom || '',
+              quantity: quantity,
+              max_quantity: quantity, // For existing invoices, use current quantity as max
+              supplier_unit_price: unitPrice,
+              total_price: totalPrice
+            };
+          })
         });
         // Load supplier details for display
         if (inv.supplier_id) {
@@ -62,6 +69,18 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
             const supplierData = supplierRes.data.record || supplierRes.data;
             setSelectedSupplier(supplierData);
           } catch (_) {}
+        }
+        
+        // Load total claim percentage from previous invoices (excluding current invoice)
+        if (inv.po_number) {
+          try {
+            const params = { exclude_invoice_id: invoiceId };
+            const poResponse = await purchaseTaxInvoicesAPI.getPoItems(inv.po_number, params);
+            const totalClaim = parseFloat(poResponse.data.total_claim_percentage || 0);
+            setTotalClaimPercentage(totalClaim);
+          } catch (_) {
+            setTotalClaimPercentage(0);
+          }
         }
       } catch (err) {
         console.error('Error loading invoice:', err);
@@ -95,12 +114,24 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
     }
   };
 
+  // Calculate remaining amount percentage
+  const calculateRemainingAmount = (claimPercentage, previousClaims) => {
+    const claim = parseFloat(claimPercentage) || 0;
+    const previous = parseFloat(previousClaims) || 0;
+    return Math.max(0, 100 - claim - previous);
+  };
+
   const handleInputChange = async (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+
+    // If PO is cleared, reset total claim percentage
+    if (name === 'po_number' && !value) {
+      setTotalClaimPercentage(0);
+    }
 
     // If supplier is selected, fetch supplier details and PO numbers
     if (name === 'supplier_id' && value) {
@@ -116,9 +147,11 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
         setFormData(prev => ({
           ...prev,
           po_number: '',
-          items: []
+          items: [],
+          claim_percentage: 100
         }));
         setSelectedPO(null);
+        setTotalClaimPercentage(0);
       } catch (error) {
         console.error('Error fetching supplier details:', error);
         setSelectedSupplier(null);
@@ -129,14 +162,29 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
       setFormData(prev => ({
         ...prev,
         po_number: '',
-        items: []
+        items: [],
+        claim_percentage: 100
       }));
       setSelectedPO(null);
+      setTotalClaimPercentage(0);
     }
   };
 
   const handlePOChange = async (e) => {
     const poNumber = e.target.value;
+    
+    if (!poNumber) {
+      // Reset to default when PO is cleared
+      setFormData(prev => ({
+        ...prev,
+        po_number: '',
+        claim_percentage: 100
+      }));
+      setSelectedPO(null);
+      setTotalClaimPercentage(0);
+      return;
+    }
+
     setFormData(prev => ({
       ...prev,
       po_number: poNumber
@@ -144,28 +192,70 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
 
     if (poNumber) {
       try {
-        const response = await purchaseTaxInvoicesAPI.getPoItems(poNumber);
+        // Pass current invoice ID if editing to exclude it from already invoiced calculation
+        const params = invoiceId ? { exclude_invoice_id: invoiceId } : {};
+        const response = await purchaseTaxInvoicesAPI.getPoItems(poNumber, params);
         const poData = response.data.po || {};
         const items = response.data.items || [];
+        const totalClaim = parseFloat(response.data.total_claim_percentage || 0);
         
         setSelectedPO(poData);
+        setTotalClaimPercentage(totalClaim);
         
-        // Auto-fill items from PO
-        setFormData(prev => ({
-          ...prev,
-          project_number: items[0]?.project_no || '',
-          items: items.map((item, index) => ({
-            serial_no: index + 1,
-            project_no: item.project_no || '',
-            part_no: item.part_no || '',
-            material_no: item.material_no || '',
-            description: item.description || item.inventory_description || '',
-            uom: item.uom || '',
-            quantity: item.quantity , // User will enter delivered quantity
-            supplier_unit_price: parseFloat(item.unit_price) || 0,
-            total_price: 0
-          }))
-        }));
+        // Set default Amount of Claim (%) = 100 - previous claims
+        // If no previous claims, default = 100
+        const defaultClaimPercentage = Math.max(0, 100 - totalClaim);
+        
+          // Auto-fill items from PO
+          // IMPORTANT: Use remaining_quantity (Total Quantity - Already Invoiced Quantity) as default
+          // Calculate total_price based on remaining_quantity
+          setFormData(prev => ({
+            ...prev,
+            project_number: items[0]?.project_no || '',
+            claim_percentage: invoiceId ? prev.claim_percentage : defaultClaimPercentage,
+            items: items.map((item, index) => {
+              // Calculate remaining_quantity correctly: total_quantity - already_invoiced_quantity
+              // Use remaining_quantity from backend if it exists and is a valid number, otherwise calculate it
+              const totalQuantity = parseFloat(item.quantity) || 0;
+              const alreadyInvoiced = parseFloat(item.already_invoiced_quantity) || 0;
+              
+              // IMPORTANT: Check if remaining_quantity exists and is a valid number (including 0)
+              // Use nullish coalescing to only fallback if remaining_quantity is null/undefined, not if it's 0
+              let remainingQty = 0;
+              if (item.remaining_quantity !== null && item.remaining_quantity !== undefined) {
+                remainingQty = parseFloat(item.remaining_quantity);
+                // If parseFloat returns NaN, fallback to calculation
+                if (isNaN(remainingQty)) {
+                  remainingQty = Math.max(0, totalQuantity - alreadyInvoiced);
+                }
+              } else {
+                // Calculate: remaining = total - already_invoiced
+                remainingQty = Math.max(0, totalQuantity - alreadyInvoiced);
+              }
+              
+              // Ensure remainingQty is never negative
+              remainingQty = Math.max(0, remainingQty);
+              
+              // Get unit price from PO item (unit_price field from purchase_order_items table)
+              const unitPrice = parseFloat(item.unit_price) || 0;
+              
+              // Calculate total_price based on remaining_quantity
+              const totalPrice = remainingQty * unitPrice;
+              
+              return {
+                serial_no: index + 1,
+                project_no: item.project_no || '',
+                part_no: item.part_no || '',
+                material_no: item.material_no || '',
+                description: item.description || item.inventory_description || '',
+                uom: item.uom || '',
+                quantity: remainingQty, // Use remaining quantity as default
+                max_quantity: remainingQty, // Store the maximum allowed quantity (remaining from PO)
+                supplier_unit_price: unitPrice, // Use unit_price from PO
+                total_price: totalPrice // Calculate based on remaining_quantity
+              };
+            })
+          }));
         setError('');
       } catch (error) {
         console.error('Error fetching PO items:', error);
@@ -189,7 +279,16 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
 
   const handleItemChange = (index, field, value) => {
     const newItems = [...formData.items];
-    newItems[index][field] = value;
+    
+    // If changing quantity, validate it doesn't exceed max_quantity
+    if (field === 'quantity') {
+      const maxQty = parseFloat(newItems[index].max_quantity) || parseFloat(newItems[index].quantity) || 0;
+      const newQty = parseFloat(value) || 0;
+      // Restrict to max_quantity if it exists, otherwise use current quantity as max
+      newItems[index].quantity = Math.min(newQty, maxQty);
+    } else {
+      newItems[index][field] = value;
+    }
     
     if (field === 'quantity' || field === 'supplier_unit_price') {
       const quantity = parseFloat(newItems[index].quantity) || 0;
@@ -215,6 +314,7 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
         description: '',
         uom: '',
         quantity: 0,
+        max_quantity: undefined, // Manually added items have no max restriction
         supplier_unit_price: 0,
         total_price: 0
       }]
@@ -315,6 +415,20 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
     setSuccess('');
 
     try {
+      // Validate total claim percentage doesn't exceed 100%
+      if (formData.po_number) {
+        const currentClaim = parseFloat(formData.claim_percentage) || 0;
+        const totalClaim = totalClaimPercentage + currentClaim;
+        
+        if (totalClaim > 100) {
+          const errorMessage = `Total claim percentage cannot exceed 100%. Current: ${totalClaimPercentage.toFixed(2)}% (previous invoices) + ${currentClaim.toFixed(2)}% (this invoice) = ${totalClaim.toFixed(2)}%`;
+          setError(errorMessage);
+          showToast(errorMessage, 'error');
+          setLoading(false);
+          return;
+        }
+      }
+
       const payload = {
         ...formData,
         status: 'draft' // إضافة القيمة صراحة
@@ -335,6 +449,7 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
       });
       setSelectedSupplier(null);
       setSelectedPO(null);
+      setTotalClaimPercentage(0);
     } catch (error) {
       const errorMessage = formatErrorMessages(error);
       setError(errorMessage);
@@ -746,8 +861,8 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
                                   onChange={(e) => handleItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
                                   className="form-control table-input"
                                   min="0"
-                                  max={item.quantity}
-                                  step="0.01"
+                                  max={item.max_quantity || item.quantity}
+                                  step="1"
                                 />
                               </td>
                               <td>
@@ -813,6 +928,11 @@ const PurchaseTaxInvoice = ({ invoiceId = null }) => {
                             required
                             disabled={!!invoiceId}
                           />
+                          {totalClaimPercentage > 0 && (
+                            <small className="text-muted">
+                              Previous invoices: {totalClaimPercentage.toFixed(2)}%
+                            </small>
+                          )}
                         </div>
                       </div>
                     </div>
