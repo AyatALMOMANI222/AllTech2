@@ -48,3 +48,4 @@ node -e "const mysql = require('mysql2/promise'); const fs = require('fs'); (asy
 - هذا متوافق مع التغييرات السابقة لإزالة UNIQUE constraint
 
 
+

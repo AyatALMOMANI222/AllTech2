@@ -13,3 +13,4 @@ The logo should be:
 Once the image is placed in this directory, it will automatically appear in the Tax Invoice.
 
 
+
