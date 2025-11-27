@@ -435,13 +435,25 @@ const DatabaseDashboard = () => {
                           // Calculate balance quantity undelivered: ORDERED QUANTITY - DELIVERED QUANTITY
                           const supplierBalanceQuantityUndelivered = supplierApprovedQuantity - supplierDeliveredQuantity;
                           
+                          // Recalculate penalty_amount for supplier delivered orders
+                          // Formula: penalty_amount = (penalty_percentage × delivered_total_price) / 100
+                          // This applies ONLY to the specific supplier order, not linked customer orders
+                          const supplierPenaltyPercentage = parseFloat(item.supplier_penalty_percentage) || null;
+                          let calculatedSupplierPenaltyAmount = null;
+                          if (supplierPenaltyPercentage !== null && !isNaN(supplierPenaltyPercentage) && supplierPenaltyPercentage > 0 && supplierDeliveredTotalPrice > 0) {
+                            calculatedSupplierPenaltyAmount = (supplierPenaltyPercentage * supplierDeliveredTotalPrice) / 100;
+                            // Round to 2 decimal places
+                            calculatedSupplierPenaltyAmount = Math.round(calculatedSupplierPenaltyAmount * 100) / 100;
+                          }
+                          
                           const supplierDelivered = (hasSupplierDelivered && supplierIsDelivered) ? {
                             ...item,
                             delivered_quantity: supplierDeliveredQuantity,
                             delivered_unit_price: supplierDeliveredUnitPrice,
                             delivered_total_price: supplierDeliveredTotalPrice,
-                            penalty_percentage: item.supplier_penalty_percentage || null,
-                            penalty_amount: item.supplier_penalty_amount || 0,
+                            penalty_percentage: supplierPenaltyPercentage,
+                            // Use calculated penalty_amount if available, otherwise use the one from backend
+                            penalty_amount: calculatedSupplierPenaltyAmount !== null ? calculatedSupplierPenaltyAmount : (parseFloat(item.supplier_penalty_amount) || 0),
                             invoice_no: item.supplier_invoice_no || '',
                             balance_quantity_undelivered: supplierBalanceQuantityUndelivered,
                             customer_supplier_name: supplierDeliveredOrders[0]?.supplier_name || item.supplier_name || item.customer_supplier_name || '',
