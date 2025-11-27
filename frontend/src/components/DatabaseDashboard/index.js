@@ -436,7 +436,7 @@ const DatabaseDashboard = () => {
                           const supplierBalanceQuantityUndelivered = supplierApprovedQuantity - supplierDeliveredQuantity;
                           
                           // Get penalty_percentage from backend
-                          // Priority: item.supplier_penalty_percentage (aggregated by backend) > delivered orders array
+                          // Priority: item level (aggregated by backend) > delivered orders array
                           let supplierPenaltyPercentage = null;
                           
                           // First, try to get from item.supplier_penalty_percentage (this is the aggregated value from backend)
@@ -629,13 +629,13 @@ const DatabaseDashboard = () => {
                                   : '-'}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierDelivered && supplierDelivered.penalty_percentage != null && supplierDelivered.penalty_percentage !== undefined && (typeof supplierDelivered.penalty_percentage === 'number' || (typeof supplierDelivered.penalty_percentage === 'string' && supplierDelivered.penalty_percentage !== '')) && !isNaN(parseFloat(supplierDelivered.penalty_percentage))
-                                      ? formatNumber(supplierDelivered.penalty_percentage)
+                                {supplierDelivered && supplierDelivered.penalty_percentage != null && supplierDelivered.penalty_percentage !== undefined && supplierDelivered.penalty_percentage !== ''
+                                  ? formatNumber(supplierDelivered.penalty_percentage)
                                   : supplierDelivered ? '-' : '-'}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierDelivered && supplierDelivered.penalty_amount != null && supplierDelivered.penalty_amount !== undefined && (typeof supplierDelivered.penalty_amount === 'number' || (typeof supplierDelivered.penalty_amount === 'string' && supplierDelivered.penalty_amount !== '')) && !isNaN(parseFloat(supplierDelivered.penalty_amount))
-                                      ? formatNumber(supplierDelivered.penalty_amount)
+                                {supplierDelivered && supplierDelivered.penalty_amount != null && supplierDelivered.penalty_amount !== undefined && supplierDelivered.penalty_amount !== ''
+                                  ? formatNumber(supplierDelivered.penalty_amount)
                                   : supplierDelivered ? '-' : '-'}
                                   </td>
                               <td className="purchase-data" title={supplierDelivered?.invoice_no ? `Invoice: ${supplierDelivered.invoice_no}` : ''}>
