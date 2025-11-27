@@ -459,6 +459,14 @@ const DatabaseDashboard = () => {
                             }
                           }
                           
+                          // Final fallback: try to parse directly from item if still null
+                          if (supplierPenaltyPercentage === null && itemPenaltyPct != null && itemPenaltyPct !== '') {
+                            const directParsed = parseFloat(String(itemPenaltyPct));
+                            if (!isNaN(directParsed) && isFinite(directParsed)) {
+                              supplierPenaltyPercentage = directParsed;
+                            }
+                          }
+                          
                           // Recalculate penalty_amount: penalty_amount = (penalty_percentage × delivered_total_price) / 100
                           // Always recalculate when penalty_percentage is available (including 0)
                           let calculatedSupplierPenaltyAmount = null;
@@ -472,12 +480,22 @@ const DatabaseDashboard = () => {
                             }
                           }
                           
+                          // Ensure penalty_percentage is set correctly (handle 0 values)
+                          const finalSupplierPenaltyPercentage = supplierPenaltyPercentage !== null 
+                            ? supplierPenaltyPercentage 
+                            : (item.supplier_penalty_percentage != null && item.supplier_penalty_percentage !== '' 
+                                ? (() => {
+                                    const parsed = parseFloat(item.supplier_penalty_percentage);
+                                    return !isNaN(parsed) && isFinite(parsed) ? parsed : null;
+                                  })()
+                                : null);
+                          
                           const supplierDelivered = (hasSupplierDelivered && supplierIsDelivered) ? {
                             ...item,
                             delivered_quantity: supplierDeliveredQuantity,
                             delivered_unit_price: supplierDeliveredUnitPrice,
                             delivered_total_price: supplierDeliveredTotalPrice,
-                            penalty_percentage: supplierPenaltyPercentage,
+                            penalty_percentage: finalSupplierPenaltyPercentage,
                             penalty_amount: calculatedSupplierPenaltyAmount !== null ? calculatedSupplierPenaltyAmount : (item.supplier_penalty_amount != null && item.supplier_penalty_amount !== '' ? parseFloat(item.supplier_penalty_amount) : null),
                             invoice_no: item.supplier_invoice_no || '',
                             balance_quantity_undelivered: supplierBalanceQuantityUndelivered,
@@ -621,14 +639,22 @@ const DatabaseDashboard = () => {
                                   : '-'}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierDelivered && supplierDelivered.penalty_percentage != null && supplierDelivered.penalty_percentage !== undefined
-                                  ? formatNumber(supplierDelivered.penalty_percentage)
-                                  : supplierDelivered ? '-' : '-'}
+                                {(() => {
+                                  if (!supplierDelivered) return '-';
+                                  const val = supplierDelivered.penalty_percentage;
+                                  if (val == null || val === undefined || val === '') return '-';
+                                  const num = typeof val === 'number' ? val : parseFloat(val);
+                                  return isNaN(num) ? '-' : formatNumber(num);
+                                })()}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierDelivered && supplierDelivered.penalty_amount != null && supplierDelivered.penalty_amount !== undefined
-                                  ? formatNumber(supplierDelivered.penalty_amount)
-                                  : supplierDelivered ? '-' : '-'}
+                                {(() => {
+                                  if (!supplierDelivered) return '-';
+                                  const val = supplierDelivered.penalty_amount;
+                                  if (val == null || val === undefined || val === '') return '-';
+                                  const num = typeof val === 'number' ? val : parseFloat(val);
+                                  return isNaN(num) ? '-' : formatNumber(num);
+                                })()}
                                   </td>
                               <td className="purchase-data" title={supplierDelivered?.invoice_no ? `Invoice: ${supplierDelivered.invoice_no}` : ''}>
                                     {supplierDelivered?.invoice_no || '-'}
