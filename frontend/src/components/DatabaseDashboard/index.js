@@ -436,26 +436,48 @@ const DatabaseDashboard = () => {
                           const supplierBalanceQuantityUndelivered = supplierApprovedQuantity - supplierDeliveredQuantity;
                           
                           // Get penalty_percentage from backend
-                          // Priority: item level (aggregated by backend) > delivered orders array
+                          // Priority: item.supplier_penalty_percentage (aggregated by backend) > delivered orders array
                           let supplierPenaltyPercentage = null;
-                          if (item.supplier_penalty_percentage != null && item.supplier_penalty_percentage !== '' && item.supplier_penalty_percentage !== '0') {
-                            supplierPenaltyPercentage = parseFloat(item.supplier_penalty_percentage);
-                            if (isNaN(supplierPenaltyPercentage)) {
-                              supplierPenaltyPercentage = null;
+                          
+                          // First, try to get from item.supplier_penalty_percentage (this is the aggregated value from backend)
+                          // The backend returns this as a string like "66.00", so we need to parse it
+                          if (item.supplier_penalty_percentage != null && item.supplier_penalty_percentage !== '' && item.supplier_penalty_percentage !== undefined) {
+                            const parsed = parseFloat(String(item.supplier_penalty_percentage));
+                            if (!isNaN(parsed) && isFinite(parsed)) {
+                              supplierPenaltyPercentage = parsed;
                             }
-                          } else if (supplierDeliveredOrders.length > 0 && supplierDeliveredOrders[0]?.penalty_percentage != null && supplierDeliveredOrders[0]?.penalty_percentage !== '' && supplierDeliveredOrders[0]?.penalty_percentage !== '0') {
-                            supplierPenaltyPercentage = parseFloat(supplierDeliveredOrders[0].penalty_percentage);
-                            if (isNaN(supplierPenaltyPercentage)) {
-                              supplierPenaltyPercentage = null;
+                          }
+                          
+                          // Fallback: try to get from delivered orders array if not found in item level
+                          if (supplierPenaltyPercentage === null && supplierDeliveredOrders.length > 0) {
+                            const orderPenalty = supplierDeliveredOrders[0]?.penalty_percentage;
+                            if (orderPenalty != null && orderPenalty !== '' && orderPenalty !== undefined) {
+                              const parsed = parseFloat(String(orderPenalty));
+                              if (!isNaN(parsed) && isFinite(parsed)) {
+                                supplierPenaltyPercentage = parsed;
+                              }
                             }
                           }
                           
                           // Recalculate penalty_amount on frontend: penalty_amount = (penalty_percentage × delivered_total_price) / 100
                           let calculatedSupplierPenaltyAmount = null;
-                          if (supplierPenaltyPercentage !== null && !isNaN(supplierPenaltyPercentage) && supplierPenaltyPercentage > 0 && supplierDeliveredTotalPrice > 0) {
+                          if (supplierPenaltyPercentage !== null && !isNaN(supplierPenaltyPercentage) && supplierPenaltyPercentage >= 0 && supplierDeliveredTotalPrice > 0) {
                             calculatedSupplierPenaltyAmount = (supplierPenaltyPercentage * supplierDeliveredTotalPrice) / 100;
                             // Round to 2 decimal places
                             calculatedSupplierPenaltyAmount = Math.round(calculatedSupplierPenaltyAmount * 100) / 100;
+                          }
+                          
+                          // Debug: Log penalty values for troubleshooting
+                          if (hasSupplierDelivered && supplierIsDelivered) {
+                            console.log('🔍 Supplier Delivered Penalty Debug:', {
+                              itemId: item.id,
+                              partNo: item.part_no,
+                              supplier_penalty_percentage_from_item: item.supplier_penalty_percentage,
+                              supplier_penalty_percentage_parsed: supplierPenaltyPercentage,
+                              supplier_delivered_total_price: supplierDeliveredTotalPrice,
+                              calculated_penalty_amount: calculatedSupplierPenaltyAmount,
+                              supplier_penalty_amount_from_item: item.supplier_penalty_amount
+                            });
                           }
                           
                           const supplierDelivered = (hasSupplierDelivered && supplierIsDelivered) ? {
@@ -463,8 +485,8 @@ const DatabaseDashboard = () => {
                             delivered_quantity: supplierDeliveredQuantity,
                             delivered_unit_price: supplierDeliveredUnitPrice,
                             delivered_total_price: supplierDeliveredTotalPrice,
-                            penalty_percentage: supplierPenaltyPercentage,
-                            penalty_amount: calculatedSupplierPenaltyAmount !== null ? calculatedSupplierPenaltyAmount : (parseFloat(item.supplier_penalty_amount) || 0),
+                            penalty_percentage: supplierPenaltyPercentage, // This will be the number value (e.g., 66.00) or null
+                            penalty_amount: calculatedSupplierPenaltyAmount !== null ? calculatedSupplierPenaltyAmount : (item.supplier_penalty_amount != null ? parseFloat(item.supplier_penalty_amount) : null),
                             invoice_no: item.supplier_invoice_no || '',
                             balance_quantity_undelivered: supplierBalanceQuantityUndelivered,
                             customer_supplier_name: supplierDeliveredOrders[0]?.supplier_name || item.supplier_name || item.customer_supplier_name || '',
@@ -607,12 +629,12 @@ const DatabaseDashboard = () => {
                                   : '-'}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierDelivered && supplierDelivered.penalty_percentage != null && supplierDelivered.penalty_percentage !== '' && !isNaN(supplierDelivered.penalty_percentage) && parseFloat(supplierDelivered.penalty_percentage) > 0
+                                {supplierDelivered && supplierDelivered.penalty_percentage != null && supplierDelivered.penalty_percentage !== undefined && (typeof supplierDelivered.penalty_percentage === 'number' || (typeof supplierDelivered.penalty_percentage === 'string' && supplierDelivered.penalty_percentage !== '')) && !isNaN(parseFloat(supplierDelivered.penalty_percentage))
                                       ? formatNumber(supplierDelivered.penalty_percentage)
                                   : supplierDelivered ? '-' : '-'}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierDelivered && supplierDelivered.penalty_amount != null && supplierDelivered.penalty_amount !== '' && !isNaN(supplierDelivered.penalty_amount) && parseFloat(supplierDelivered.penalty_amount) > 0
+                                {supplierDelivered && supplierDelivered.penalty_amount != null && supplierDelivered.penalty_amount !== undefined && (typeof supplierDelivered.penalty_amount === 'number' || (typeof supplierDelivered.penalty_amount === 'string' && supplierDelivered.penalty_amount !== '')) && !isNaN(parseFloat(supplierDelivered.penalty_amount))
                                       ? formatNumber(supplierDelivered.penalty_amount)
                                   : supplierDelivered ? '-' : '-'}
                                   </td>
