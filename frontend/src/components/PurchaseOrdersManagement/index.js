@@ -165,10 +165,24 @@ const documentFileInputRef = React.useRef(null);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
+    setFormData((prev) => {
+      const updated = {
         ...prev,
         [name]: value,
-    }));
+      };
+      
+      // If penalty_percentage is changed, recalculate penalty_amount for items with delivered_total_price
+      // This calculation applies ONLY to the current order being edited, not linked orders
+      if (name === 'penalty_percentage' && editingOrder) {
+        // Note: Items are not loaded in the edit form, so penalty_amount calculation
+        // will be handled by the backend when the form is submitted
+        // The backend will recalculate penalty_amount for items in this specific order only
+        console.log(`Penalty percentage changed to: ${value} for order id: ${editingOrder.id}`);
+        console.log('Penalty amount will be recalculated by backend for this order only');
+      }
+      
+      return updated;
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -226,12 +240,21 @@ const documentFileInputRef = React.useRef(null);
 
   const handleEdit = (order) => {
     setEditingOrder(order);
+    
+    // Display penalty_percentage correctly from the order
+    // This applies ONLY to the specific order being edited, not linked orders
+    const penaltyPercentage = order.penalty_percentage || "";
+    
     setFormData({
       po_number: order.po_number,
       order_type: order.order_type,
       customer_supplier_id: order.customer_supplier_id,
-      penalty_percentage: order.penalty_percentage || "",
+      penalty_percentage: penaltyPercentage,
     });
+    
+    console.log(`Loading order for edit - id: ${order.id}, penalty_percentage: ${penaltyPercentage}`);
+    console.log('This penalty_percentage applies ONLY to this order, not linked orders');
+    
     setShowModal(true);
   };
 
@@ -270,6 +293,35 @@ const documentFileInputRef = React.useRef(null);
         `${API_BASE_URL}/purchase-orders/${order.id}`
       );
       const data = await response.json();
+      
+      // Recalculate penalty_amount for items in THIS order only (not linked orders)
+      // Formula: penalty_amount = (penalty_percentage × delivered_total_price) / 100
+      if (data.items && Array.isArray(data.items)) {
+        const orderPenaltyPercentage = parseFloat(data.order?.penalty_percentage) || null;
+        
+        data.items = data.items.map((item) => {
+          // Only calculate penalty_amount if this item has delivered_total_price
+          // and penalty_percentage exists (either from item or order level)
+          const itemPenaltyPercentage = parseFloat(item.penalty_percentage) || orderPenaltyPercentage;
+          const deliveredTotalPrice = parseFloat(item.delivered_total_price) || 0;
+          
+          let calculatedPenaltyAmount = null;
+          if (itemPenaltyPercentage !== null && !isNaN(itemPenaltyPercentage) && itemPenaltyPercentage > 0 && deliveredTotalPrice > 0) {
+            calculatedPenaltyAmount = (itemPenaltyPercentage * deliveredTotalPrice) / 100;
+            // Round to 2 decimal places
+            calculatedPenaltyAmount = Math.round(calculatedPenaltyAmount * 100) / 100;
+          }
+          
+          return {
+            ...item,
+            // Use calculated penalty_amount if it exists, otherwise use the one from backend
+            penalty_amount: calculatedPenaltyAmount !== null ? calculatedPenaltyAmount : (parseFloat(item.penalty_amount) || null),
+            // Ensure penalty_percentage is set (from item or order level)
+            penalty_percentage: itemPenaltyPercentage !== null ? itemPenaltyPercentage : null
+          };
+        });
+      }
+      
       setSelectedOrder(data);
       setPODocuments(data.documents || []);
       setDocumentFiles([]);
