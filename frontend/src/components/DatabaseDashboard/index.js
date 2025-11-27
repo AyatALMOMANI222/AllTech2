@@ -435,20 +435,20 @@ const DatabaseDashboard = () => {
                           // Calculate balance quantity undelivered: ORDERED QUANTITY - DELIVERED QUANTITY
                           const supplierBalanceQuantityUndelivered = supplierApprovedQuantity - supplierDeliveredQuantity;
                           
-                          // Get penalty_percentage from backend
-                          // Priority: item level (aggregated by backend) > delivered orders array
+                          // Get penalty_percentage from backend for Supplier Delivered Orders
+                          // Priority: item.supplier_penalty_percentage (aggregated by backend) > delivered orders array
                           let supplierPenaltyPercentage = null;
                           
-                          // First, try to get from item.supplier_penalty_percentage (this is the aggregated value from backend)
-                          // The backend returns this as a string like "66.00", so we need to parse it
-                          if (item.supplier_penalty_percentage != null && item.supplier_penalty_percentage !== '' && item.supplier_penalty_percentage !== undefined) {
-                            const parsed = parseFloat(String(item.supplier_penalty_percentage));
+                          // Read from item.supplier_penalty_percentage (backend returns as string like "66.00" or number)
+                          const itemPenaltyPct = item.supplier_penalty_percentage;
+                          if (itemPenaltyPct != null && itemPenaltyPct !== '' && itemPenaltyPct !== undefined) {
+                            const parsed = parseFloat(String(itemPenaltyPct));
                             if (!isNaN(parsed) && isFinite(parsed)) {
                               supplierPenaltyPercentage = parsed;
                             }
                           }
                           
-                          // Fallback: try to get from delivered orders array if not found in item level
+                          // Fallback: get from delivered orders array if not found at item level
                           if (supplierPenaltyPercentage === null && supplierDeliveredOrders.length > 0) {
                             const orderPenalty = supplierDeliveredOrders[0]?.penalty_percentage;
                             if (orderPenalty != null && orderPenalty !== '' && orderPenalty !== undefined) {
@@ -459,25 +459,17 @@ const DatabaseDashboard = () => {
                             }
                           }
                           
-                          // Recalculate penalty_amount on frontend: penalty_amount = (penalty_percentage × delivered_total_price) / 100
+                          // Recalculate penalty_amount: penalty_amount = (penalty_percentage × delivered_total_price) / 100
+                          // Always recalculate when penalty_percentage is available (including 0)
                           let calculatedSupplierPenaltyAmount = null;
-                          if (supplierPenaltyPercentage !== null && !isNaN(supplierPenaltyPercentage) && supplierPenaltyPercentage >= 0 && supplierDeliveredTotalPrice > 0) {
-                            calculatedSupplierPenaltyAmount = (supplierPenaltyPercentage * supplierDeliveredTotalPrice) / 100;
-                            // Round to 2 decimal places
-                            calculatedSupplierPenaltyAmount = Math.round(calculatedSupplierPenaltyAmount * 100) / 100;
-                          }
-                          
-                          // Debug: Log penalty values for troubleshooting
-                          if (hasSupplierDelivered && supplierIsDelivered) {
-                            console.log('🔍 Supplier Delivered Penalty Debug:', {
-                              itemId: item.id,
-                              partNo: item.part_no,
-                              supplier_penalty_percentage_from_item: item.supplier_penalty_percentage,
-                              supplier_penalty_percentage_parsed: supplierPenaltyPercentage,
-                              supplier_delivered_total_price: supplierDeliveredTotalPrice,
-                              calculated_penalty_amount: calculatedSupplierPenaltyAmount,
-                              supplier_penalty_amount_from_item: item.supplier_penalty_amount
-                            });
+                          if (supplierPenaltyPercentage !== null && !isNaN(supplierPenaltyPercentage) && supplierPenaltyPercentage >= 0) {
+                            if (supplierDeliveredTotalPrice > 0) {
+                              calculatedSupplierPenaltyAmount = (supplierPenaltyPercentage * supplierDeliveredTotalPrice) / 100;
+                              calculatedSupplierPenaltyAmount = Math.round(calculatedSupplierPenaltyAmount * 100) / 100;
+                            } else {
+                              // If delivered_total_price is 0, penalty_amount should be 0
+                              calculatedSupplierPenaltyAmount = 0;
+                            }
                           }
                           
                           const supplierDelivered = (hasSupplierDelivered && supplierIsDelivered) ? {
@@ -485,8 +477,8 @@ const DatabaseDashboard = () => {
                             delivered_quantity: supplierDeliveredQuantity,
                             delivered_unit_price: supplierDeliveredUnitPrice,
                             delivered_total_price: supplierDeliveredTotalPrice,
-                            penalty_percentage: supplierPenaltyPercentage, // This will be the number value (e.g., 66.00) or null
-                            penalty_amount: calculatedSupplierPenaltyAmount !== null ? calculatedSupplierPenaltyAmount : (item.supplier_penalty_amount != null ? parseFloat(item.supplier_penalty_amount) : null),
+                            penalty_percentage: supplierPenaltyPercentage,
+                            penalty_amount: calculatedSupplierPenaltyAmount !== null ? calculatedSupplierPenaltyAmount : (item.supplier_penalty_amount != null && item.supplier_penalty_amount !== '' ? parseFloat(item.supplier_penalty_amount) : null),
                             invoice_no: item.supplier_invoice_no || '',
                             balance_quantity_undelivered: supplierBalanceQuantityUndelivered,
                             customer_supplier_name: supplierDeliveredOrders[0]?.supplier_name || item.supplier_name || item.customer_supplier_name || '',
@@ -629,12 +621,12 @@ const DatabaseDashboard = () => {
                                   : '-'}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierDelivered && supplierDelivered.penalty_percentage != null && supplierDelivered.penalty_percentage !== undefined && supplierDelivered.penalty_percentage !== ''
+                                {supplierDelivered && supplierDelivered.penalty_percentage != null && supplierDelivered.penalty_percentage !== undefined
                                   ? formatNumber(supplierDelivered.penalty_percentage)
                                   : supplierDelivered ? '-' : '-'}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierDelivered && supplierDelivered.penalty_amount != null && supplierDelivered.penalty_amount !== undefined && supplierDelivered.penalty_amount !== ''
+                                {supplierDelivered && supplierDelivered.penalty_amount != null && supplierDelivered.penalty_amount !== undefined
                                   ? formatNumber(supplierDelivered.penalty_amount)
                                   : supplierDelivered ? '-' : '-'}
                                   </td>
