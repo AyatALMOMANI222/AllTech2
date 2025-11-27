@@ -417,22 +417,32 @@ router.post('/', validateSalesTaxInvoice, async (req, res) => {
           // Update the inventory record with highest balance
           const inventoryItem = inventoryItems[0];
           const currentSoldQuantity = parseFloat(inventoryItem.sold_quantity) || 0;
+          const currentQuantity = parseFloat(inventoryItem.quantity) || 0;
+          const supplierUnitPrice = parseFloat(inventoryItem.supplier_unit_price) || 0;
           
           // Calculate new sold_quantity
           const newSoldQuantity = currentSoldQuantity + saleQuantity;
           
-          // Update inventory record - ONLY sold_quantity (all other fields remain unchanged)
+          // Recalculate balance and balance_amount
+          const newBalance = currentQuantity - newSoldQuantity;
+          const newBalanceAmount = newBalance * supplierUnitPrice;
+          
+          // Update inventory record - sold_quantity, balance, and balance_amount
           await connection.execute(`
             UPDATE inventory 
             SET sold_quantity = ?,
+                balance = ?,
+                balance_amount = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
           `, [
             newSoldQuantity,
+            newBalance,
+            newBalanceAmount,
             inventoryItem.id
           ]);
           
-          console.log(`✓ Inventory updated: project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}, sold_quantity: ${currentSoldQuantity} + ${saleQuantity} = ${newSoldQuantity}`);
+          console.log(`✓ Inventory updated: project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}, sold_quantity: ${currentSoldQuantity} + ${saleQuantity} = ${newSoldQuantity}, balance: ${newBalance}, balance_amount: ${newBalanceAmount}`);
         } else {
           // No matching inventory record found - skip this item (don't throw error, just log and continue)
           console.log(`⚠️ No matching inventory found for project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}. Skipping inventory update for this item.`);
@@ -821,7 +831,7 @@ router.put('/:id', async (req, res) => {
         
         // Find matching inventory record - select the one with highest balance
         const [inventoryItems] = await req.db.execute(`
-          SELECT id, sold_quantity
+          SELECT id, quantity, sold_quantity, supplier_unit_price
           FROM inventory 
           WHERE project_no = ? AND part_no = ? AND description = ?
           ORDER BY balance DESC
@@ -831,18 +841,26 @@ router.put('/:id', async (req, res) => {
         if (inventoryItems.length > 0) {
           const inventoryItem = inventoryItems[0];
           const currentSoldQuantity = parseFloat(inventoryItem.sold_quantity) || 0;
+          const currentQuantity = parseFloat(inventoryItem.quantity) || 0;
+          const supplierUnitPrice = parseFloat(inventoryItem.supplier_unit_price) || 0;
           
-          // Revert: reduce sold_quantity by old quantity (only update sold_quantity)
+          // Revert: reduce sold_quantity by old quantity
           const newSoldQuantity = Math.max(0, currentSoldQuantity - oldQuantity);
+          
+          // Recalculate balance and balance_amount
+          const newBalance = currentQuantity - newSoldQuantity;
+          const newBalanceAmount = newBalance * supplierUnitPrice;
           
           await req.db.execute(`
             UPDATE inventory 
             SET sold_quantity = ?,
+                balance = ?,
+                balance_amount = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-          `, [newSoldQuantity, inventoryItem.id]);
+          `, [newSoldQuantity, newBalance, newBalanceAmount, inventoryItem.id]);
           
-          console.log(`✓ Inventory reverted: project_no=${oldItem.project_no}, part_no=${oldItem.part_no}, description=${oldItem.description}, sold_quantity: ${currentSoldQuantity} - ${oldQuantity} = ${newSoldQuantity}`);
+          console.log(`✓ Inventory reverted: project_no=${oldItem.project_no}, part_no=${oldItem.part_no}, description=${oldItem.description}, sold_quantity: ${currentSoldQuantity} - ${oldQuantity} = ${newSoldQuantity}, balance: ${newBalance}, balance_amount: ${newBalanceAmount}`);
         }
       }
     }
@@ -869,7 +887,7 @@ router.put('/:id', async (req, res) => {
         
         // Get matching inventory records - select the one with highest balance
         const [inventoryItems] = await req.db.execute(`
-          SELECT id, sold_quantity
+          SELECT id, quantity, sold_quantity, supplier_unit_price
           FROM inventory 
           WHERE project_no = ? AND part_no = ? AND description = ?
           ORDER BY balance DESC
@@ -880,19 +898,27 @@ router.put('/:id', async (req, res) => {
           // Update the inventory record with highest balance
           const inventoryItem = inventoryItems[0];
           const currentSoldQuantity = parseFloat(inventoryItem.sold_quantity) || 0;
+          const currentQuantity = parseFloat(inventoryItem.quantity) || 0;
+          const supplierUnitPrice = parseFloat(inventoryItem.supplier_unit_price) || 0;
           
           // Calculate new sold_quantity
           const newSoldQuantity = currentSoldQuantity + saleQuantity;
           
-          // Update inventory record - ONLY sold_quantity (all other fields remain unchanged)
+          // Recalculate balance and balance_amount
+          const newBalance = currentQuantity - newSoldQuantity;
+          const newBalanceAmount = newBalance * supplierUnitPrice;
+          
+          // Update inventory record - sold_quantity, balance, and balance_amount
           await req.db.execute(`
             UPDATE inventory 
             SET sold_quantity = ?,
+                balance = ?,
+                balance_amount = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-          `, [newSoldQuantity, inventoryItem.id]);
+          `, [newSoldQuantity, newBalance, newBalanceAmount, inventoryItem.id]);
           
-          console.log(`✓ Inventory updated: project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}, sold_quantity: ${currentSoldQuantity} + ${saleQuantity} = ${newSoldQuantity}`);
+          console.log(`✓ Inventory updated: project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}, sold_quantity: ${currentSoldQuantity} + ${saleQuantity} = ${newSoldQuantity}, balance: ${newBalance}, balance_amount: ${newBalanceAmount}`);
         } else {
           // No matching inventory record found - skip this item
           console.log(`⚠️ No matching inventory found for project_no=${item.project_no}, part_no=${item.part_no}, description=${item.description}. Skipping inventory update for this item.`);

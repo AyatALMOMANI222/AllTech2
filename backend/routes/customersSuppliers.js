@@ -91,6 +91,21 @@ router.post('/', authenticateToken, [
       country
     } = req.body;
 
+    // Check if email already exists (only if email is provided)
+    if (email) {
+      const [existingEmail] = await req.db.execute(
+        'SELECT id FROM customers_suppliers WHERE email = ?',
+        [email]
+      );
+      
+      if (existingEmail.length > 0) {
+        return res.status(400).json({ 
+          message: 'Email already exists',
+          errors: [{ field: 'email', message: 'This email is already registered' }]
+        });
+      }
+    }
+
     const id = generateUUID();
 
     await req.db.execute(
@@ -161,6 +176,21 @@ router.put('/:id', authenticateToken, [
 
     if (existingRecords.length === 0) {
       return res.status(404).json({ message: 'Record not found' });
+    }
+
+    // Check if email already exists (only if email is being updated and is provided)
+    if (email !== undefined && email) {
+      const [existingEmail] = await req.db.execute(
+        'SELECT id FROM customers_suppliers WHERE email = ? AND id != ?',
+        [email, id]
+      );
+      
+      if (existingEmail.length > 0) {
+        return res.status(400).json({ 
+          message: 'Email already exists',
+          errors: [{ field: 'email', message: 'This email is already registered' }]
+        });
+      }
     }
 
     // Build update query dynamically

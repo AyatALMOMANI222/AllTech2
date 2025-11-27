@@ -172,6 +172,36 @@ async function ensureCustomersSuppliersColumns() {
       }
     }
     
+    // Add UNIQUE constraint to email column if it doesn't exist
+    try {
+      const [constraints] = await connection.execute(`
+        SELECT CONSTRAINT_NAME 
+        FROM information_schema.TABLE_CONSTRAINTS 
+        WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'customers_suppliers' 
+        AND CONSTRAINT_TYPE = 'UNIQUE' 
+        AND CONSTRAINT_NAME LIKE '%email%'
+      `);
+      
+      if (constraints.length === 0) {
+        await connection.execute(`
+          ALTER TABLE customers_suppliers 
+          ADD UNIQUE KEY unique_email (email)
+        `);
+        console.log('✓ UNIQUE constraint added to email column in customers_suppliers table');
+      } else {
+        console.log('✓ UNIQUE constraint already exists on email column in customers_suppliers table');
+      }
+    } catch (error) {
+      if (error.code === 'ER_DUP_ENTRY' || error.message.includes('Duplicate entry')) {
+        console.log('⚠️ Cannot add UNIQUE constraint: duplicate emails exist in customers_suppliers table. Please remove duplicates first.');
+      } else if (error.code === 'ER_DUP_KEYNAME' || error.message.includes('Duplicate key name')) {
+        console.log('✓ UNIQUE constraint already exists on email column in customers_suppliers table');
+      } else {
+        console.log('Note: email UNIQUE constraint check:', error.message);
+      }
+    }
+    
     connection.release();
   } catch (error) {
     console.error('Error checking customers_suppliers columns:', error.message);
