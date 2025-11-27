@@ -1335,29 +1335,47 @@ router.put('/:id', async (req, res) => {
     }
     
     // Update penalty_percentage for all items if provided (regardless of status)
-    // Update penalty_percentage (penalty_amount always NULL)
+    // Only update the specific PO (id = :id), NOT linked Customer PO
+    // After updating penalty_percentage, recalculate penalty_amount for this order only
     if (penalty_percentage !== undefined && penalty_percentage !== null && penalty_percentage !== '') {
-      console.log('Updating penalty_percentage for all items:', penalty_percentage);
+      console.log('Updating penalty_percentage for PO id:', id, 'penalty_percentage:', penalty_percentage);
       
       try {
-        // Update penalty_percentage (penalty_amount always NULL)
-        await req.db.execute(`
-          UPDATE purchase_order_items SET
-            penalty_percentage = ?,
-            penalty_amount = NULL,
-            updated_at = CURRENT_TIMESTAMP
+        // Get all items for this PO to recalculate penalty_amount
+        const [items] = await req.db.execute(`
+          SELECT id, delivered_total_price
+          FROM purchase_order_items
           WHERE po_id = ?
-        `, [
-          parseFloat(penalty_percentage),
-          id
-        ]);
+        `, [id]);
         
-        console.log('✅ Updated penalty_percentage (penalty_amount set to NULL)');
+        // Update penalty_percentage and recalculate penalty_amount for each item
+        for (const item of items) {
+          const deliveredTotalPrice = parseFloat(item.delivered_total_price) || 0;
+          const penaltyPercentage = parseFloat(penalty_percentage);
+          
+          // Calculate penalty_amount = (penalty_percentage × delivered_total_price) / 100
+          let penaltyAmount = null;
+          if (penaltyPercentage !== null && !isNaN(penaltyPercentage) && penaltyPercentage > 0 && deliveredTotalPrice > 0) {
+            penaltyAmount = (penaltyPercentage * deliveredTotalPrice) / 100;
+            // Round to 2 decimal places to avoid floating point precision issues
+            penaltyAmount = Math.round(penaltyAmount * 100) / 100;
+          }
+          
+          // Update penalty_percentage and penalty_amount for this item only
+          await req.db.execute(`
+            UPDATE purchase_order_items SET
+              penalty_percentage = ?,
+              penalty_amount = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `, [
+            penaltyPercentage,
+            penaltyAmount,
+            item.id
+          ]);
+        }
         
-        // Recalculate all delivered values (to ensure consistency)
-        // This ensures delivered_quantity, delivered_unit_price, delivered_total_price are up to date
-        const { calculateAndUpdateDeliveredData } = require('./databaseDashboard');
-        await calculateAndUpdateDeliveredData(req.db, id);
+        console.log(`✅ Updated penalty_percentage and recalculated penalty_amount for ${items.length} item(s) in PO id: ${id}`);
         
       } catch (updateError) {
         console.error('Error updating penalty_percentage:', updateError);
