@@ -1335,20 +1335,40 @@ router.put('/:id', async (req, res) => {
     }
     
     // Update penalty_percentage for all items if provided (regardless of status)
-    // Only update the specific PO (id = :id), NOT linked Customer PO
-    // After updating penalty_percentage, recalculate penalty_amount for this order only
+    // ⚠️ CRITICAL: Only update the specific PO (id = :id), NOT linked Customer PO
+    // ⚠️ This update applies ONLY to purchase_order_items WHERE po_id = :id
+    // ⚠️ After updating penalty_percentage, recalculate penalty_amount for this order only
     if (penalty_percentage !== undefined && penalty_percentage !== null && penalty_percentage !== '') {
-      console.log('Updating penalty_percentage for PO id:', id, 'penalty_percentage:', penalty_percentage);
+      console.log('⚠️ UPDATING PENALTY: PO id:', id, 'penalty_percentage:', penalty_percentage);
+      console.log('⚠️ This update will ONLY affect items in PO id:', id, '- NOT linked Customer PO');
       
       try {
-        // Get all items for this PO to recalculate penalty_amount
+        // Get the PO to verify it exists and log its details
+        const [poCheck] = await req.db.execute(`
+          SELECT id, po_number, order_type, linked_customer_po_id
+          FROM purchase_orders
+          WHERE id = ?
+        `, [id]);
+        
+        if (poCheck.length === 0) {
+          console.error(`❌ PO id ${id} not found - cannot update penalty_percentage`);
+          return res.status(404).json({ message: 'Purchase order not found' });
+        }
+        
+        const currentPO = poCheck[0];
+        console.log(`✓ Found PO: id=${currentPO.id}, po_number=${currentPO.po_number}, order_type=${currentPO.order_type}, linked_customer_po_id=${currentPO.linked_customer_po_id || 'NULL'}`);
+        console.log(`⚠️ IMPORTANT: Will NOT update linked Customer PO id=${currentPO.linked_customer_po_id || 'N/A'}`);
+        
+        // Get all items for THIS SPECIFIC PO ONLY (WHERE po_id = :id)
         const [items] = await req.db.execute(`
-          SELECT id, delivered_total_price
+          SELECT id, delivered_total_price, part_no
           FROM purchase_order_items
           WHERE po_id = ?
         `, [id]);
         
-        // Update penalty_percentage and recalculate penalty_amount for each item
+        console.log(`✓ Found ${items.length} item(s) in PO id ${id} - will update ONLY these items`);
+        
+        // Update penalty_percentage and recalculate penalty_amount for each item in THIS PO ONLY
         for (const item of items) {
           const deliveredTotalPrice = parseFloat(item.delivered_total_price) || 0;
           const penaltyPercentage = parseFloat(penalty_percentage);
@@ -1361,7 +1381,8 @@ router.put('/:id', async (req, res) => {
             penaltyAmount = Math.round(penaltyAmount * 100) / 100;
           }
           
-          // Update penalty_percentage and penalty_amount for this item only
+          // Update penalty_percentage and penalty_amount for THIS ITEM ONLY (WHERE id = item.id)
+          // This item belongs to PO id = :id, so it will NOT affect other POs
           await req.db.execute(`
             UPDATE purchase_order_items SET
               penalty_percentage = ?,
@@ -1373,12 +1394,15 @@ router.put('/:id', async (req, res) => {
             penaltyAmount,
             item.id
           ]);
+          
+          console.log(`  ✓ Updated item id=${item.id} (part_no=${item.part_no}): penalty_percentage=${penaltyPercentage}, penalty_amount=${penaltyAmount}`);
         }
         
-        console.log(`✅ Updated penalty_percentage and recalculated penalty_amount for ${items.length} item(s) in PO id: ${id}`);
+        console.log(`✅ COMPLETED: Updated penalty_percentage and recalculated penalty_amount for ${items.length} item(s) in PO id: ${id} ONLY`);
+        console.log(`⚠️ CONFIRMED: Linked Customer PO (id=${currentPO.linked_customer_po_id || 'N/A'}) was NOT updated`);
         
       } catch (updateError) {
-        console.error('Error updating penalty_percentage:', updateError);
+        console.error('❌ Error updating penalty_percentage:', updateError);
         // Don't fail the whole request, just log the error
       }
     }
