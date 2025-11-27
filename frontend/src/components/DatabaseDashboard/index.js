@@ -435,10 +435,22 @@ const DatabaseDashboard = () => {
                           // Calculate balance quantity undelivered: ORDERED QUANTITY - DELIVERED QUANTITY
                           const supplierBalanceQuantityUndelivered = supplierApprovedQuantity - supplierDeliveredQuantity;
                           
-                          // Recalculate penalty_amount for supplier delivered orders
-                          // Formula: penalty_amount = (penalty_percentage × delivered_total_price) / 100
-                          // This applies ONLY to the specific supplier order, not linked customer orders
-                          const supplierPenaltyPercentage = parseFloat(item.supplier_penalty_percentage) || null;
+                          // Get penalty_percentage from backend
+                          // Priority: item level (aggregated by backend) > delivered orders array
+                          let supplierPenaltyPercentage = null;
+                          if (item.supplier_penalty_percentage != null && item.supplier_penalty_percentage !== '' && item.supplier_penalty_percentage !== '0') {
+                            supplierPenaltyPercentage = parseFloat(item.supplier_penalty_percentage);
+                            if (isNaN(supplierPenaltyPercentage)) {
+                              supplierPenaltyPercentage = null;
+                            }
+                          } else if (supplierDeliveredOrders.length > 0 && supplierDeliveredOrders[0]?.penalty_percentage != null && supplierDeliveredOrders[0]?.penalty_percentage !== '' && supplierDeliveredOrders[0]?.penalty_percentage !== '0') {
+                            supplierPenaltyPercentage = parseFloat(supplierDeliveredOrders[0].penalty_percentage);
+                            if (isNaN(supplierPenaltyPercentage)) {
+                              supplierPenaltyPercentage = null;
+                            }
+                          }
+                          
+                          // Recalculate penalty_amount on frontend: penalty_amount = (penalty_percentage × delivered_total_price) / 100
                           let calculatedSupplierPenaltyAmount = null;
                           if (supplierPenaltyPercentage !== null && !isNaN(supplierPenaltyPercentage) && supplierPenaltyPercentage > 0 && supplierDeliveredTotalPrice > 0) {
                             calculatedSupplierPenaltyAmount = (supplierPenaltyPercentage * supplierDeliveredTotalPrice) / 100;
@@ -452,7 +464,6 @@ const DatabaseDashboard = () => {
                             delivered_unit_price: supplierDeliveredUnitPrice,
                             delivered_total_price: supplierDeliveredTotalPrice,
                             penalty_percentage: supplierPenaltyPercentage,
-                            // Use calculated penalty_amount if available, otherwise use the one from backend
                             penalty_amount: calculatedSupplierPenaltyAmount !== null ? calculatedSupplierPenaltyAmount : (parseFloat(item.supplier_penalty_amount) || 0),
                             invoice_no: item.supplier_invoice_no || '',
                             balance_quantity_undelivered: supplierBalanceQuantityUndelivered,
@@ -596,14 +607,14 @@ const DatabaseDashboard = () => {
                                   : '-'}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierDelivered && supplierDelivered.penalty_percentage != null && supplierDelivered.penalty_percentage !== '' && supplierDelivered.penalty_percentage !== '0'
+                                {supplierDelivered && supplierDelivered.penalty_percentage != null && supplierDelivered.penalty_percentage !== '' && !isNaN(supplierDelivered.penalty_percentage) && parseFloat(supplierDelivered.penalty_percentage) > 0
                                       ? formatNumber(supplierDelivered.penalty_percentage)
-                                  : supplierDelivered ? '0.00' : '-'}
+                                  : supplierDelivered ? '-' : '-'}
                                   </td>
                                   <td className="purchase-data">
-                                {supplierDelivered && supplierDelivered.penalty_amount != null && supplierDelivered.penalty_amount !== '' && supplierDelivered.penalty_amount !== '0'
+                                {supplierDelivered && supplierDelivered.penalty_amount != null && supplierDelivered.penalty_amount !== '' && !isNaN(supplierDelivered.penalty_amount) && parseFloat(supplierDelivered.penalty_amount) > 0
                                       ? formatNumber(supplierDelivered.penalty_amount)
-                                  : supplierDelivered ? '0.00' : '-'}
+                                  : supplierDelivered ? '-' : '-'}
                                   </td>
                               <td className="purchase-data" title={supplierDelivered?.invoice_no ? `Invoice: ${supplierDelivered.invoice_no}` : ''}>
                                     {supplierDelivered?.invoice_no || '-'}
