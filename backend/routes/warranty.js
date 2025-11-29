@@ -93,7 +93,7 @@ function parseDate(dateValue) {
   
   // Try to parse as date string (MM/DD/YYYY or DD/MM/YYYY)
   if (typeof dateValue === 'string') {
-    // Try MM/DD/YYYY format (US Excel standard format)
+    // Try MM/DD/YYYY or DD/MM/YYYY format (with forward slash)
     const mmddyyyy = dateValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (mmddyyyy) {
       const first = parseInt(mmddyyyy[1]);
@@ -114,6 +114,35 @@ function parseDate(dateValue) {
         day = second;
       } else {
         // Ambiguous (both <= 12) - assume MM/DD/YYYY (US format, standard in Excel)
+        month = first - 1;
+        day = second;
+      }
+      
+      // Use formatDateAsString to avoid timezone conversion
+      return formatDateAsString(year, month, day);
+    }
+    
+    // Try DD-MM-YYYY or MM-DD-YYYY format (with dash)
+    const ddmmyyyy = dateValue.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (ddmmyyyy) {
+      const first = parseInt(ddmmyyyy[1]);
+      const second = parseInt(ddmmyyyy[2]);
+      const year = parseInt(ddmmyyyy[3]);
+      
+      let month, day;
+      // Determine format: if first > 12, it must be DD-MM-YYYY (day)
+      // If second > 12, it must be MM-DD-YYYY (day)
+      // If both <= 12, assume MM-DD-YYYY (US format)
+      if (first > 12 && second <= 12) {
+        // Definitely DD-MM-YYYY (first is day, second is month)
+        day = first;
+        month = second - 1;
+      } else if (second > 12 && first <= 12) {
+        // Definitely MM-DD-YYYY (first is month, second is day)
+        month = first - 1;
+        day = second;
+      } else {
+        // Ambiguous (both <= 12) - assume MM-DD-YYYY (US format)
         month = first - 1;
         day = second;
       }
@@ -666,10 +695,12 @@ router.post('/import', upload.single('file'), async (req, res) => {
     }
     
     const processedItems = [];
+    const validationErrors = [];
     const warrantyType = req.body.warranty_type || 'sales';
     
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
+      const rowNumber = i + 2; // Excel row number (accounting for header row)
       
       try {
         // Map exact column names from the image
@@ -690,9 +721,69 @@ router.post('/import', upload.single('file'), async (req, res) => {
           continue;
         }
         
-        // Parse dates
+        // Validate and parse dates
         const formattedStartDate = parseDate(warranty_start_date);
         const formattedEndDate = parseDate(warranty_end_date);
+        
+        // Validate Warranty Start Date
+        if (!warranty_start_date || warranty_start_date === '' || warranty_start_date === null) {
+          validationErrors.push({
+            row: rowNumber,
+            field: 'Warranty Start Date',
+            message: `Row ${rowNumber}: Warranty Start Date is empty or missing`
+          });
+          continue; // Skip this row
+        }
+        
+        if (!formattedStartDate) {
+          validationErrors.push({
+            row: rowNumber,
+            field: 'Warranty Start Date',
+            message: `Row ${rowNumber}: Warranty Start Date "${warranty_start_date}" is invalid or cannot be parsed. Accepted formats: dd/mm/yyyy, dd-mm-yyyy, mm/dd/yyyy, mm-dd-yyyy, yyyy-mm-dd`
+          });
+          continue; // Skip this row
+        }
+        
+        // Validate Warranty End Date
+        if (!warranty_end_date || warranty_end_date === '' || warranty_end_date === null) {
+          validationErrors.push({
+            row: rowNumber,
+            field: 'Warranty End Date',
+            message: `Row ${rowNumber}: Warranty End Date is empty or missing`
+          });
+          continue; // Skip this row
+        }
+        
+        if (!formattedEndDate) {
+          validationErrors.push({
+            row: rowNumber,
+            field: 'Warranty End Date',
+            message: `Row ${rowNumber}: Warranty End Date "${warranty_end_date}" is invalid or cannot be parsed. Accepted formats: dd/mm/yyyy, dd-mm-yyyy, mm/dd/yyyy, mm-dd-yyyy, yyyy-mm-dd`
+          });
+          continue; // Skip this row
+        }
+        
+        // Validate that dates are valid Date objects (additional check)
+        const startDateObj = new Date(formattedStartDate);
+        const endDateObj = new Date(formattedEndDate);
+        
+        if (isNaN(startDateObj.getTime())) {
+          validationErrors.push({
+            row: rowNumber,
+            field: 'Warranty Start Date',
+            message: `Row ${rowNumber}: Warranty Start Date "${warranty_start_date}" is not a valid date`
+          });
+          continue; // Skip this row
+        }
+        
+        if (isNaN(endDateObj.getTime())) {
+          validationErrors.push({
+            row: rowNumber,
+            field: 'Warranty End Date',
+            message: `Row ${rowNumber}: Warranty End Date "${warranty_end_date}" is not a valid date`
+          });
+          continue; // Skip this row
+        }
         
         processedItems.push({
           sr_no: sr_no || null,
@@ -709,6 +800,11 @@ router.post('/import', upload.single('file'), async (req, res) => {
         });
       } catch (error) {
         console.error(`Error processing row ${i + 1}:`, error);
+        validationErrors.push({
+          row: rowNumber,
+          field: 'General',
+          message: `Row ${rowNumber}: Error processing row - ${error.message}`
+        });
       }
     }
     
@@ -722,9 +818,23 @@ router.post('/import', upload.single('file'), async (req, res) => {
       console.error('Error cleaning up file:', cleanupError);
     }
     
+    // If there are validation errors, return them along with the processed items
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        message: `Import completed with validation errors. ${processedItems.length} items processed, ${validationErrors.length} rows skipped due to validation errors.`,
+        items: processedItems,
+        validation_errors: validationErrors,
+        total_rows: data.length,
+        processed_count: processedItems.length,
+        error_count: validationErrors.length
+      });
+    }
+    
     res.json({
       message: `Import completed. ${processedItems.length} items processed.`,
-      items: processedItems
+      items: processedItems,
+      total_rows: data.length,
+      processed_count: processedItems.length
     });
   } catch (error) {
     console.error('Error importing warranty data:', error);
