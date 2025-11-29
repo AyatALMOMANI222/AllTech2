@@ -725,62 +725,46 @@ router.post('/import', upload.single('file'), async (req, res) => {
         const formattedStartDate = parseDate(warranty_start_date);
         const formattedEndDate = parseDate(warranty_end_date);
         
-        // Validate Warranty Start Date
-        if (!warranty_start_date || warranty_start_date === '' || warranty_start_date === null) {
+        // Check if Start Date is invalid or empty
+        let isStartDateInvalid = !warranty_start_date || warranty_start_date === '' || warranty_start_date === null || !formattedStartDate;
+        
+        // Check if End Date is invalid or empty
+        let isEndDateInvalid = !warranty_end_date || warranty_end_date === '' || warranty_end_date === null || !formattedEndDate;
+        
+        // Additional validation: Check if parsed dates are valid Date objects
+        if (formattedStartDate) {
+          const startDateObj = new Date(formattedStartDate);
+          if (isNaN(startDateObj.getTime())) {
+            isStartDateInvalid = true;
+          }
+        }
+        if (formattedEndDate) {
+          const endDateObj = new Date(formattedEndDate);
+          if (isNaN(endDateObj.getTime())) {
+            isEndDateInvalid = true;
+          }
+        }
+        
+        // Return appropriate error message based on which dates are invalid
+        if (isStartDateInvalid && isEndDateInvalid) {
+          validationErrors.push({
+            row: rowNumber,
+            field: 'Both Dates',
+            message: `Error in both Warranty Start Date and Warranty End Date at row ${rowNumber}`
+          });
+          continue; // Skip this row
+        } else if (isStartDateInvalid) {
           validationErrors.push({
             row: rowNumber,
             field: 'Warranty Start Date',
-            message: `Row ${rowNumber}: Warranty Start Date is empty or missing`
+            message: `Error in Warranty Start Date at row ${rowNumber}`
           });
           continue; // Skip this row
-        }
-        
-        if (!formattedStartDate) {
-          validationErrors.push({
-            row: rowNumber,
-            field: 'Warranty Start Date',
-            message: `Row ${rowNumber}: Warranty Start Date "${warranty_start_date}" is invalid or cannot be parsed. Accepted formats: dd/mm/yyyy, dd-mm-yyyy, mm/dd/yyyy, mm-dd-yyyy, yyyy-mm-dd`
-          });
-          continue; // Skip this row
-        }
-        
-        // Validate Warranty End Date
-        if (!warranty_end_date || warranty_end_date === '' || warranty_end_date === null) {
+        } else if (isEndDateInvalid) {
           validationErrors.push({
             row: rowNumber,
             field: 'Warranty End Date',
-            message: `Row ${rowNumber}: Warranty End Date is empty or missing`
-          });
-          continue; // Skip this row
-        }
-        
-        if (!formattedEndDate) {
-          validationErrors.push({
-            row: rowNumber,
-            field: 'Warranty End Date',
-            message: `Row ${rowNumber}: Warranty End Date "${warranty_end_date}" is invalid or cannot be parsed. Accepted formats: dd/mm/yyyy, dd-mm-yyyy, mm/dd/yyyy, mm-dd-yyyy, yyyy-mm-dd`
-          });
-          continue; // Skip this row
-        }
-        
-        // Validate that dates are valid Date objects (additional check)
-        const startDateObj = new Date(formattedStartDate);
-        const endDateObj = new Date(formattedEndDate);
-        
-        if (isNaN(startDateObj.getTime())) {
-          validationErrors.push({
-            row: rowNumber,
-            field: 'Warranty Start Date',
-            message: `Row ${rowNumber}: Warranty Start Date "${warranty_start_date}" is not a valid date`
-          });
-          continue; // Skip this row
-        }
-        
-        if (isNaN(endDateObj.getTime())) {
-          validationErrors.push({
-            row: rowNumber,
-            field: 'Warranty End Date',
-            message: `Row ${rowNumber}: Warranty End Date "${warranty_end_date}" is not a valid date`
+            message: `Error in Warranty End Date at row ${rowNumber}`
           });
           continue; // Skip this row
         }
