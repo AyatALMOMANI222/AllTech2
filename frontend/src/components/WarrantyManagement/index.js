@@ -77,6 +77,45 @@ const WarrantyManagement = () => {
     }));
   };
 
+  // Validate that all fields are filled
+  const isFormValid = () => {
+    return (
+      formData.sr_no !== '' &&
+      formData.sr_no !== null &&
+      formData.sr_no !== undefined &&
+      formData.part_no !== '' &&
+      formData.part_no !== null &&
+      formData.part_no !== undefined &&
+      formData.material_no !== '' &&
+      formData.material_no !== null &&
+      formData.material_no !== undefined &&
+      formData.description !== '' &&
+      formData.description !== null &&
+      formData.description !== undefined &&
+      formData.project_no !== '' &&
+      formData.project_no !== null &&
+      formData.project_no !== undefined &&
+      formData.part_cost !== '' &&
+      formData.part_cost !== null &&
+      formData.part_cost !== undefined &&
+      formData.serial_number !== '' &&
+      formData.serial_number !== null &&
+      formData.serial_number !== undefined &&
+      formData.warranty_start_date !== '' &&
+      formData.warranty_start_date !== null &&
+      formData.warranty_start_date !== undefined &&
+      formData.warranty_end_date !== '' &&
+      formData.warranty_end_date !== null &&
+      formData.warranty_end_date !== undefined &&
+      formData.warranty_type !== '' &&
+      formData.warranty_type !== null &&
+      formData.warranty_type !== undefined &&
+      formData.remarks !== '' &&
+      formData.remarks !== null &&
+      formData.remarks !== undefined
+    );
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -599,7 +638,7 @@ const WarrantyManagement = () => {
                   <button 
                     type="submit" 
                     className={`btn btn-primary ${editingRecord ? 'btn-update-warranty' : 'btn-save-warranty'}`} 
-                    disabled={loading}
+                    disabled={loading || !isFormValid()}
                   >
                     {loading ? (
                       <>
