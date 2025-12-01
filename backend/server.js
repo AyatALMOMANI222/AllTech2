@@ -864,6 +864,19 @@ ensureCustomerSupplierDocumentsTable();
 ensurePODocumentsTable();
 fixPurchaseInvoiceTriggers();
 
+// Ensure database dashboard indexes exist (non-blocking)
+async function ensureDashboardIndexes() {
+  try {
+    const { addIndexes } = require('./migrations/add_dashboard_indexes');
+    await addIndexes();
+    console.log('✓ Database dashboard indexes verified');
+  } catch (error) {
+    console.log('Note: Dashboard index check:', error.message);
+    // Non-blocking - continue even if indexes fail
+  }
+}
+ensureDashboardIndexes();
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));

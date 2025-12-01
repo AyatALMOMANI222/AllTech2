@@ -1,6 +1,22 @@
 const express = require('express');
 const router = express.Router();
 
+// Simple in-memory cache for dashboard queries
+// Cache key: JSON string of query parameters
+// Cache TTL: 30 seconds
+const dashboardCache = new Map();
+const CACHE_TTL = 30000; // 30 seconds
+
+// Clean up expired cache entries every minute
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of dashboardCache.entries()) {
+    if (now - value.timestamp > CACHE_TTL) {
+      dashboardCache.delete(key);
+    }
+  }
+}, 60000); // Run cleanup every minute
+
 /**
  * Helper function to calculate and update delivered data for a Purchase Order
  * 
@@ -257,9 +273,23 @@ router.get('/', async (req, res) => {
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
     
+    // Create cache key from query parameters
+    const cacheKey = JSON.stringify({ search, as_of_date, page: pageNum, limit: limitNum });
+    
+    // Check cache first
+    const cached = dashboardCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+      return res.json(cached.data);
+    }
+    
     // Optimize session settings for better GROUP_CONCAT performance
     // Increase GROUP_CONCAT max length to prevent truncation (default 1024)
     await req.db.execute("SET SESSION group_concat_max_len = 16384");
+    
+    // Optimize query settings for better performance
+    await req.db.execute("SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'");
+    await req.db.execute("SET SESSION join_buffer_size = 256000");
+    await req.db.execute("SET SESSION sort_buffer_size = 256000");
     
     // Base query to get all Purchase Order items with related inventory and invoice data
     // ⚠️ IMPORTANT: Query starts from purchase_order_items to display ALL PO items
@@ -696,16 +726,33 @@ router.get('/', async (req, res) => {
       const searchTerm = search.trim();
       // If search doesn't start with wildcard, use prefix search for better performance
       if (searchTerm.length > 0) {
-        query += ` AND (
-          poi.serial_no LIKE ? OR 
-          poi.project_no LIKE ? OR 
-          poi.part_no LIKE ? OR 
-          poi.material_no LIKE ? OR 
-          poi.description LIKE ? OR
-          po.po_number LIKE ?
-        )`;
-        const searchParam = `%${searchTerm}%`;
-        params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
+        // Optimize: Use UNION for better index usage when searching multiple fields
+        // For exact matches, use = instead of LIKE for better performance
+        const exactMatch = searchTerm.length > 2 && !searchTerm.includes('%') && !searchTerm.includes('_');
+        if (exactMatch) {
+          // Try exact match first (uses indexes better)
+          query += ` AND (
+            poi.serial_no = ? OR 
+            poi.project_no = ? OR 
+            poi.part_no = ? OR 
+            poi.material_no = ? OR
+            po.po_number = ? OR
+            poi.description LIKE ?
+          )`;
+          params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, `%${searchTerm}%`);
+        } else {
+          // Use LIKE for partial matches
+          query += ` AND (
+            poi.serial_no LIKE ? OR 
+            poi.project_no LIKE ? OR 
+            poi.part_no LIKE ? OR 
+            poi.material_no LIKE ? OR 
+            poi.description LIKE ? OR
+            po.po_number LIKE ?
+          )`;
+          const searchParam = `%${searchTerm}%`;
+          params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
+        }
       }
     }
     
@@ -992,7 +1039,7 @@ router.get('/', async (req, res) => {
       inventoryTotalBalance += parseFloat(item.inventory_balance || 0);
     });
     
-    res.json({
+    const responseData = {
       success: true,
       items: processedItems,
       pagination: {
@@ -1010,7 +1057,20 @@ router.get('/', async (req, res) => {
         inventory_total_value: inventoryTotalValue,
         inventory_total_balance: inventoryTotalBalance
       }
+    };
+    
+    // Cache the response (limit cache size to prevent memory issues)
+    if (dashboardCache.size > 100) {
+      // Remove oldest entries if cache is too large
+      const firstKey = dashboardCache.keys().next().value;
+      dashboardCache.delete(firstKey);
+    }
+    dashboardCache.set(cacheKey, {
+      data: responseData,
+      timestamp: Date.now()
     });
+    
+    res.json(responseData);
     
   } catch (error) {
     console.error('Error fetching database dashboard:', error);

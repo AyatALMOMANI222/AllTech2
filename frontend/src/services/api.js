@@ -158,7 +158,7 @@ export const inventoryReportsAPI = {
 
 // Database Dashboard API
 export const databaseDashboardAPI = {
-  getDashboard: (params = {}) => api.get('/database-dashboard', { params }),
+  getDashboard: (params = {}, config = {}) => api.get('/database-dashboard', { params, ...config }),
   exportDashboard: async (params = {}) => {
     const response = await api.get('/database-dashboard/export', { 
       params,

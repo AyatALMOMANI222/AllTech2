@@ -14,6 +14,12 @@ const DatabaseDashboard = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(100);
   const searchTimeoutRef = useRef(null);
+  
+  // Performance optimizations
+  const abortControllerRef = useRef(null);
+  const cacheRef = useRef(new Map());
+  const pendingRequestRef = useRef(null);
+  const CACHE_DURATION = 30000; // 30 seconds cache
 
   // Debounce search term to reduce API calls
   useEffect(() => {
@@ -32,32 +38,117 @@ const DatabaseDashboard = () => {
     };
   }, [searchTerm]);
 
-  useEffect(() => {
-    fetchDashboard();
-  }, [currentPage, debouncedSearchTerm, asOfDate]);
-
   const fetchDashboard = useCallback(async () => {
+    // Cancel any pending request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Create new AbortController for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    
+    // Create cache key
+    const cacheKey = JSON.stringify({
+      search: debouncedSearchTerm,
+      as_of_date: asOfDate,
+      page: currentPage,
+      limit: itemsPerPage
+    });
+    
+    // Check cache first
+    const cachedData = cacheRef.current.get(cacheKey);
+    if (cachedData && Date.now() - cachedData.timestamp < CACHE_DURATION) {
+      setDashboardData(cachedData.items || []);
+      if (cachedData.pagination) {
+        setTotalPages(cachedData.pagination.totalPages);
+      }
+      setLoading(false);
+      return;
+    }
+    
+    // Request deduplication - check if same request is already pending
+    if (pendingRequestRef.current === cacheKey) {
+      return; // Request already in progress
+    }
+    
     try {
       setLoading(true);
       setError('');
+      pendingRequestRef.current = cacheKey;
+      
       const response = await databaseDashboardAPI.getDashboard({
         search: debouncedSearchTerm,
         as_of_date: asOfDate,
         page: currentPage,
         limit: itemsPerPage
+      }, {
+        signal: abortController.signal
       });
-      setDashboardData(response.data.items || []);
       
-      if (response.data.pagination) {
-        setTotalPages(response.data.pagination.totalPages);
+      // Check if request was aborted
+      if (abortController.signal.aborted) {
+        return;
+      }
+      
+      const items = response.data.items || [];
+      const pagination = response.data.pagination;
+      
+      // Cache the response
+      cacheRef.current.set(cacheKey, {
+        items,
+        pagination,
+        timestamp: Date.now()
+      });
+      
+      // Clean old cache entries (keep only last 10)
+      if (cacheRef.current.size > 10) {
+        const firstKey = cacheRef.current.keys().next().value;
+        cacheRef.current.delete(firstKey);
+      }
+      
+      setDashboardData(items);
+      
+      if (pagination) {
+        setTotalPages(pagination.totalPages);
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError' || error.name === 'CanceledError') {
+        return;
+      }
       console.error('Error fetching dashboard:', error);
       setError('Error loading dashboard data');
     } finally {
-      setLoading(false);
+      pendingRequestRef.current = null;
+      if (!abortController.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, [currentPage, debouncedSearchTerm, asOfDate, itemsPerPage]);
+
+  useEffect(() => {
+    fetchDashboard();
+    
+    // Cleanup: cancel pending request on unmount or dependency change
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      pendingRequestRef.current = null;
+    };
+  }, [currentPage, debouncedSearchTerm, asOfDate, fetchDashboard]);
+  
+  // Cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      // Clear cache on unmount to free memory
+      cacheRef.current.clear();
+    };
+  }, []);
 
   const handleExport = async () => {
     try {
@@ -108,6 +199,12 @@ const DatabaseDashboard = () => {
                 </p>
               </div>
               <div className="text-end">
+                {loading && dashboardData.length > 0 && (
+                  <div className="badge bg-info text-white px-3 py-2 mb-2" style={{ animation: 'pulse 2s ease-in-out infinite' }}>
+                    <i className="fas fa-sync-alt fa-spin me-2"></i>
+                    Refreshing...
+                  </div>
+                )}
                 <div className="badge bg-light text-dark px-3 py-2 mb-2">
                   <i className="fas fa-calendar-alt me-2"></i>
                   {new Date().toLocaleDateString('en-US', { 
@@ -202,10 +299,31 @@ const DatabaseDashboard = () => {
               </div>
             </div>
 
+            {/* Loading Overlay - Shows when loading and data exists (for refresh scenarios) */}
+            {loading && dashboardData.length > 0 && (
+              <div className="loading-overlay">
+                <div className="loading-content">
+                  <div className="spinner-border text-primary mb-3" role="status" style={{ width: '3rem', height: '3rem' }}>
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                  <h5 className="mb-2">
+                    <i className="fas fa-sync-alt me-2"></i>
+                    Refreshing Data
+                  </h5>
+                  <p className="text-muted mb-0">Updating your dashboard with the latest information...</p>
+                  <div className="loading-progress mt-3">
+                    <div className="progress" style={{ width: '200px', height: '4px' }}>
+                      <div className="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style={{ width: '100%' }}></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Professional Loading and Empty States */}
             {loading && !dashboardData.length ? (
               <div className="text-center py-5">
-                <div className="spinner-border text-primary" role="status">
+                <div className="spinner-border text-primary" role="status" style={{ width: '3rem', height: '3rem' }}>
                   <span className="visually-hidden">Loading...</span>
                 </div>
                 <h4 className="mt-3 mb-2">
@@ -213,6 +331,11 @@ const DatabaseDashboard = () => {
                   Loading Dashboard Data
                 </h4>
                 <p className="text-muted">Please wait while we fetch your inventory and transaction data...</p>
+                <div className="mt-3">
+                  <div className="progress" style={{ width: '300px', margin: '0 auto', height: '6px' }}>
+                    <div className="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style={{ width: '100%' }}></div>
+                  </div>
+                </div>
               </div>
             ) : !loading && (!dashboardData || dashboardData.length === 0) ? (
               <div className="text-center py-5">
@@ -339,7 +462,18 @@ const DatabaseDashboard = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {dashboardData.length === 0 ? (
+                      {loading && dashboardData.length === 0 ? (
+                        // Skeleton loaders while loading
+                        Array.from({ length: 5 }).map((_, skeletonIndex) => (
+                          <tr key={`skeleton-${skeletonIndex}`} className="skeleton-row">
+                            {Array.from({ length: 32 }).map((_, colIndex) => (
+                              <td key={`skeleton-col-${colIndex}`} className="skeleton-cell">
+                                <div className="skeleton-placeholder"></div>
+                              </td>
+                            ))}
+                          </tr>
+                        ))
+                      ) : dashboardData.length === 0 ? (
                         <tr>
                           <td colSpan="32" className="text-center py-4">
                             No data available. {searchTerm ? 'Try different search terms.' : 'Add purchase orders to see them here.'}
@@ -573,10 +707,16 @@ const DatabaseDashboard = () => {
                                   </td>
                                   <td className="purchase-data">
                                 {(() => {
+                                  // Only show "Completed" or due_date if there's an Approved Order
+                                  if (!supplierApproved) {
+                                    return '-';
+                                  }
+                                  
                                   // Check if all items are delivered (quantity == delivered_quantity for all items)
                                   // This is true when status is 'delivered_completed' AND balance_quantity_undelivered is 0 (or very close to 0)
                                   // Account for floating point precision issues
-                                  const isCompleted = supplierStatus === 'delivered_completed' && 
+                                  // Only show "Completed" if there's an Approved Order
+                                  const isCompleted = supplierApproved && supplierStatus === 'delivered_completed' && 
                                     (supplierBalanceQuantityUndelivered === 0 || Math.abs(supplierBalanceQuantityUndelivered) < 0.01);
                                   
                                   if (isCompleted) {
@@ -584,9 +724,9 @@ const DatabaseDashboard = () => {
                                   }
                                   
                                   // Show due_date with red color if overdue
-                                  // Only show if there are values for APPROVED PURCHASED ORDER
+                                  // Only show if there's an Approved Order AND due_date is not empty
                                   const dueDate = supplierApproved?.due_date;
-                                  if (dueDate) {
+                                  if (dueDate && dueDate.trim() !== '') {
                                     const today = new Date();
                                     today.setHours(0, 0, 0, 0);
                                     const due = new Date(dueDate);
@@ -668,10 +808,16 @@ const DatabaseDashboard = () => {
                                   </td>
                                   <td className="approved-sales-data">
                                 {(() => {
+                                  // Only show "Completed" or due_date if there's an Approved Order
+                                  if (!customerApproved) {
+                                    return '-';
+                                  }
+                                  
                                   // Check if all items are delivered (quantity == delivered_quantity for all items)
                                   // This is true when status is 'delivered_completed' AND balance_quantity_undelivered is 0 (or very close to 0)
                                   // Account for floating point precision issues
-                                  const isCompleted = customerStatus === 'delivered_completed' && 
+                                  // Only show "Completed" if there's an Approved Order
+                                  const isCompleted = customerApproved && customerStatus === 'delivered_completed' && 
                                     (customerBalanceQuantityUndelivered === 0 || Math.abs(customerBalanceQuantityUndelivered) < 0.01);
                                   
                                   if (isCompleted) {
@@ -679,9 +825,9 @@ const DatabaseDashboard = () => {
                                   }
                                   
                                   // Show due_date with red color if overdue
-                                  // Only show if there are values for APPROVED PURCHASED ORDER
+                                  // Only show if there's an Approved Order AND due_date is not empty
                                   const dueDate = customerApproved?.due_date;
-                                  if (dueDate) {
+                                  if (dueDate && dueDate.trim() !== '') {
                                     const today = new Date();
                                     today.setHours(0, 0, 0, 0);
                                     const due = new Date(dueDate);
